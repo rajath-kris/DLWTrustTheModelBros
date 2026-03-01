@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 import requests
-from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication, QGraphicsOpacityEffect, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -19,7 +19,7 @@ from .bridge_client import BridgeClient
 from .capture import capture_region
 from .config import settings
 from .hotkey import HotkeyManager
-from .overlay import OverlayBubble
+from .overlay import OverlayBubble, OverlayState
 from .platform import get_active_window_metadata, platform_name
 from .region_selector import select_region
 from .types import CaptureRegion, MonitorSnapshot, WindowMetadata
@@ -139,6 +139,15 @@ class SentinelController(QObject):
         self._active_turn_index = 0
         self._last_prompt_text = ""
         self._pending_user_input_text: str | None = None
+        self._pending_success_result: AnalysisResult | None = None
+        self._pending_success_duration_ms: int | None = None
+        self._pending_success_was_turn_analysis = False
+        self._thinking_visible_request_id: int | None = None
+        self._thinking_visible_started_at: float | None = None
+
+        self._thinking_hold_timer = QTimer(self)
+        self._thinking_hold_timer.setSingleShot(True)
+        self._thinking_hold_timer.timeout.connect(self._finalize_success_after_thinking)
 
         self.capture_requested.connect(self._on_capture_requested)
         self.escape_requested.connect(self._on_escape_requested)
@@ -157,6 +166,7 @@ class SentinelController(QObject):
         self.escape_requested.emit(source_mode)
 
     def _on_capture_requested(self, source_mode: str) -> None:
+        self._cancel_thinking_hold()
         self._log_event("capture_triggered", source_mode=source_mode)
         region = select_region(telemetry_callback=self._on_selector_event)
         if region is None:
@@ -199,6 +209,7 @@ class SentinelController(QObject):
 
     def _on_escape_requested(self, source_mode: str) -> None:
         self._log_event("escape_triggered", source_mode=source_mode)
+        self._cancel_thinking_hold()
         self.overlay.hide_prompt(reason="escape")
 
     def _on_retry_requested(self) -> None:
@@ -284,15 +295,26 @@ class SentinelController(QObject):
         user_input_text: str | None,
         is_turn_analysis: bool,
     ) -> None:
+        self._cancel_thinking_hold()
         request_id = self._next_request_id()
         self._request_started_at[request_id] = time.monotonic()
 
         if show_loading:
-            self.overlay.show_analyzing_state(
-                context.region,
-                status_text="Analyzing your response" if is_turn_analysis else "Analyzing capture",
-                message="Generating your next Socratic prompt...",
-            )
+            if is_turn_analysis:
+                self._thinking_visible_request_id = request_id
+                self._thinking_visible_started_at = time.monotonic()
+                self.overlay.show_thinking_state(context.region, text="Thinking...")
+            else:
+                self._thinking_visible_request_id = None
+                self._thinking_visible_started_at = None
+                self.overlay.show_analyzing_state(
+                    context.region,
+                    status_text="Analyzing your response" if is_turn_analysis else "Analyzing capture",
+                    message="Generating your next Socratic prompt...",
+                )
+        else:
+            self._thinking_visible_request_id = None
+            self._thinking_visible_started_at = None
 
         effective_turn_index = max(0, int(turn_index))
         user_input = user_input_text.strip() if user_input_text is not None else None
@@ -450,32 +472,11 @@ class SentinelController(QObject):
             self._last_prompt_text = result.prompt.strip()
             turn_request_was_submitted = self._pending_user_input_text is not None
             self._pending_user_input_text = None
-
-            self.overlay.show_prompt_input_state(
-                result.prompt,
-                result.region,
-                thread_id=self._active_thread_id,
-                turn_index=self._active_turn_index,
-                ttl_ms=settings.overlay_prompt_ttl_ms,
-                retry_enabled=self._last_capture_context is not None,
-            )
-            self._log_event(
-                "request_success",
-                request_id=result.request_id,
-                capture_id=result.capture_id,
+            self._start_thinking_hold(
+                result=result,
                 duration_ms=duration_ms,
-                thread_id=self._active_thread_id,
-                turn_index=self._active_turn_index,
+                was_turn_analysis=turn_request_was_submitted,
             )
-            if turn_request_was_submitted:
-                self._log_event(
-                    "turn_analysis_completed",
-                    request_id=result.request_id,
-                    status="success",
-                    duration_ms=duration_ms,
-                    thread_id=self._active_thread_id,
-                    turn_index=self._active_turn_index,
-                )
             return
 
         self.overlay.show_error_state(
@@ -484,6 +485,8 @@ class SentinelController(QObject):
             result.region,
             retry_enabled=self._last_capture_context is not None,
         )
+        self._thinking_visible_request_id = None
+        self._thinking_visible_started_at = None
         self._log_event(
             "request_error_presented",
             request_id=result.request_id,
@@ -499,7 +502,110 @@ class SentinelController(QObject):
                 thread_id=result.thread_id or self._active_thread_id,
                 turn_index=max(0, int(result.turn_index)),
                 error_category=result.error_category or "unknown",
+                )
+
+    def _start_thinking_hold(
+        self,
+        result: AnalysisResult,
+        duration_ms: int | None,
+        was_turn_analysis: bool,
+    ) -> None:
+        if self._thinking_hold_timer.isActive():
+            self._thinking_hold_timer.stop()
+        self._pending_success_result = result
+        self._pending_success_duration_ms = duration_ms
+        self._pending_success_was_turn_analysis = was_turn_analysis
+        target_hold_ms = max(0, int(settings.overlay_thinking_hold_ms))
+        already_thinking = (
+            self._thinking_visible_request_id == result.request_id
+            and self.overlay.state == OverlayState.THINKING
+        )
+        hold_elapsed_ms = 0
+        hold_ms = target_hold_ms
+        if already_thinking:
+            started_at = self._thinking_visible_started_at or time.monotonic()
+            hold_elapsed_ms = int(max(0.0, (time.monotonic() - started_at) * 1000.0))
+            hold_ms = max(0, target_hold_ms - hold_elapsed_ms)
+        else:
+            self.overlay.show_thinking_state(result.region, text="Thinking...")
+            self._thinking_visible_request_id = result.request_id
+            self._thinking_visible_started_at = time.monotonic()
+        self._log_event(
+            "thinking_hold_started",
+            request_id=result.request_id,
+            hold_ms=hold_ms,
+            hold_target_ms=target_hold_ms,
+            hold_elapsed_ms=hold_elapsed_ms,
+            already_thinking=already_thinking,
+            thread_id=self._active_thread_id,
+            turn_index=self._active_turn_index,
+        )
+        if hold_ms <= 0:
+            self._finalize_success_after_thinking()
+            return
+        self._thinking_hold_timer.start(hold_ms)
+
+    def _finalize_success_after_thinking(self) -> None:
+        result = self._pending_success_result
+        if result is None:
+            return
+
+        duration_ms = self._pending_success_duration_ms
+        was_turn_analysis = self._pending_success_was_turn_analysis
+        self._pending_success_result = None
+        self._pending_success_duration_ms = None
+        self._pending_success_was_turn_analysis = False
+
+        if result.request_id != self._active_request_id:
+            self._log_event(
+                "stale_response_ignored",
+                request_id=result.request_id,
+                active_request_id=self._active_request_id,
             )
+            return
+
+        self._log_event(
+            "thinking_hold_completed",
+            request_id=result.request_id,
+            thread_id=self._active_thread_id,
+            turn_index=self._active_turn_index,
+        )
+        self._thinking_visible_request_id = None
+        self._thinking_visible_started_at = None
+        self.overlay.show_prompt_input_state(
+            result.prompt,
+            result.region,
+            thread_id=self._active_thread_id or result.thread_id,
+            turn_index=self._active_turn_index,
+            ttl_ms=settings.overlay_prompt_ttl_ms,
+            retry_enabled=self._last_capture_context is not None,
+        )
+        self._log_event(
+            "request_success",
+            request_id=result.request_id,
+            capture_id=result.capture_id,
+            duration_ms=duration_ms,
+            thread_id=self._active_thread_id,
+            turn_index=self._active_turn_index,
+        )
+        if was_turn_analysis:
+            self._log_event(
+                "turn_analysis_completed",
+                request_id=result.request_id,
+                status="success",
+                duration_ms=duration_ms,
+                thread_id=self._active_thread_id,
+                turn_index=self._active_turn_index,
+            )
+
+    def _cancel_thinking_hold(self) -> None:
+        if self._thinking_hold_timer.isActive():
+            self._thinking_hold_timer.stop()
+        self._pending_success_result = None
+        self._pending_success_duration_ms = None
+        self._pending_success_was_turn_analysis = False
+        self._thinking_visible_request_id = None
+        self._thinking_visible_started_at = None
 
     def _next_request_id(self) -> int:
         self._request_sequence += 1
@@ -583,6 +689,8 @@ def main() -> None:
         font_family=ui_font_family,
         fade_in_ms=settings.ui_fade_in_ms,
         fade_text_stagger_ms=settings.ui_fade_text_stagger_ms,
+        thinking_min_width=settings.overlay_thinking_min_width,
+        thinking_max_width=settings.overlay_thinking_max_width,
     )
     bridge = BridgeClient(settings.bridge_url)
     controller = SentinelController(overlay, bridge)

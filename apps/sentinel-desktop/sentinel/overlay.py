@@ -22,6 +22,7 @@ from .ui_theme import qss_font_family_stack
 class OverlayState(str, Enum):
     HIDDEN = "hidden"
     ANALYZING = "analyzing"
+    THINKING = "thinking"
     PROMPT = "prompt"
     ERROR = "error"
 
@@ -67,10 +68,14 @@ class OverlayBubble(QWidget):
         font_family: str | None = None,
         fade_in_ms: int = 220,
         fade_text_stagger_ms: int = 60,
+        thinking_min_width: int = 220,
+        thinking_max_width: int = 280,
     ) -> None:
         super().__init__()
         self._min_width = max(220, min_width)
         self._max_width = max(self._min_width, max_width)
+        self._thinking_min_width = max(160, thinking_min_width)
+        self._thinking_max_width = max(self._thinking_min_width, thinking_max_width)
         self._loading_dot_interval_ms = max(120, loading_dot_interval_ms)
         self._input_max_chars = max(40, input_max_chars)
         self._show_input_confirmation = show_input_confirmation
@@ -82,6 +87,8 @@ class OverlayBubble(QWidget):
         self._state: OverlayState = OverlayState.HIDDEN
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
+        self._thinking_frames = ["Thinking.", "Thinking..", "Thinking..."]
+        self._thinking_index = 0
         self._anchor_region: CaptureRegion | None = None
         self._last_submitted_text = ""
         self._input_mode_enabled = False
@@ -124,7 +131,6 @@ class OverlayBubble(QWidget):
         self._input_edit.setPlaceholderText("Click here and type your reply...")
         self._input_edit.setMaxLength(self._input_max_chars)
         self._input_edit.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        self._input_edit.textChanged.connect(self._on_input_changed)
         self._input_edit.submit_pressed.connect(self._on_send_clicked)
         self._input_edit.focus_intent.connect(self._on_input_focus_intent)
         self._input_edit.escape_pressed.connect(self._on_dismiss_clicked)
@@ -133,16 +139,10 @@ class OverlayBubble(QWidget):
         input_palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(180, 190, 206, 196))
         self._input_edit.setPalette(input_palette)
 
-        self._send_button = QPushButton("Send", self._composer)
-        self._send_button.setObjectName("SendButton")
-        self._send_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._send_button.clicked.connect(self._on_send_clicked)
-
         composer_layout = QHBoxLayout()
-        composer_layout.setContentsMargins(12, 8, 8, 8)
+        composer_layout.setContentsMargins(12, 8, 12, 8)
         composer_layout.setSpacing(8)
         composer_layout.addWidget(self._input_edit, stretch=1)
-        composer_layout.addWidget(self._send_button)
         self._composer.setLayout(composer_layout)
 
         self._input_feedback_label = QLabel("", self._card)
@@ -170,16 +170,20 @@ class OverlayBubble(QWidget):
         self._actions_container.setObjectName("ActionsContainer")
         self._actions_container.setLayout(actions_layout)
 
-        card_layout = QVBoxLayout()
-        card_layout.setContentsMargins(16, 14, 16, 14)
-        card_layout.setSpacing(10)
-        card_layout.addWidget(self._status_label)
-        card_layout.addWidget(self._message_label)
-        card_layout.addWidget(self._loading_label)
-        card_layout.addWidget(self._composer)
-        card_layout.addWidget(self._input_feedback_label)
-        card_layout.addWidget(self._actions_container)
-        self._card.setLayout(card_layout)
+        self._card_layout = QVBoxLayout()
+        self._card_density_default_margins = (16, 14, 16, 14)
+        self._card_density_default_spacing = 10
+        self._card_density_thinking_margins = (12, 8, 12, 8)
+        self._card_density_thinking_spacing = 5
+        self._card_layout.setContentsMargins(*self._card_density_default_margins)
+        self._card_layout.setSpacing(self._card_density_default_spacing)
+        self._card_layout.addWidget(self._status_label)
+        self._card_layout.addWidget(self._message_label)
+        self._card_layout.addWidget(self._loading_label)
+        self._card_layout.addWidget(self._composer)
+        self._card_layout.addWidget(self._input_feedback_label)
+        self._card_layout.addWidget(self._actions_container)
+        self._card.setLayout(self._card_layout)
 
         root_layout = QVBoxLayout()
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -202,27 +206,27 @@ class OverlayBubble(QWidget):
             QLabel {
                 color: #eef3fa;
                 font-family: __FONT_STACK__;
-                font-size: 14px;
+                font-size: 12px;
                 line-height: 1.35;
             }
 
             #StatusLabel {
                 color: rgba(228, 236, 247, 230);
                 font-family: __FONT_STACK__;
-                font-size: 12px;
+                font-size: 10px;
                 font-weight: 600;
                 letter-spacing: 0.2px;
             }
 
             #MessageLabel {
                 color: #ffffff;
-                font-size: 15px;
+                font-size: 13px;
                 font-weight: 500;
             }
 
             #LoadingLabel {
                 color: rgba(188, 199, 214, 230);
-                font-size: 12px;
+                font-size: 10px;
                 font-weight: 500;
             }
 
@@ -237,7 +241,7 @@ class OverlayBubble(QWidget):
                 background: transparent;
                 color: #f4f8ff;
                 font-family: __FONT_STACK__;
-                font-size: 14px;
+                font-size: 12px;
                 font-weight: 500;
                 padding: 2px 4px;
             }
@@ -248,7 +252,7 @@ class OverlayBubble(QWidget):
 
             #InputFeedbackLabel {
                 color: rgba(168, 221, 198, 235);
-                font-size: 12px;
+                font-size: 10px;
                 font-weight: 500;
             }
 
@@ -263,7 +267,7 @@ class OverlayBubble(QWidget):
                 border-radius: 14px;
                 padding: 6px 12px;
                 font-family: __FONT_STACK__;
-                font-size: 12px;
+                font-size: 10px;
                 font-weight: 600;
                 min-width: 82px;
             }
@@ -282,19 +286,6 @@ class OverlayBubble(QWidget):
                 background-color: rgba(12, 15, 20, 204);
             }
 
-            #SendButton {
-                background-color: rgba(36, 122, 235, 225);
-                border: 1px solid rgba(178, 214, 255, 156);
-                min-width: 72px;
-            }
-
-            #SendButton:hover {
-                border-color: rgba(198, 227, 255, 220);
-            }
-
-            #SendButton:disabled {
-                background-color: rgba(33, 44, 62, 190);
-            }
             """
             .replace("__FONT_STACK__", font_stack)
         )
@@ -314,7 +305,6 @@ class OverlayBubble(QWidget):
         self._loading_timer.timeout.connect(self._advance_loading_frame)
 
         self._composer.hide()
-        self._send_button.setEnabled(False)
         self.set_retry_enabled(False)
         self.hide()
 
@@ -341,9 +331,15 @@ class OverlayBubble(QWidget):
         self._state = OverlayState.ANALYZING
         self._anchor_region = region
         self._set_input_mode(False)
+        self._apply_card_density(self._state)
+        self._set_status_visible(True)
+        self._set_actions_visible(True)
         self._set_composer_visible(False)
+        self._clear_feedback()
         self._status_label.setText(status_text)
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._message_label.setText(message)
+        self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._loading_label.setText(self._loading_frames[0])
         self._loading_label.show()
         self.set_retry_enabled(False)
@@ -355,6 +351,35 @@ class OverlayBubble(QWidget):
             "overlay_state_analyzing",
             state=self._state.value,
             region=self._region_payload(region),
+        )
+
+    def show_thinking_state(self, region: CaptureRegion, text: str = "Thinking...") -> None:
+        self._state = OverlayState.THINKING
+        self._anchor_region = region
+        self._set_input_mode(False)
+        self._apply_card_density(self._state)
+        self._set_status_visible(False)
+        self._set_actions_visible(False)
+        self._set_composer_visible(False)
+        self._clear_feedback()
+        self._loading_label.hide()
+        base = text.strip().rstrip(".") or "Thinking"
+        self._thinking_frames = [f"{base}.", f"{base}..", f"{base}..."]
+        self._thinking_index = len(self._thinking_frames) - 1
+        self._message_label.setText(self._thinking_frames[self._thinking_index])
+        self._message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._auto_hide_timer.stop()
+        self._loading_timer.start()
+        self._render_and_show(
+            region,
+            effective_min_width=self._thinking_min_width,
+            effective_max_width=self._thinking_max_width,
+        )
+        self._emit(
+            "overlay_state_thinking",
+            state=self._state.value,
+            region=self._region_payload(region),
+            message=self._thinking_frames[self._thinking_index],
         )
 
     def show_prompt_input_state(
@@ -371,12 +396,17 @@ class OverlayBubble(QWidget):
         self._thread_id = thread_id.strip()
         self._turn_index = max(0, int(turn_index))
         self._set_input_mode(False)
+        self._apply_card_density(self._state)
+        self._set_status_visible(True)
+        self._set_actions_visible(True)
         self._set_composer_visible(True)
         self._clear_input()
         self._clear_feedback()
         turn_label = self._turn_index + 1
         self._status_label.setText(f"Socratic prompt  Turn {turn_label}")
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._message_label.setText(prompt)
+        self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._loading_timer.stop()
         self._loading_label.hide()
         self.set_retry_enabled(retry_enabled)
@@ -411,12 +441,18 @@ class OverlayBubble(QWidget):
         self._state = OverlayState.ERROR
         self._anchor_region = region
         self._set_input_mode(False)
+        self._apply_card_density(self._state)
+        self._set_status_visible(True)
+        self._set_actions_visible(True)
         self._set_composer_visible(False)
+        self._clear_feedback()
         self._status_label.setText("Could not analyze")
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         details = message.strip()
         if hint.strip():
             details = f"{details}\n{hint.strip()}"
         self._message_label.setText(details)
+        self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._loading_timer.stop()
         self._loading_label.hide()
         self.set_retry_enabled(retry_enabled)
@@ -448,9 +484,17 @@ class OverlayBubble(QWidget):
             region=self._region_payload(self._anchor_region),
         )
 
-    def _render_and_show(self, region: CaptureRegion) -> None:
+    def _render_and_show(
+        self,
+        region: CaptureRegion,
+        effective_min_width: int | None = None,
+        effective_max_width: int | None = None,
+    ) -> None:
+        min_width = self._min_width if effective_min_width is None else max(160, int(effective_min_width))
+        max_width_default = self._max_width if effective_max_width is None else max(160, int(effective_max_width))
+        max_width = max(min_width, max_width_default)
         self.adjustSize()
-        width = min(self._max_width, max(self._min_width, self.width()))
+        width = min(max_width, max(min_width, self.width()))
         height = max(self.height(), self.minimumSizeHint().height())
         self.resize(width, height)
         self.move(*self._resolve_position(region))
@@ -522,12 +566,16 @@ class OverlayBubble(QWidget):
         return max(minimum, min(value, maximum))
 
     def _advance_loading_frame(self) -> None:
-        if self._state != OverlayState.ANALYZING:
+        if self._state not in (OverlayState.ANALYZING, OverlayState.THINKING):
             self._loading_timer.stop()
             self._loading_label.hide()
             return
-        self._loading_index = (self._loading_index + 1) % len(self._loading_frames)
-        self._loading_label.setText(self._loading_frames[self._loading_index])
+        if self._state == OverlayState.ANALYZING:
+            self._loading_index = (self._loading_index + 1) % len(self._loading_frames)
+            self._loading_label.setText(self._loading_frames[self._loading_index])
+            return
+        self._thinking_index = (self._thinking_index + 1) % len(self._thinking_frames)
+        self._message_label.setText(self._thinking_frames[self._thinking_index])
 
     def _on_auto_hide_timeout(self) -> None:
         self._emit(
@@ -568,10 +616,6 @@ class OverlayBubble(QWidget):
             turn_index=self._turn_index,
         )
 
-    def _on_input_changed(self, text: str) -> None:
-        has_text = bool(text.strip())
-        self._send_button.setEnabled(self._state == OverlayState.PROMPT and has_text)
-
     def _on_send_clicked(self) -> None:
         if self._state != OverlayState.PROMPT:
             return
@@ -597,7 +641,6 @@ class OverlayBubble(QWidget):
                 variant="confirmation",
             )
         self._set_input_mode(False)
-        self._send_button.setEnabled(False)
         self._emit(
             "overlay_send_clicked",
             state=self._state.value,
@@ -612,8 +655,22 @@ class OverlayBubble(QWidget):
     def _set_composer_visible(self, visible: bool) -> None:
         self._composer.setVisible(visible)
         self._input_edit.setEnabled(visible)
-        if not visible:
-            self._send_button.setEnabled(False)
+
+    def _set_actions_visible(self, visible: bool) -> None:
+        self._actions_container.setVisible(visible)
+
+    def _set_status_visible(self, visible: bool) -> None:
+        self._status_label.setVisible(visible)
+
+    def _apply_card_density(self, state: OverlayState) -> None:
+        if state == OverlayState.THINKING:
+            margins = self._card_density_thinking_margins
+            spacing = self._card_density_thinking_spacing
+        else:
+            margins = self._card_density_default_margins
+            spacing = self._card_density_default_spacing
+        self._card_layout.setContentsMargins(*margins)
+        self._card_layout.setSpacing(spacing)
 
     def _set_input_mode(self, enabled: bool) -> None:
         if self._input_mode_enabled == enabled:
@@ -649,7 +706,6 @@ class OverlayBubble(QWidget):
 
     def _clear_input(self) -> None:
         self._input_edit.clear()
-        self._send_button.setEnabled(False)
 
     def _preview_text(self, text: str, max_len: int = 72) -> str:
         compact = " ".join(text.split())
