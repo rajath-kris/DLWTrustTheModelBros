@@ -3,11 +3,20 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Callable
 
-from PyQt6.QtCore import QPoint, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QPalette
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .types import CaptureRegion
+from .ui_theme import qss_font_family_stack
 
 
 class OverlayState(str, Enum):
@@ -55,6 +64,9 @@ class OverlayBubble(QWidget):
         input_max_chars: int = 280,
         show_input_confirmation: bool = True,
         input_required: bool = True,
+        font_family: str | None = None,
+        fade_in_ms: int = 220,
+        fade_text_stagger_ms: int = 60,
     ) -> None:
         super().__init__()
         self._min_width = max(220, min_width)
@@ -63,6 +75,10 @@ class OverlayBubble(QWidget):
         self._input_max_chars = max(40, input_max_chars)
         self._show_input_confirmation = show_input_confirmation
         self._input_required = input_required
+        self._font_family = (font_family or "").strip()
+        self._fade_in_ms = max(0, int(fade_in_ms))
+        self._fade_text_stagger_ms = max(0, int(fade_text_stagger_ms))
+        self._fade_enabled = self._fade_in_ms > 1
         self._state: OverlayState = OverlayState.HIDDEN
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
@@ -75,6 +91,12 @@ class OverlayBubble(QWidget):
 
         self.setObjectName("OverlayRoot")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._apply_focus_mode(False)
 
         self._card = QFrame(self)
@@ -144,6 +166,10 @@ class OverlayBubble(QWidget):
         actions_layout.addWidget(self._retry_button)
         actions_layout.addWidget(self._dismiss_button)
 
+        self._actions_container = QFrame(self._card)
+        self._actions_container.setObjectName("ActionsContainer")
+        self._actions_container.setLayout(actions_layout)
+
         card_layout = QVBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(10)
@@ -152,7 +178,7 @@ class OverlayBubble(QWidget):
         card_layout.addWidget(self._loading_label)
         card_layout.addWidget(self._composer)
         card_layout.addWidget(self._input_feedback_label)
-        card_layout.addLayout(actions_layout)
+        card_layout.addWidget(self._actions_container)
         self._card.setLayout(card_layout)
 
         root_layout = QVBoxLayout()
@@ -160,6 +186,7 @@ class OverlayBubble(QWidget):
         root_layout.addWidget(self._card)
         self.setLayout(root_layout)
 
+        font_stack = qss_font_family_stack(self._font_family)
         self.setStyleSheet(
             """
             #OverlayRoot {
@@ -174,14 +201,14 @@ class OverlayBubble(QWidget):
 
             QLabel {
                 color: #eef3fa;
-                font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif;
+                font-family: __FONT_STACK__;
                 font-size: 14px;
                 line-height: 1.35;
             }
 
             #StatusLabel {
                 color: rgba(228, 236, 247, 230);
-                font-family: "Segoe UI Variable Small", "Segoe UI", sans-serif;
+                font-family: __FONT_STACK__;
                 font-size: 12px;
                 font-weight: 600;
                 letter-spacing: 0.2px;
@@ -209,6 +236,7 @@ class OverlayBubble(QWidget):
                 border: none;
                 background: transparent;
                 color: #f4f8ff;
+                font-family: __FONT_STACK__;
                 font-size: 14px;
                 font-weight: 500;
                 padding: 2px 4px;
@@ -234,6 +262,7 @@ class OverlayBubble(QWidget):
                 border: 1px solid rgba(255, 255, 255, 46);
                 border-radius: 14px;
                 padding: 6px 12px;
+                font-family: __FONT_STACK__;
                 font-size: 12px;
                 font-weight: 600;
                 min-width: 82px;
@@ -267,7 +296,13 @@ class OverlayBubble(QWidget):
                 background-color: rgba(33, 44, 62, 190);
             }
             """
+            .replace("__FONT_STACK__", font_stack)
         )
+
+        self.setWindowOpacity(1.0)
+        self._fade_animation = QPropertyAnimation(self, b"windowOpacity", self)
+        self._fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade_animation.finished.connect(self._on_fade_in_finished)
 
         self._auto_hide_timer = QTimer(self)
         self._auto_hide_timer.setSingleShot(True)
@@ -398,10 +433,12 @@ class OverlayBubble(QWidget):
     def hide_prompt(self, reason: str = "manual") -> None:
         previous_state = self._state.value
         self._state = OverlayState.HIDDEN
+        self._stop_fade_animation()
         self._auto_hide_timer.stop()
         self._loading_timer.stop()
         self._loading_label.hide()
         self._set_input_mode(False)
+        self.setWindowOpacity(1.0)
         self.hide()
         self._emit(
             "overlay_hidden",
@@ -414,23 +451,75 @@ class OverlayBubble(QWidget):
     def _render_and_show(self, region: CaptureRegion) -> None:
         self.adjustSize()
         width = min(self._max_width, max(self._min_width, self.width()))
-        self.resize(width, self.height())
+        height = max(self.height(), self.minimumSizeHint().height())
+        self.resize(width, height)
         self.move(*self._resolve_position(region))
         self.show()
         self.raise_()
+        self._play_fade_in_animation(self._state)
 
     def _resolve_position(self, region: CaptureRegion) -> tuple[int, int]:
-        x = region.x + region.width + 12
-        y = region.y
+        margin = 12
+        bubble_width = max(1, self.width())
+        bubble_height = max(1, self.height())
 
-        screen = QGuiApplication.screenAt(QPoint(region.x, region.y)) or QGuiApplication.primaryScreen()
-        if screen is not None:
-            geometry = screen.availableGeometry()
-            if x + self.width() > geometry.right():
-                x = max(geometry.left() + 12, region.x - self.width() - 12)
-            if y + self.height() > geometry.bottom():
-                y = max(geometry.top() + 12, geometry.bottom() - self.height() - 12)
+        screen = self._resolve_active_screen(region)
+        if screen is None:
+            return region.x + region.width + margin, region.y
+
+        geometry = screen.availableGeometry()
+        min_x = geometry.left() + margin
+        max_x = geometry.left() + geometry.width() - bubble_width - margin
+        min_y = geometry.top() + margin
+        max_y = geometry.top() + geometry.height() - bubble_height - margin
+
+        right_candidate_x = region.x + region.width + margin
+        left_candidate_x = region.x - bubble_width - margin
+
+        if right_candidate_x <= max_x:
+            x = right_candidate_x
+        elif left_candidate_x >= min_x:
+            x = left_candidate_x
+        else:
+            x = self._clamp(right_candidate_x, min_x, max_x)
+
+        y = self._clamp(region.y, min_y, max_y)
         return x, y
+
+    def _resolve_active_screen(self, region: CaptureRegion):
+        screens = list(QGuiApplication.screens())
+        if not screens:
+            return QGuiApplication.primaryScreen()
+
+        region_rect = QRect(region.x, region.y, max(1, region.width), max(1, region.height))
+        best_screen = None
+        best_overlap_area = -1
+
+        for screen in screens:
+            intersection = region_rect.intersected(screen.availableGeometry())
+            overlap_area = max(0, intersection.width()) * max(0, intersection.height())
+            if overlap_area > best_overlap_area:
+                best_overlap_area = overlap_area
+                best_screen = screen
+
+        if best_screen is not None and best_overlap_area > 0:
+            return best_screen
+
+        center = QPoint(
+            region.x + max(0, region.width // 2),
+            region.y + max(0, region.height // 2),
+        )
+        return (
+            QGuiApplication.screenAt(center)
+            or QGuiApplication.screenAt(QPoint(region.x, region.y))
+            or QGuiApplication.primaryScreen()
+        )
+
+    @staticmethod
+    def _clamp(value: int, minimum: int, maximum: int) -> int:
+        if maximum < minimum:
+            return minimum
+        return max(minimum, min(value, maximum))
 
     def _advance_loading_frame(self) -> None:
         if self._state != OverlayState.ANALYZING:
@@ -530,6 +619,8 @@ class OverlayBubble(QWidget):
         if self._input_mode_enabled == enabled:
             return
         self._input_mode_enabled = enabled
+        self._stop_fade_animation()
+        self.setWindowOpacity(1.0)
         self._apply_focus_mode(enabled)
         if enabled:
             self._input_edit.setFocus(Qt.FocusReason.MouseFocusReason)
@@ -537,28 +628,12 @@ class OverlayBubble(QWidget):
             self._input_edit.clearFocus()
 
     def _apply_focus_mode(self, enabled: bool) -> None:
-        flags = (
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
-        if not enabled:
-            flags |= Qt.WindowType.WindowDoesNotAcceptFocus
-
-        if self.windowFlags() == flags:
-            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not enabled)
-            return
-
-        was_visible = self.isVisible()
-        previous_position = self.pos()
-        self.setWindowFlags(flags)
+        # Keep a stable top-level window configuration to avoid hide/show churn.
+        # Toggling focus intent only via ShowWithoutActivating + activateWindow is
+        # smoother and prevents flicker when the user clicks into the input.
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not enabled)
-        if was_visible:
-            self.show()
-            self.move(previous_position)
-            self.raise_()
-            if enabled:
-                self.activateWindow()
+        if enabled and self.isVisible():
+            self.activateWindow()
 
     def _set_feedback(self, message: str, variant: str = "confirmation") -> None:
         self._input_feedback_label.setProperty("variant", variant)
@@ -585,6 +660,40 @@ class OverlayBubble(QWidget):
     def _refresh_styles(self) -> None:
         self.style().unpolish(self._input_feedback_label)
         self.style().polish(self._input_feedback_label)
+
+    def _stop_fade_animation(self) -> None:
+        if self._fade_animation.state() != QPropertyAnimation.State.Stopped:
+            self._fade_animation.stop()
+
+    def _play_fade_in_animation(self, mode: OverlayState) -> None:
+        if not self._fade_enabled:
+            self.setWindowOpacity(1.0)
+            return
+        self._stop_fade_animation()
+        self.setWindowOpacity(0.0)
+        self._fade_animation.setStartValue(0.0)
+        self._fade_animation.setEndValue(1.0)
+        # Keep the visual rhythm of text staggering by extending total fade time.
+        total_duration = self._fade_in_ms + max(0, self._fade_text_stagger_ms)
+        self._fade_animation.setDuration(max(1, total_duration))
+        self._pending_fade_mode = mode
+        self._emit(
+            "overlay_fade_in_started",
+            state=mode.value,
+            region=self._region_payload(self._anchor_region),
+            duration_ms=total_duration,
+            text_stagger_ms=self._fade_text_stagger_ms,
+        )
+        self._fade_animation.start()
+
+    def _on_fade_in_finished(self) -> None:
+        self.setWindowOpacity(1.0)
+        mode = getattr(self, "_pending_fade_mode", self._state)
+        self._emit(
+            "overlay_fade_in_completed",
+            state=mode.value,
+            region=self._region_payload(self._anchor_region),
+        )
 
     def _region_payload(self, region: CaptureRegion | None) -> dict[str, int] | None:
         if region is None:

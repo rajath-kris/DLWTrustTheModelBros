@@ -11,9 +11,9 @@ from typing import Any
 from uuid import uuid4
 
 import requests
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
-from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QGraphicsOpacityEffect, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .bridge_client import BridgeClient
 from .capture import capture_region
@@ -23,6 +23,7 @@ from .overlay import OverlayBubble
 from .platform import get_active_window_metadata, platform_name
 from .region_selector import select_region
 from .types import CaptureRegion, MonitorSnapshot, WindowMetadata
+from .ui_theme import load_actor_font, qss_font_family_stack
 
 
 def utc_now_iso() -> str:
@@ -56,7 +57,7 @@ class AnalysisResult:
 class JourneyControlPanel(QWidget):
     capture_requested = pyqtSignal(str)
 
-    def __init__(self, local_trigger_key: str, scenario_label: str) -> None:
+    def __init__(self, local_trigger_key: str, scenario_label: str, font_family: str, fade_in_ms: int) -> None:
         super().__init__()
         self.setWindowTitle("Sentinel Journey Control")
         self.setWindowFlags(
@@ -64,24 +65,28 @@ class JourneyControlPanel(QWidget):
             | Qt.WindowType.Tool
         )
         self.resize(320, 180)
+        self._fade_in_ms = max(100, int(fade_in_ms))
+        self._font_stack = qss_font_family_stack(font_family)
 
         title = QLabel("Overlay Test Mode")
-        title.setStyleSheet("font-size:16px;font-weight:700;color:#f8fbff;")
+        title.setStyleSheet("font-family: __FONT_STACK__; font-size:16px;font-weight:700;color:#f8fbff;".replace("__FONT_STACK__", self._font_stack))
 
         scenario = QLabel(f"Scenario: {scenario_label or 'unspecified'}")
-        scenario.setStyleSheet("font-size:12px;color:#d8e0eb;")
+        scenario.setStyleSheet("font-family: __FONT_STACK__; font-size:12px;color:#d8e0eb;".replace("__FONT_STACK__", self._font_stack))
 
         hint = QLabel(
             "Use Alt+S globally, or use the local trigger below.\n"
             "Press Esc to dismiss selector/overlay."
         )
-        hint.setStyleSheet("font-size:12px;color:#adbacb;")
+        hint.setStyleSheet("font-family: __FONT_STACK__; font-size:12px;color:#adbacb;".replace("__FONT_STACK__", self._font_stack))
         hint.setWordWrap(True)
 
         button = QPushButton(f"Start Capture ({local_trigger_key})")
         button.setStyleSheet(
-            "font-size:13px;font-weight:600;padding:8px 10px;border-radius:10px;"
-            "background:#141923;color:#eef4ff;border:1px solid #2a3447;"
+            (
+                "font-family: __FONT_STACK__;font-size:13px;font-weight:600;padding:8px 10px;border-radius:10px;"
+                "background:#141923;color:#eef4ff;border:1px solid #2a3447;"
+            ).replace("__FONT_STACK__", self._font_stack)
         )
         button.clicked.connect(lambda: self.capture_requested.emit("local_panel_button"))
 
@@ -95,8 +100,24 @@ class JourneyControlPanel(QWidget):
         self.setLayout(layout)
         self.setStyleSheet("background:#0c1119;border:1px solid #2f3b4e;border-radius:12px;")
 
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(1.0)
+        self.setGraphicsEffect(self._opacity_effect)
+
+        self._fade_animation = QPropertyAnimation(self._opacity_effect, b"opacity", self)
+        self._fade_animation.setDuration(self._fade_in_ms)
+        self._fade_animation.setStartValue(0.0)
+        self._fade_animation.setEndValue(1.0)
+        self._fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
         self._shortcut = QShortcut(QKeySequence(local_trigger_key), self)
         self._shortcut.activated.connect(lambda: self.capture_requested.emit("local_panel_shortcut"))
+
+    def showEvent(self, event) -> None:
+        self._fade_animation.stop()
+        self._opacity_effect.setOpacity(0.0)
+        self._fade_animation.start()
+        super().showEvent(event)
 
 
 class SentinelController(QObject):
@@ -550,6 +571,7 @@ class SentinelController(QObject):
 
 def main() -> None:
     app = QApplication(sys.argv)
+    ui_font_family = load_actor_font(use_actor_font=settings.ui_use_actor_font)
 
     overlay = OverlayBubble(
         min_width=settings.overlay_min_width,
@@ -558,6 +580,9 @@ def main() -> None:
         input_max_chars=settings.overlay_input_max_chars,
         show_input_confirmation=settings.overlay_show_input_confirmation,
         input_required=settings.overlay_input_required,
+        font_family=ui_font_family,
+        fade_in_ms=settings.ui_fade_in_ms,
+        fade_text_stagger_ms=settings.ui_fade_text_stagger_ms,
     )
     bridge = BridgeClient(settings.bridge_url)
     controller = SentinelController(overlay, bridge)
@@ -573,6 +598,8 @@ def main() -> None:
         control_panel = JourneyControlPanel(
             local_trigger_key=settings.local_trigger_key,
             scenario_label=settings.test_scenario_label,
+            font_family=ui_font_family,
+            fade_in_ms=settings.ui_fade_in_ms,
         )
         control_panel.capture_requested.connect(controller.trigger_capture)
         control_panel.show()

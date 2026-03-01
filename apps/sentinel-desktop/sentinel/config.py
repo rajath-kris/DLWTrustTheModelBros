@@ -45,6 +45,9 @@ class SentinelSettings:
     overlay_input_max_chars: int = _env_int("SENTINEL_OVERLAY_INPUT_MAX_CHARS", 280)
     overlay_show_input_confirmation: bool = _env_bool("SENTINEL_OVERLAY_SHOW_INPUT_CONFIRMATION", True)
     overlay_input_required: bool = _env_bool("SENTINEL_OVERLAY_INPUT_REQUIRED", True)
+    ui_fade_in_ms: int = _env_int("SENTINEL_UI_FADE_IN_MS", 220)
+    ui_fade_text_stagger_ms: int = _env_int("SENTINEL_UI_FADE_TEXT_STAGGER_MS", 60)
+    ui_use_actor_font: bool = _env_bool("SENTINEL_UI_USE_ACTOR_FONT", True)
 
 
 settings = SentinelSettings()
