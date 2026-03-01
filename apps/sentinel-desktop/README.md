@@ -9,3 +9,13 @@ python -m venv .venv
 pip install -r requirements.txt
 python -m sentinel.main
 ```
+
+## Overlay Journey Harness
+
+From repo root:
+
+```powershell
+.\scripts\run-overlay-journey.ps1
+```
+
+This starts an isolated mock bridge + sentinel test mode and writes journey artifacts under `artifacts/overlay-journey/`.

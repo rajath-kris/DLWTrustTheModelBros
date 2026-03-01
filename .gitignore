@@ -21,3 +21,5 @@ data/captures/*.jpeg
 # Local scripts and runtime logs
 *.log
 data/*.pid
+artifacts/overlay-journey/
+artifacts/tmp-*/

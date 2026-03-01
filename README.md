@@ -70,3 +70,31 @@ python .\scripts\smoke_check.py
 ```
 
 This starts the bridge, posts a capture, verifies state increments, and exits.
+
+## Overlay Isolated Journey (One Command)
+
+Run the overlay in an isolated environment with a mock bridge, live timeline, and session artifacts:
+
+```powershell
+.\scripts\run-overlay-journey.ps1
+```
+
+Useful options:
+
+```powershell
+.\scripts\run-overlay-journey.ps1 -Scenario flaky
+.\scripts\run-overlay-journey.ps1 -Scenario success_slow -SkipBootstrap
+```
+
+What this does:
+
+1. Starts a local mock bridge on `127.0.0.1:8011`.
+2. Starts sentinel desktop in test mode with local Journey Control trigger.
+3. Streams timeline events in terminal while you perform capture/escape/retry actions.
+4. Writes artifacts to `artifacts/overlay-journey/<timestamp>/`:
+   - `raw-sentinel.log`
+   - `raw-mock-bridge.log`
+   - `timeline.json`
+   - `session-report.md`
+
+See `docs/overlay-test-journey.md` for full scenario matrix and guided steps.
