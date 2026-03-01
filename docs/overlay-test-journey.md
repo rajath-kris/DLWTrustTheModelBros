@@ -38,11 +38,14 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8011/__scenario -ContentTyp
 1. Start the script.
 2. Trigger capture using `Alt+S` or the Journey Control panel.
 3. Select a region and confirm selector completion in timeline output.
-4. Observe overlay state transitions (`analyzing` -> `prompt` or `error`).
-5. Press `Esc` to verify dismissibility.
-6. Force an error scenario and click `Retry`.
-7. Press Enter in launcher to end session.
-8. Open `session-report.md` and `timeline.json` in the generated artifact directory.
+4. Observe first overlay prompt in glass card style with composer input area.
+5. Click the composer, type a learner response, and press `Send`.
+6. Confirm timeline shows `input_mode_entered`, `user_input_submitted`, `turn_analysis_started`.
+7. Verify transition `prompt -> analyzing -> prompt` with cleared input.
+8. Press `Esc` to verify dismissibility.
+9. Force an error scenario and click `Retry` to validate retry after input.
+10. Press Enter in launcher to end session.
+11. Open `session-report.md` and `timeline.json` in the generated artifact directory.
 
 ## Artifacts
 
@@ -66,3 +69,18 @@ Default path:
 3. Latency visibility: analyzing state appears immediately after capture.
 4. State consistency: timeline event order matches user-visible states.
 5. Failure transparency: errors display actionable hints.
+6. Input-required loop: `Send` requires non-empty text and logs submission telemetry.
+7. Turn loop continuity: same thread progresses across turns until recapture.
+
+## Quick validation commands
+
+```powershell
+# Success two-turn loop
+.\scripts\run-overlay-journey.ps1 -Scenario success_fast
+
+# Slow analysis visibility during input turns
+.\scripts\run-overlay-journey.ps1 -Scenario success_slow
+
+# Flaky fail-then-retry with same thread context
+.\scripts\run-overlay-journey.ps1 -Scenario flaky
+```

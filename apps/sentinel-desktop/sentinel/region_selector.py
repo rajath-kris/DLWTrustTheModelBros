@@ -4,7 +4,7 @@ import time
 from typing import Any, Callable
 
 from PyQt6.QtCore import QEventLoop, QPoint, QRect, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
+from PyQt6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
 from PyQt6.QtWidgets import QWidget
 
 from .types import CaptureRegion
@@ -128,28 +128,44 @@ class RegionSelector(QWidget):
     def _draw_instruction_pill(self, painter: QPainter) -> None:
         painter.save()
         painter.setPen(Qt.PenStyle.NoPen)
-        metrics = painter.fontMetrics()
-        primary_w = metrics.horizontalAdvance(self._instruction_text)
-        secondary_w = metrics.horizontalAdvance(self._hint_text)
-        width = max(primary_w, secondary_w) + 42
-        height = (metrics.height() * 2) + 24
-        width = max(320, min(width, max(360, self.width() - 40)))
+        primary_font = QFont("Segoe UI Variable Text", 14)
+        secondary_font = QFont("Segoe UI Variable Small", 11)
+
+        painter.setFont(primary_font)
+        primary_metrics = painter.fontMetrics()
+        painter.setFont(secondary_font)
+        secondary_metrics = painter.fontMetrics()
+
+        primary_w = primary_metrics.horizontalAdvance(self._instruction_text)
+        secondary_w = secondary_metrics.horizontalAdvance(self._hint_text)
+        width = max(primary_w, secondary_w) + 54
+        height = primary_metrics.height() + secondary_metrics.height() + 30
+        width = max(360, min(width, max(420, self.width() - 40)))
 
         x = (self.width() - width) // 2
-        y = 26
+        y = 24
         pill_rect = QRect(x, y, width, height)
-        painter.setBrush(QColor(10, 13, 18, 228))
+        painter.setBrush(QColor(18, 22, 30, 220))
         painter.drawRoundedRect(pill_rect, 22, 22)
+        painter.setBrush(QColor(255, 255, 255, 9))
+        painter.drawRoundedRect(QRect(x + 1, y + 1, width - 2, height - 2), 21, 21)
 
-        painter.setPen(QColor(243, 247, 255, 245))
+        painter.setFont(primary_font)
+        painter.setPen(QColor(243, 248, 255, 245))
         painter.drawText(
-            QRect(x + 20, y + 8, width - 40, metrics.height() + 4),
+            QRect(x + 24, y + 8, width - 48, primary_metrics.height() + 4),
             Qt.AlignmentFlag.AlignCenter,
             self._instruction_text,
         )
-        painter.setPen(QColor(172, 185, 204, 230))
+        painter.setFont(secondary_font)
+        painter.setPen(QColor(175, 189, 210, 230))
         painter.drawText(
-            QRect(x + 20, y + metrics.height() + 8, width - 40, metrics.height() + 8),
+            QRect(
+                x + 24,
+                y + primary_metrics.height() + 9,
+                width - 48,
+                secondary_metrics.height() + 8,
+            ),
             Qt.AlignmentFlag.AlignCenter,
             self._hint_text,
         )

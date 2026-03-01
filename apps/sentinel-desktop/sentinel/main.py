@@ -8,6 +8,7 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 import requests
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
@@ -44,6 +45,9 @@ class AnalysisResult:
     region: CaptureRegion
     prompt: str = ""
     capture_id: str = ""
+    thread_id: str = ""
+    turn_index: int = 0
+    source_mode: str = ""
     error_message: str = ""
     error_hint: str = ""
     error_category: str = ""
@@ -110,12 +114,17 @@ class SentinelController(QObject):
         self._active_request_id = 0
         self._request_started_at: dict[int, float] = {}
         self._scenario_label = settings.test_scenario_label
+        self._active_thread_id: str | None = None
+        self._active_turn_index = 0
+        self._last_prompt_text = ""
+        self._pending_user_input_text: str | None = None
 
         self.capture_requested.connect(self._on_capture_requested)
         self.escape_requested.connect(self._on_escape_requested)
         self.analysis_ready.connect(self._on_analysis_ready)
         self.overlay.retry_requested.connect(self._on_retry_requested)
         self.overlay.dismiss_requested.connect(lambda: self.trigger_escape("overlay_dismiss"))
+        self.overlay.user_input_submitted.connect(self._on_user_input_submitted)
         self.overlay.set_telemetry_callback(self._on_overlay_event)
 
         self.overlay.set_retry_enabled(False)
@@ -133,8 +142,9 @@ class SentinelController(QObject):
             self._log_event("capture_aborted", source_mode=source_mode, reason="selector_cancelled")
             return
 
+        self._reset_turn_state()
         self._last_region = region
-        self.overlay.show_analyzing(region)
+        self.overlay.show_analyzing_state(region)
 
         try:
             context = self._build_capture_context(region)
@@ -155,7 +165,16 @@ class SentinelController(QObject):
             return
 
         self._last_capture_context = context
-        self._start_analysis(context, source_mode=source_mode, show_loading=False)
+        self._start_analysis(
+            context,
+            source_mode=source_mode,
+            show_loading=False,
+            thread_id=None,
+            turn_index=0,
+            previous_prompt=None,
+            user_input_text=None,
+            is_turn_analysis=False,
+        )
 
     def _on_escape_requested(self, source_mode: str) -> None:
         self._log_event("escape_triggered", source_mode=source_mode)
@@ -172,7 +191,54 @@ class SentinelController(QObject):
             )
             self._log_event("retry_unavailable", reason="no_previous_capture")
             return
-        self._start_analysis(context, source_mode="retry", show_loading=True)
+
+        pending_input = self._pending_user_input_text
+        self._start_analysis(
+            context,
+            source_mode="retry",
+            show_loading=True,
+            thread_id=self._active_thread_id,
+            turn_index=self._active_turn_index,
+            previous_prompt=self._last_prompt_text or None,
+            user_input_text=pending_input,
+            is_turn_analysis=bool(pending_input),
+        )
+
+    def _on_user_input_submitted(self, text: str) -> None:
+        context = self._last_capture_context
+        if context is None:
+            self.overlay.show_error_state(
+                "No active capture context.",
+                "Press Alt+S to capture first.",
+                self._fallback_region(),
+                retry_enabled=False,
+            )
+            self._log_event("user_input_rejected", reason="no_capture_context")
+            return
+
+        trimmed = text.strip()
+        if not trimmed:
+            self._log_event("user_input_rejected", reason="empty_input")
+            return
+
+        self._pending_user_input_text = trimmed
+        self._log_event(
+            "user_input_submitted",
+            char_count=len(trimmed),
+            preview=self._preview_text(trimmed),
+            thread_id=self._active_thread_id,
+            turn_index=self._active_turn_index,
+        )
+        self._start_analysis(
+            context,
+            source_mode="user_input_submit",
+            show_loading=True,
+            thread_id=self._active_thread_id,
+            turn_index=self._active_turn_index,
+            previous_prompt=self._last_prompt_text or None,
+            user_input_text=trimmed,
+            is_turn_analysis=True,
+        )
 
     def _build_capture_context(self, region: CaptureRegion) -> CaptureContext:
         image_bytes, monitor = capture_region(region)
@@ -186,19 +252,48 @@ class SentinelController(QObject):
             image_bytes=image_bytes,
         )
 
-    def _start_analysis(self, context: CaptureContext, source_mode: str, show_loading: bool) -> None:
+    def _start_analysis(
+        self,
+        context: CaptureContext,
+        source_mode: str,
+        show_loading: bool,
+        thread_id: str | None,
+        turn_index: int,
+        previous_prompt: str | None,
+        user_input_text: str | None,
+        is_turn_analysis: bool,
+    ) -> None:
         request_id = self._next_request_id()
         self._request_started_at[request_id] = time.monotonic()
 
         if show_loading:
-            self.overlay.show_analyzing(context.region)
+            self.overlay.show_analyzing_state(
+                context.region,
+                status_text="Analyzing your response" if is_turn_analysis else "Analyzing capture",
+                message="Generating your next Socratic prompt...",
+            )
+
+        effective_turn_index = max(0, int(turn_index))
+        user_input = user_input_text.strip() if user_input_text is not None else None
 
         self._log_event(
             "request_started",
             request_id=request_id,
             source_mode=source_mode,
             region=self._region_payload(context.region),
+            thread_id=thread_id,
+            turn_index=effective_turn_index,
+            user_input_char_count=len(user_input) if user_input else 0,
         )
+        if is_turn_analysis:
+            self._log_event(
+                "turn_analysis_started",
+                request_id=request_id,
+                source_mode=source_mode,
+                thread_id=thread_id,
+                turn_index=effective_turn_index,
+                user_input_char_count=len(user_input) if user_input else 0,
+            )
 
         def worker() -> None:
             try:
@@ -208,11 +303,20 @@ class SentinelController(QObject):
                     context.monitor,
                     context.region,
                     context.image_bytes,
+                    thread_id=thread_id,
+                    turn_index=effective_turn_index,
+                    previous_prompt=previous_prompt,
+                    user_input_text=user_input,
                 )
                 prompt = str(
                     result.get("socratic_prompt", "What concept feels least clear in this capture?")
                 ).strip() or "What concept feels least clear in this capture?"
                 capture_id = str(result.get("capture_id", "")).strip()
+                resolved_thread_id = str(result.get("thread_id", "")).strip() or thread_id or capture_id or str(uuid4())
+                resolved_turn_index = self._coerce_turn_index(
+                    result.get("turn_index"),
+                    default=(effective_turn_index + 1 if is_turn_analysis else effective_turn_index),
+                )
                 self.analysis_ready.emit(
                     AnalysisResult(
                         request_id=request_id,
@@ -220,6 +324,9 @@ class SentinelController(QObject):
                         region=context.region,
                         prompt=prompt,
                         capture_id=capture_id,
+                        thread_id=resolved_thread_id,
+                        turn_index=resolved_turn_index,
+                        source_mode=source_mode,
                     )
                 )
             except requests.Timeout:
@@ -233,6 +340,9 @@ class SentinelController(QObject):
                         request_id=request_id,
                         status="error",
                         region=context.region,
+                        thread_id=thread_id or "",
+                        turn_index=effective_turn_index,
+                        source_mode=source_mode,
                         error_message="Analysis timed out.",
                         error_hint="Retry, or check connection to the bridge.",
                         error_category="timeout",
@@ -249,6 +359,9 @@ class SentinelController(QObject):
                         request_id=request_id,
                         status="error",
                         region=context.region,
+                        thread_id=thread_id or "",
+                        turn_index=effective_turn_index,
+                        source_mode=source_mode,
                         error_message="Cannot reach bridge API.",
                         error_hint="Start FastAPI on port 8000, then Retry.",
                         error_category="bridge_unreachable",
@@ -267,6 +380,9 @@ class SentinelController(QObject):
                         request_id=request_id,
                         status="error",
                         region=context.region,
+                        thread_id=thread_id or "",
+                        turn_index=effective_turn_index,
+                        source_mode=source_mode,
                         error_message="Bridge returned an error.",
                         error_hint=f"HTTP {status_code}. Retry, or check bridge logs.",
                         error_category="http_error",
@@ -284,6 +400,9 @@ class SentinelController(QObject):
                         request_id=request_id,
                         status="error",
                         region=context.region,
+                        thread_id=thread_id or "",
+                        turn_index=effective_turn_index,
+                        source_mode=source_mode,
                         error_message="Unexpected analysis failure.",
                         error_hint="Retry. If it keeps failing, inspect terminal logs.",
                         error_category="unknown",
@@ -305,9 +424,17 @@ class SentinelController(QObject):
         duration_ms = self._consume_duration_ms(result.request_id)
 
         if result.status == "success":
-            self.overlay.show_prompt_state(
+            self._active_thread_id = result.thread_id.strip() or self._active_thread_id or result.capture_id or str(uuid4())
+            self._active_turn_index = max(0, int(result.turn_index))
+            self._last_prompt_text = result.prompt.strip()
+            turn_request_was_submitted = self._pending_user_input_text is not None
+            self._pending_user_input_text = None
+
+            self.overlay.show_prompt_input_state(
                 result.prompt,
                 result.region,
+                thread_id=self._active_thread_id,
+                turn_index=self._active_turn_index,
                 ttl_ms=settings.overlay_prompt_ttl_ms,
                 retry_enabled=self._last_capture_context is not None,
             )
@@ -316,7 +443,18 @@ class SentinelController(QObject):
                 request_id=result.request_id,
                 capture_id=result.capture_id,
                 duration_ms=duration_ms,
+                thread_id=self._active_thread_id,
+                turn_index=self._active_turn_index,
             )
+            if turn_request_was_submitted:
+                self._log_event(
+                    "turn_analysis_completed",
+                    request_id=result.request_id,
+                    status="success",
+                    duration_ms=duration_ms,
+                    thread_id=self._active_thread_id,
+                    turn_index=self._active_turn_index,
+                )
             return
 
         self.overlay.show_error_state(
@@ -331,6 +469,16 @@ class SentinelController(QObject):
             error_category=result.error_category or "unknown",
             duration_ms=duration_ms,
         )
+        if self._pending_user_input_text is not None:
+            self._log_event(
+                "turn_analysis_completed",
+                request_id=result.request_id,
+                status="error",
+                duration_ms=duration_ms,
+                thread_id=result.thread_id or self._active_thread_id,
+                turn_index=max(0, int(result.turn_index)),
+                error_category=result.error_category or "unknown",
+            )
 
     def _next_request_id(self) -> int:
         self._request_sequence += 1
@@ -342,6 +490,12 @@ class SentinelController(QObject):
         if start is None:
             return None
         return int(max(0.0, (time.monotonic() - start) * 1000.0))
+
+    def _coerce_turn_index(self, value: Any, default: int) -> int:
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return max(0, int(default))
 
     def _fallback_region(self) -> CaptureRegion:
         if self._last_region is not None:
@@ -364,6 +518,18 @@ class SentinelController(QObject):
     def _on_selector_event(self, event: str, fields: dict[str, Any]) -> None:
         self._log_event(event, **fields)
 
+    def _reset_turn_state(self) -> None:
+        self._active_thread_id = None
+        self._active_turn_index = 0
+        self._last_prompt_text = ""
+        self._pending_user_input_text = None
+
+    def _preview_text(self, text: str, max_len: int = 64) -> str:
+        collapsed = " ".join(text.split())
+        if len(collapsed) <= max_len:
+            return collapsed
+        return f"{collapsed[: max_len - 3]}..."
+
     def _log_event(self, event: str, **fields: Any) -> None:
         payload: dict[str, Any] = {
             "component": "sentinel_overlay",
@@ -375,6 +541,8 @@ class SentinelController(QObject):
             "region": None,
             "duration_ms": None,
             "error_category": None,
+            "thread_id": self._active_thread_id,
+            "turn_index": self._active_turn_index if self._active_thread_id else None,
         }
         payload.update(fields)
         print(json.dumps(payload, ensure_ascii=True), flush=True)
@@ -387,6 +555,9 @@ def main() -> None:
         min_width=settings.overlay_min_width,
         max_width=settings.overlay_max_width,
         loading_dot_interval_ms=settings.overlay_loading_dot_interval_ms,
+        input_max_chars=settings.overlay_input_max_chars,
+        show_input_confirmation=settings.overlay_show_input_confirmation,
+        input_required=settings.overlay_input_required,
     )
     bridge = BridgeClient(settings.bridge_url)
     controller = SentinelController(overlay, bridge)

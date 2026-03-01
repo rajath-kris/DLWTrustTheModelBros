@@ -42,6 +42,9 @@ class SentinelSettings:
     local_trigger_enabled: bool = _env_bool("SENTINEL_LOCAL_TRIGGER_ENABLED", _env_bool("SENTINEL_TEST_MODE", False))
     local_trigger_key: str = os.getenv("SENTINEL_LOCAL_TRIGGER_KEY", "Ctrl+Shift+S").strip() or "Ctrl+Shift+S"
     test_scenario_label: str = os.getenv("SENTINEL_TEST_SCENARIO_LABEL", "").strip()
+    overlay_input_max_chars: int = _env_int("SENTINEL_OVERLAY_INPUT_MAX_CHARS", 280)
+    overlay_show_input_confirmation: bool = _env_bool("SENTINEL_OVERLAY_SHOW_INPUT_CONFIRMATION", True)
+    overlay_input_required: bool = _env_bool("SENTINEL_OVERLAY_INPUT_REQUIRED", True)
 
 
 settings = SentinelSettings()

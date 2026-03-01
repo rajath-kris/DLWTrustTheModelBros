@@ -129,11 +129,12 @@ try {
     Write-Host ''
     Write-Host 'Overlay Journey Instructions'
     Write-Host '1. Trigger capture with Alt+S or Journey Control button.'
-    Write-Host "2. Drag-select a region. Observe selector and overlay timeline events."
-    Write-Host "3. Press Esc to verify dismiss behavior."
-    Write-Host "4. To force a failure mid-run, switch scenario:"
+    Write-Host "2. Drag-select a region, then click the input area and submit one reply with Send."
+    Write-Host "3. Observe prompt -> analyzing -> prompt loop and input telemetry in timeline."
+    Write-Host "4. Press Esc to verify dismiss behavior."
+    Write-Host "5. To force a failure mid-run, switch scenario:"
     Write-Host "   Invoke-RestMethod -Method Post -Uri $bridgeUrl/__scenario -ContentType 'application/json' -Body '{`"scenario`":`"http_500`"}'"
-    Write-Host "5. Click Retry on overlay to test retry journey."
+    Write-Host "6. Click Retry on overlay to test retry after an input turn."
     Write-Host ''
     Read-Host 'Press Enter when your user journey is complete'
 }

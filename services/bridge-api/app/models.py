@@ -39,6 +39,10 @@ class CaptureRequest(BaseModel):
     monitor: MonitorInfo
     region: RegionInfo
     image_base64: str = Field(min_length=1)
+    thread_id: str | None = None
+    turn_index: int = Field(default=0, ge=0)
+    previous_prompt: str | None = None
+    user_input_text: str | None = None
 
 
 class VisionExtraction(BaseModel):
@@ -91,6 +95,8 @@ class LearningState(BaseModel):
 
 class CaptureResponse(BaseModel):
     capture_id: str
+    thread_id: str
+    turn_index: int
     socratic_prompt: str
     gaps: list[KnowledgeGap]
     readiness_axes: ReadinessAxes

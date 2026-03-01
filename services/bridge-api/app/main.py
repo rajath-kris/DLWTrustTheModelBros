@@ -91,6 +91,11 @@ def _sanitize_capture_id(raw_value: str) -> str:
     return (cleaned[:80] or str(uuid4())).strip("-") or str(uuid4())
 
 
+def _sanitize_thread_id(raw_value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_value.strip())
+    return (cleaned[:80] or str(uuid4())).strip("-") or str(uuid4())
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok", "timestamp_utc": datetime.now(timezone.utc).isoformat()}
@@ -123,6 +128,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         raise HTTPException(status_code=400, detail=f"Invalid image_base64: {exc}") from exc
 
     capture_id = _sanitize_capture_id(payload.capture_id or str(uuid4()))
+    thread_id = _sanitize_thread_id((payload.thread_id or "").strip() or capture_id)
+    response_turn_index = max(0, int(payload.turn_index))
+    if (payload.user_input_text or "").strip():
+        response_turn_index += 1
     filename = f"{capture_id}.png"
     capture_path = Path(settings.captures_dir) / filename
     capture_path.write_bytes(image_bytes)
@@ -173,6 +182,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
 
     return CaptureResponse(
         capture_id=capture_id,
+        thread_id=thread_id,
+        turn_index=response_turn_index,
         socratic_prompt=socratic.socratic_prompt,
         gaps=new_gaps,
         readiness_axes=readiness,

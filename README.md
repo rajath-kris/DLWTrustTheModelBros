@@ -97,4 +97,18 @@ What this does:
    - `timeline.json`
    - `session-report.md`
 
+Prompt-by-prompt input loop (desktop overlay):
+
+1. Trigger a capture (`Alt+S` or Journey Control button).
+2. Select region and wait for the first Socratic prompt card.
+3. Click input area to enter text mode, type one response, then press `Send` (or Enter).
+4. Overlay transitions to analyzing and then returns with next prompt + cleared input box.
+5. Retry/Dismiss remain available; `Esc` dismisses selector/overlay.
+
+Input behavior defaults:
+
+- `SENTINEL_OVERLAY_INPUT_REQUIRED=1`
+- `SENTINEL_OVERLAY_INPUT_MAX_CHARS=280`
+- `SENTINEL_OVERLAY_SHOW_INPUT_CONFIRMATION=1`
+
 See `docs/overlay-test-journey.md` for full scenario matrix and guided steps.

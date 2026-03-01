@@ -137,6 +137,12 @@ class MockBridgeHandler(BaseHTTPRequestHandler):
 
         payload = self._read_json()
         capture_id = str(payload.get("capture_id", "")).strip() or str(uuid4())
+        thread_id = str(payload.get("thread_id", "")).strip() or capture_id
+        try:
+            request_turn_index = max(0, int(payload.get("turn_index", 0)))
+        except (TypeError, ValueError):
+            request_turn_index = 0
+        response_turn_index = request_turn_index + (1 if str(payload.get("user_input_text", "")).strip() else 0)
         request_number, scenario, flaky_fail_now = self.state.bump_request()
 
         emit(
@@ -144,17 +150,25 @@ class MockBridgeHandler(BaseHTTPRequestHandler):
             request_number=request_number,
             scenario=scenario,
             capture_id=capture_id,
+            thread_id=thread_id,
+            turn_index=response_turn_index,
             app_name=str(payload.get("app_name", "")),
         )
 
         if scenario == "success_fast":
             time.sleep(random.uniform(0.2, 0.4))
-            self._json_response(200, self._success_payload(capture_id, scenario, request_number))
+            self._json_response(
+                200,
+                self._success_payload(capture_id, thread_id, response_turn_index, scenario, request_number),
+            )
             return
 
         if scenario == "success_slow":
             time.sleep(random.uniform(2.0, 4.0))
-            self._json_response(200, self._success_payload(capture_id, scenario, request_number))
+            self._json_response(
+                200,
+                self._success_payload(capture_id, thread_id, response_turn_index, scenario, request_number),
+            )
             return
 
         if scenario == "http_500":
@@ -163,7 +177,10 @@ class MockBridgeHandler(BaseHTTPRequestHandler):
 
         if scenario == "timeout":
             time.sleep(self.state.timeout_seconds)
-            self._json_response(200, self._success_payload(capture_id, scenario, request_number))
+            self._json_response(
+                200,
+                self._success_payload(capture_id, thread_id, response_turn_index, scenario, request_number),
+            )
             return
 
         if scenario == "malformed":
@@ -175,14 +192,26 @@ class MockBridgeHandler(BaseHTTPRequestHandler):
                 self._json_response(500, {"detail": "Mock bridge flaky failure"})
                 return
             time.sleep(random.uniform(0.2, 0.5))
-            self._json_response(200, self._success_payload(capture_id, scenario, request_number))
+            self._json_response(
+                200,
+                self._success_payload(capture_id, thread_id, response_turn_index, scenario, request_number),
+            )
             return
 
         self._json_response(500, {"detail": "Unhandled scenario"})
 
-    def _success_payload(self, capture_id: str, scenario: str, request_number: int) -> dict[str, Any]:
+    def _success_payload(
+        self,
+        capture_id: str,
+        thread_id: str,
+        turn_index: int,
+        scenario: str,
+        request_number: int,
+    ) -> dict[str, Any]:
         return {
             "capture_id": capture_id,
+            "thread_id": thread_id,
+            "turn_index": turn_index,
             "socratic_prompt": (
                 f"[{scenario}] What first principle explains this step? "
                 f"(mock request #{request_number})"
