@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "started_at_utc": "2026-03-01T16:24:30.179722Z",
+  "finished_at_utc": "2026-03-01T16:24:30.180679Z",
+  "repo_root": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+  "base_branch": "main",
+  "integration_branch": "integration/test-only",
+  "feature_branches": [],
+  "allow_dirty": true,
+  "skipped": {
+    "merge": true,
+    "smoke_check": true,
+    "mission_build": true,
+    "python_compile": true
+  },
+  "failure_reason": "",
+  "steps": [],
+  "artifact_dir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\integration-gate\\20260302-002430"
+}

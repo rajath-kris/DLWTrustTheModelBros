@@ -3,22 +3,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Callable
 
-from PyQt6.QtCore import (
-    QEasingCurve,
-    QPoint,
-    QRect,
-    QParallelAnimationGroup,
-    QPauseAnimation,
-    QPropertyAnimation,
-    QSequentialAnimationGroup,
-    QTimer,
-    Qt,
-    pyqtSignal,
-)
+from PyQt6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QPalette
 from PyQt6.QtWidgets import (
     QFrame,
-    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -88,8 +76,9 @@ class OverlayBubble(QWidget):
         self._show_input_confirmation = show_input_confirmation
         self._input_required = input_required
         self._font_family = (font_family or "").strip()
-        self._fade_in_ms = max(100, int(fade_in_ms))
+        self._fade_in_ms = max(0, int(fade_in_ms))
         self._fade_text_stagger_ms = max(0, int(fade_text_stagger_ms))
+        self._fade_enabled = self._fade_in_ms > 1
         self._state: OverlayState = OverlayState.HIDDEN
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
@@ -102,6 +91,12 @@ class OverlayBubble(QWidget):
 
         self.setObjectName("OverlayRoot")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._apply_focus_mode(False)
 
         self._card = QFrame(self)
@@ -304,21 +299,10 @@ class OverlayBubble(QWidget):
             .replace("__FONT_STACK__", font_stack)
         )
 
-        self._fade_effects: dict[str, QGraphicsOpacityEffect] = {}
-        for key, widget in {
-            "card": self._card,
-            "status": self._status_label,
-            "message": self._message_label,
-            "loading": self._loading_label,
-            "composer": self._composer,
-            "feedback": self._input_feedback_label,
-            "actions": self._actions_container,
-        }.items():
-            effect = QGraphicsOpacityEffect(widget)
-            effect.setOpacity(1.0)
-            widget.setGraphicsEffect(effect)
-            self._fade_effects[key] = effect
-        self._fade_group: QParallelAnimationGroup | None = None
+        self.setWindowOpacity(1.0)
+        self._fade_animation = QPropertyAnimation(self, b"windowOpacity", self)
+        self._fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade_animation.finished.connect(self._on_fade_in_finished)
 
         self._auto_hide_timer = QTimer(self)
         self._auto_hide_timer.setSingleShot(True)
@@ -454,13 +438,7 @@ class OverlayBubble(QWidget):
         self._loading_timer.stop()
         self._loading_label.hide()
         self._set_input_mode(False)
-        self._set_fade_opacity("card", 1.0)
-        self._set_fade_opacity("status", 1.0)
-        self._set_fade_opacity("message", 1.0)
-        self._set_fade_opacity("loading", 1.0)
-        self._set_fade_opacity("composer", 1.0)
-        self._set_fade_opacity("feedback", 1.0)
-        self._set_fade_opacity("actions", 1.0)
+        self.setWindowOpacity(1.0)
         self.hide()
         self._emit(
             "overlay_hidden",
@@ -473,7 +451,8 @@ class OverlayBubble(QWidget):
     def _render_and_show(self, region: CaptureRegion) -> None:
         self.adjustSize()
         width = min(self._max_width, max(self._min_width, self.width()))
-        self.resize(width, self.height())
+        height = max(self.height(), self.minimumSizeHint().height())
+        self.resize(width, height)
         self.move(*self._resolve_position(region))
         self.show()
         self.raise_()
@@ -640,6 +619,8 @@ class OverlayBubble(QWidget):
         if self._input_mode_enabled == enabled:
             return
         self._input_mode_enabled = enabled
+        self._stop_fade_animation()
+        self.setWindowOpacity(1.0)
         self._apply_focus_mode(enabled)
         if enabled:
             self._input_edit.setFocus(Qt.FocusReason.MouseFocusReason)
@@ -647,28 +628,12 @@ class OverlayBubble(QWidget):
             self._input_edit.clearFocus()
 
     def _apply_focus_mode(self, enabled: bool) -> None:
-        flags = (
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
-        if not enabled:
-            flags |= Qt.WindowType.WindowDoesNotAcceptFocus
-
-        if self.windowFlags() == flags:
-            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not enabled)
-            return
-
-        was_visible = self.isVisible()
-        previous_position = self.pos()
-        self.setWindowFlags(flags)
+        # Keep a stable top-level window configuration to avoid hide/show churn.
+        # Toggling focus intent only via ShowWithoutActivating + activateWindow is
+        # smoother and prevents flicker when the user clicks into the input.
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not enabled)
-        if was_visible:
-            self.show()
-            self.move(previous_position)
-            self.raise_()
-            if enabled:
-                self.activateWindow()
+        if enabled and self.isVisible():
+            self.activateWindow()
 
     def _set_feedback(self, message: str, variant: str = "confirmation") -> None:
         self._input_feedback_label.setProperty("variant", variant)
@@ -696,91 +661,39 @@ class OverlayBubble(QWidget):
         self.style().unpolish(self._input_feedback_label)
         self.style().polish(self._input_feedback_label)
 
-    def _set_fade_opacity(self, key: str, value: float) -> None:
-        effect = self._fade_effects.get(key)
-        if effect is not None:
-            effect.setOpacity(max(0.0, min(1.0, float(value))))
-
-    def _build_opacity_animation(
-        self,
-        key: str,
-        start: float,
-        end: float,
-        duration_ms: int,
-    ) -> QPropertyAnimation | None:
-        effect = self._fade_effects.get(key)
-        if effect is None:
-            return None
-        animation = QPropertyAnimation(effect, b"opacity", self)
-        animation.setStartValue(float(start))
-        animation.setEndValue(float(end))
-        animation.setDuration(max(1, int(duration_ms)))
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        return animation
-
     def _stop_fade_animation(self) -> None:
-        if self._fade_group is None:
-            return
-        self._fade_group.stop()
-        self._fade_group.deleteLater()
-        self._fade_group = None
+        if self._fade_animation.state() != QPropertyAnimation.State.Stopped:
+            self._fade_animation.stop()
 
     def _play_fade_in_animation(self, mode: OverlayState) -> None:
+        if not self._fade_enabled:
+            self.setWindowOpacity(1.0)
+            return
         self._stop_fade_animation()
-
-        self._set_fade_opacity("card", 0.0)
-        visible_text_keys: list[str] = ["status", "message", "actions"]
-        if self._loading_label.isVisible():
-            visible_text_keys.append("loading")
-        if self._composer.isVisible():
-            visible_text_keys.append("composer")
-        if self._input_feedback_label.isVisible():
-            visible_text_keys.append("feedback")
-
-        for key in visible_text_keys:
-            self._set_fade_opacity(key, 0.0)
-
-        group = QParallelAnimationGroup(self)
-
-        card_animation = self._build_opacity_animation("card", 0.0, 1.0, self._fade_in_ms)
-        if card_animation is not None:
-            group.addAnimation(card_animation)
-
-        text_sequence = QSequentialAnimationGroup(group)
-        if self._fade_text_stagger_ms > 0:
-            text_sequence.addAnimation(QPauseAnimation(self._fade_text_stagger_ms, text_sequence))
-
-        text_group = QParallelAnimationGroup(text_sequence)
-        text_duration = self._fade_in_ms + 40
-        for key in visible_text_keys:
-            text_animation = self._build_opacity_animation(key, 0.0, 1.0, text_duration)
-            if text_animation is not None:
-                text_group.addAnimation(text_animation)
-
-        text_sequence.addAnimation(text_group)
-        group.addAnimation(text_sequence)
-
-        def finalize() -> None:
-            self._set_fade_opacity("card", 1.0)
-            for key in visible_text_keys:
-                self._set_fade_opacity(key, 1.0)
-            self._fade_group = None
-            self._emit(
-                "overlay_fade_in_completed",
-                state=mode.value,
-                region=self._region_payload(self._anchor_region),
-            )
-
-        group.finished.connect(finalize)
-        self._fade_group = group
+        self.setWindowOpacity(0.0)
+        self._fade_animation.setStartValue(0.0)
+        self._fade_animation.setEndValue(1.0)
+        # Keep the visual rhythm of text staggering by extending total fade time.
+        total_duration = self._fade_in_ms + max(0, self._fade_text_stagger_ms)
+        self._fade_animation.setDuration(max(1, total_duration))
+        self._pending_fade_mode = mode
         self._emit(
             "overlay_fade_in_started",
             state=mode.value,
             region=self._region_payload(self._anchor_region),
-            duration_ms=self._fade_in_ms,
+            duration_ms=total_duration,
             text_stagger_ms=self._fade_text_stagger_ms,
         )
-        group.start()
+        self._fade_animation.start()
+
+    def _on_fade_in_finished(self) -> None:
+        self.setWindowOpacity(1.0)
+        mode = getattr(self, "_pending_fade_mode", self._state)
+        self._emit(
+            "overlay_fade_in_completed",
+            state=mode.value,
+            region=self._region_payload(self._anchor_region),
+        )
 
     def _region_payload(self, region: CaptureRegion | None) -> dict[str, int] | None:
         if region is None:

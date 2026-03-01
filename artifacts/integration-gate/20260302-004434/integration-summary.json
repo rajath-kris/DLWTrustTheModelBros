@@ -1,0 +1,112 @@
+{
+  "ok": true,
+  "started_at_utc": "2026-03-01T16:44:34.423785Z",
+  "finished_at_utc": "2026-03-01T16:44:34.736357Z",
+  "repo_root": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+  "base_branch": "main",
+  "integration_branch": "integration/test-only",
+  "feature_branches": [],
+  "allow_dirty": true,
+  "skipped": {
+    "merge": true,
+    "smoke_check": true,
+    "mission_build": true,
+    "python_compile": true,
+    "code_review": false
+  },
+  "failure_reason": "",
+  "code_review": {
+    "skipped": false,
+    "changed_files": [
+      ".env.example",
+      "README.md",
+      "apps/sentinel-desktop/sentinel/assets/fonts/Actor-Regular.ttf",
+      "apps/sentinel-desktop/sentinel/bridge_client.py",
+      "apps/sentinel-desktop/sentinel/config.py",
+      "apps/sentinel-desktop/sentinel/main.py",
+      "apps/sentinel-desktop/sentinel/overlay.py",
+      "apps/sentinel-desktop/sentinel/region_selector.py",
+      "apps/sentinel-desktop/sentinel/ui_theme.py",
+      "docs/overlay-test-journey.md",
+      "scripts/mock_bridge.py",
+      "scripts/overlay_journey_report.py",
+      "scripts/run-overlay-journey.ps1",
+      "services/bridge-api/app/azure_clients.py",
+      "services/bridge-api/app/main.py",
+      "services/bridge-api/app/models.py",
+      "services/bridge-api/app/prompting.py"
+    ],
+    "todo_hits": [],
+    "conflict_hits": [],
+    "sentinel_log_path": "C:/1Reju/Coding/HACKATHONS/Deep Learning Week 2026/artifacts/sentinel_ui.log",
+    "sentinel_log_findings": {
+      "qt_geometry_warnings": [],
+      "qpainter_warnings": []
+    }
+  },
+  "steps": [
+    {
+      "name": "code_review_collect_changed_files",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_collect_changed_files"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": ".env.example\nREADME.md\napps/sentinel-desktop/sentinel/assets/fonts/Actor-Regular.ttf\napps/sentinel-desktop/sentinel/bridge_client.py\napps/sentinel-desktop/sentinel/config.py\napps/sentinel-desktop/sentinel/main.py\napps/sentinel-desktop/sentinel/overlay.py\napps/sentinel-desktop/sentinel/region_selector.py\napps/sentinel-desktop/sentinel/ui_theme.py\ndocs/overlay-test-journey.md\nscripts/mock_bridge.py\nscripts/overlay_journey_report.py\nscripts/run-overlay-journey.ps1\nservices/bridge-api/app/azure_clients.py\nservices/bridge-api/app/main.py\nservices/bridge-api/app/models.py\nservices/bridge-api/app/prompting.py",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_diff_check",
+      "ok": true,
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "main..HEAD"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_conflict_markers",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_conflict_markers"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_todo_fixme_scan",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_todo_fixme_scan"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_runtime_warning_scan",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_runtime_warning_scan"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "qt_geometry_warnings=0\nqpainter_warnings=0",
+      "stderr_tail": ""
+    }
+  ],
+  "artifact_dir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\integration-gate\\20260302-004434"
+}
