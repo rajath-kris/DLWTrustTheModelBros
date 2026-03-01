@@ -3,11 +3,32 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Callable
 
-from PyQt6.QtCore import QPoint, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QRect,
+    QParallelAnimationGroup,
+    QPauseAnimation,
+    QPropertyAnimation,
+    QSequentialAnimationGroup,
+    QTimer,
+    Qt,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QColor, QGuiApplication, QPalette
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QFrame,
+    QGraphicsOpacityEffect,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .types import CaptureRegion
+from .ui_theme import qss_font_family_stack
 
 
 class OverlayState(str, Enum):
@@ -55,6 +76,9 @@ class OverlayBubble(QWidget):
         input_max_chars: int = 280,
         show_input_confirmation: bool = True,
         input_required: bool = True,
+        font_family: str | None = None,
+        fade_in_ms: int = 220,
+        fade_text_stagger_ms: int = 60,
     ) -> None:
         super().__init__()
         self._min_width = max(220, min_width)
@@ -63,6 +87,9 @@ class OverlayBubble(QWidget):
         self._input_max_chars = max(40, input_max_chars)
         self._show_input_confirmation = show_input_confirmation
         self._input_required = input_required
+        self._font_family = (font_family or "").strip()
+        self._fade_in_ms = max(100, int(fade_in_ms))
+        self._fade_text_stagger_ms = max(0, int(fade_text_stagger_ms))
         self._state: OverlayState = OverlayState.HIDDEN
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
@@ -144,6 +171,10 @@ class OverlayBubble(QWidget):
         actions_layout.addWidget(self._retry_button)
         actions_layout.addWidget(self._dismiss_button)
 
+        self._actions_container = QFrame(self._card)
+        self._actions_container.setObjectName("ActionsContainer")
+        self._actions_container.setLayout(actions_layout)
+
         card_layout = QVBoxLayout()
         card_layout.setContentsMargins(16, 14, 16, 14)
         card_layout.setSpacing(10)
@@ -152,7 +183,7 @@ class OverlayBubble(QWidget):
         card_layout.addWidget(self._loading_label)
         card_layout.addWidget(self._composer)
         card_layout.addWidget(self._input_feedback_label)
-        card_layout.addLayout(actions_layout)
+        card_layout.addWidget(self._actions_container)
         self._card.setLayout(card_layout)
 
         root_layout = QVBoxLayout()
@@ -160,6 +191,7 @@ class OverlayBubble(QWidget):
         root_layout.addWidget(self._card)
         self.setLayout(root_layout)
 
+        font_stack = qss_font_family_stack(self._font_family)
         self.setStyleSheet(
             """
             #OverlayRoot {
@@ -174,14 +206,14 @@ class OverlayBubble(QWidget):
 
             QLabel {
                 color: #eef3fa;
-                font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif;
+                font-family: __FONT_STACK__;
                 font-size: 14px;
                 line-height: 1.35;
             }
 
             #StatusLabel {
                 color: rgba(228, 236, 247, 230);
-                font-family: "Segoe UI Variable Small", "Segoe UI", sans-serif;
+                font-family: __FONT_STACK__;
                 font-size: 12px;
                 font-weight: 600;
                 letter-spacing: 0.2px;
@@ -209,6 +241,7 @@ class OverlayBubble(QWidget):
                 border: none;
                 background: transparent;
                 color: #f4f8ff;
+                font-family: __FONT_STACK__;
                 font-size: 14px;
                 font-weight: 500;
                 padding: 2px 4px;
@@ -234,6 +267,7 @@ class OverlayBubble(QWidget):
                 border: 1px solid rgba(255, 255, 255, 46);
                 border-radius: 14px;
                 padding: 6px 12px;
+                font-family: __FONT_STACK__;
                 font-size: 12px;
                 font-weight: 600;
                 min-width: 82px;
@@ -267,7 +301,24 @@ class OverlayBubble(QWidget):
                 background-color: rgba(33, 44, 62, 190);
             }
             """
+            .replace("__FONT_STACK__", font_stack)
         )
+
+        self._fade_effects: dict[str, QGraphicsOpacityEffect] = {}
+        for key, widget in {
+            "card": self._card,
+            "status": self._status_label,
+            "message": self._message_label,
+            "loading": self._loading_label,
+            "composer": self._composer,
+            "feedback": self._input_feedback_label,
+            "actions": self._actions_container,
+        }.items():
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(1.0)
+            widget.setGraphicsEffect(effect)
+            self._fade_effects[key] = effect
+        self._fade_group: QParallelAnimationGroup | None = None
 
         self._auto_hide_timer = QTimer(self)
         self._auto_hide_timer.setSingleShot(True)
@@ -398,10 +449,18 @@ class OverlayBubble(QWidget):
     def hide_prompt(self, reason: str = "manual") -> None:
         previous_state = self._state.value
         self._state = OverlayState.HIDDEN
+        self._stop_fade_animation()
         self._auto_hide_timer.stop()
         self._loading_timer.stop()
         self._loading_label.hide()
         self._set_input_mode(False)
+        self._set_fade_opacity("card", 1.0)
+        self._set_fade_opacity("status", 1.0)
+        self._set_fade_opacity("message", 1.0)
+        self._set_fade_opacity("loading", 1.0)
+        self._set_fade_opacity("composer", 1.0)
+        self._set_fade_opacity("feedback", 1.0)
+        self._set_fade_opacity("actions", 1.0)
         self.hide()
         self._emit(
             "overlay_hidden",
@@ -418,19 +477,70 @@ class OverlayBubble(QWidget):
         self.move(*self._resolve_position(region))
         self.show()
         self.raise_()
+        self._play_fade_in_animation(self._state)
 
     def _resolve_position(self, region: CaptureRegion) -> tuple[int, int]:
-        x = region.x + region.width + 12
-        y = region.y
+        margin = 12
+        bubble_width = max(1, self.width())
+        bubble_height = max(1, self.height())
 
-        screen = QGuiApplication.screenAt(QPoint(region.x, region.y)) or QGuiApplication.primaryScreen()
-        if screen is not None:
-            geometry = screen.availableGeometry()
-            if x + self.width() > geometry.right():
-                x = max(geometry.left() + 12, region.x - self.width() - 12)
-            if y + self.height() > geometry.bottom():
-                y = max(geometry.top() + 12, geometry.bottom() - self.height() - 12)
+        screen = self._resolve_active_screen(region)
+        if screen is None:
+            return region.x + region.width + margin, region.y
+
+        geometry = screen.availableGeometry()
+        min_x = geometry.left() + margin
+        max_x = geometry.left() + geometry.width() - bubble_width - margin
+        min_y = geometry.top() + margin
+        max_y = geometry.top() + geometry.height() - bubble_height - margin
+
+        right_candidate_x = region.x + region.width + margin
+        left_candidate_x = region.x - bubble_width - margin
+
+        if right_candidate_x <= max_x:
+            x = right_candidate_x
+        elif left_candidate_x >= min_x:
+            x = left_candidate_x
+        else:
+            x = self._clamp(right_candidate_x, min_x, max_x)
+
+        y = self._clamp(region.y, min_y, max_y)
         return x, y
+
+    def _resolve_active_screen(self, region: CaptureRegion):
+        screens = list(QGuiApplication.screens())
+        if not screens:
+            return QGuiApplication.primaryScreen()
+
+        region_rect = QRect(region.x, region.y, max(1, region.width), max(1, region.height))
+        best_screen = None
+        best_overlap_area = -1
+
+        for screen in screens:
+            intersection = region_rect.intersected(screen.availableGeometry())
+            overlap_area = max(0, intersection.width()) * max(0, intersection.height())
+            if overlap_area > best_overlap_area:
+                best_overlap_area = overlap_area
+                best_screen = screen
+
+        if best_screen is not None and best_overlap_area > 0:
+            return best_screen
+
+        center = QPoint(
+            region.x + max(0, region.width // 2),
+            region.y + max(0, region.height // 2),
+        )
+        return (
+            QGuiApplication.screenAt(center)
+            or QGuiApplication.screenAt(QPoint(region.x, region.y))
+            or QGuiApplication.primaryScreen()
+        )
+
+    @staticmethod
+    def _clamp(value: int, minimum: int, maximum: int) -> int:
+        if maximum < minimum:
+            return minimum
+        return max(minimum, min(value, maximum))
 
     def _advance_loading_frame(self) -> None:
         if self._state != OverlayState.ANALYZING:
@@ -585,6 +695,92 @@ class OverlayBubble(QWidget):
     def _refresh_styles(self) -> None:
         self.style().unpolish(self._input_feedback_label)
         self.style().polish(self._input_feedback_label)
+
+    def _set_fade_opacity(self, key: str, value: float) -> None:
+        effect = self._fade_effects.get(key)
+        if effect is not None:
+            effect.setOpacity(max(0.0, min(1.0, float(value))))
+
+    def _build_opacity_animation(
+        self,
+        key: str,
+        start: float,
+        end: float,
+        duration_ms: int,
+    ) -> QPropertyAnimation | None:
+        effect = self._fade_effects.get(key)
+        if effect is None:
+            return None
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setStartValue(float(start))
+        animation.setEndValue(float(end))
+        animation.setDuration(max(1, int(duration_ms)))
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        return animation
+
+    def _stop_fade_animation(self) -> None:
+        if self._fade_group is None:
+            return
+        self._fade_group.stop()
+        self._fade_group.deleteLater()
+        self._fade_group = None
+
+    def _play_fade_in_animation(self, mode: OverlayState) -> None:
+        self._stop_fade_animation()
+
+        self._set_fade_opacity("card", 0.0)
+        visible_text_keys: list[str] = ["status", "message", "actions"]
+        if self._loading_label.isVisible():
+            visible_text_keys.append("loading")
+        if self._composer.isVisible():
+            visible_text_keys.append("composer")
+        if self._input_feedback_label.isVisible():
+            visible_text_keys.append("feedback")
+
+        for key in visible_text_keys:
+            self._set_fade_opacity(key, 0.0)
+
+        group = QParallelAnimationGroup(self)
+
+        card_animation = self._build_opacity_animation("card", 0.0, 1.0, self._fade_in_ms)
+        if card_animation is not None:
+            group.addAnimation(card_animation)
+
+        text_sequence = QSequentialAnimationGroup(group)
+        if self._fade_text_stagger_ms > 0:
+            text_sequence.addAnimation(QPauseAnimation(self._fade_text_stagger_ms, text_sequence))
+
+        text_group = QParallelAnimationGroup(text_sequence)
+        text_duration = self._fade_in_ms + 40
+        for key in visible_text_keys:
+            text_animation = self._build_opacity_animation(key, 0.0, 1.0, text_duration)
+            if text_animation is not None:
+                text_group.addAnimation(text_animation)
+
+        text_sequence.addAnimation(text_group)
+        group.addAnimation(text_sequence)
+
+        def finalize() -> None:
+            self._set_fade_opacity("card", 1.0)
+            for key in visible_text_keys:
+                self._set_fade_opacity(key, 1.0)
+            self._fade_group = None
+            self._emit(
+                "overlay_fade_in_completed",
+                state=mode.value,
+                region=self._region_payload(self._anchor_region),
+            )
+
+        group.finished.connect(finalize)
+        self._fade_group = group
+        self._emit(
+            "overlay_fade_in_started",
+            state=mode.value,
+            region=self._region_payload(self._anchor_region),
+            duration_ms=self._fade_in_ms,
+            text_stagger_ms=self._fade_text_stagger_ms,
+        )
+        group.start()
 
     def _region_payload(self, region: CaptureRegion | None) -> dict[str, int] | None:
         if region is None:

@@ -3,11 +3,13 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from PyQt6.QtCore import QEventLoop, QPoint, QRect, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QEventLoop, QPoint, QPropertyAnimation, QRect, Qt, pyqtProperty, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
 from PyQt6.QtWidgets import QWidget
 
+from .config import settings
 from .types import CaptureRegion
+from .ui_theme import get_ui_font_family
 
 
 TelemetryCallback = Callable[[str, dict[str, Any]], None]
@@ -31,6 +33,11 @@ class RegionSelector(QWidget):
         self._hint_text = hint_text
         self._opened_at_monotonic: float | None = None
         self._closed_emitted = False
+        self._pill_opacity = 0.0
+        self._font_family = get_ui_font_family()
+        self._pill_animation = QPropertyAnimation(self, b"pill_opacity", self)
+        self._pill_animation.setDuration(max(120, settings.ui_fade_in_ms))
+        self._pill_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         geometry = QGuiApplication.primaryScreen().virtualGeometry()
         self.setGeometry(geometry)
@@ -45,6 +52,11 @@ class RegionSelector(QWidget):
 
     def showEvent(self, event) -> None:
         self._opened_at_monotonic = time.monotonic()
+        self._pill_animation.stop()
+        self.set_pill_opacity(0.0)
+        self._pill_animation.setStartValue(0.0)
+        self._pill_animation.setEndValue(1.0)
+        self._pill_animation.start()
         self._emit("selector_opened", region=None)
         super().showEvent(event)
 
@@ -128,8 +140,8 @@ class RegionSelector(QWidget):
     def _draw_instruction_pill(self, painter: QPainter) -> None:
         painter.save()
         painter.setPen(Qt.PenStyle.NoPen)
-        primary_font = QFont("Segoe UI Variable Text", 14)
-        secondary_font = QFont("Segoe UI Variable Small", 11)
+        primary_font = QFont(self._font_family, 14)
+        secondary_font = QFont(self._font_family, 11)
 
         painter.setFont(primary_font)
         primary_metrics = painter.fontMetrics()
@@ -145,20 +157,20 @@ class RegionSelector(QWidget):
         x = (self.width() - width) // 2
         y = 24
         pill_rect = QRect(x, y, width, height)
-        painter.setBrush(QColor(18, 22, 30, 220))
+        painter.setBrush(QColor(18, 22, 30, self._alpha(220)))
         painter.drawRoundedRect(pill_rect, 22, 22)
-        painter.setBrush(QColor(255, 255, 255, 9))
+        painter.setBrush(QColor(255, 255, 255, self._alpha(9)))
         painter.drawRoundedRect(QRect(x + 1, y + 1, width - 2, height - 2), 21, 21)
 
         painter.setFont(primary_font)
-        painter.setPen(QColor(243, 248, 255, 245))
+        painter.setPen(QColor(243, 248, 255, self._alpha(245)))
         painter.drawText(
             QRect(x + 24, y + 8, width - 48, primary_metrics.height() + 4),
             Qt.AlignmentFlag.AlignCenter,
             self._instruction_text,
         )
         painter.setFont(secondary_font)
-        painter.setPen(QColor(175, 189, 210, 230))
+        painter.setPen(QColor(175, 189, 210, self._alpha(230)))
         painter.drawText(
             QRect(
                 x + 24,
@@ -175,6 +187,18 @@ class RegionSelector(QWidget):
         if self._opened_at_monotonic is None:
             return None
         return int(max(0.0, (time.monotonic() - self._opened_at_monotonic) * 1000.0))
+
+    def get_pill_opacity(self) -> float:
+        return self._pill_opacity
+
+    def set_pill_opacity(self, value: float) -> None:
+        self._pill_opacity = max(0.0, min(1.0, float(value)))
+        self.update()
+
+    pill_opacity = pyqtProperty(float, fget=get_pill_opacity, fset=set_pill_opacity)
+
+    def _alpha(self, raw_alpha: int) -> int:
+        return max(0, min(255, int(round(raw_alpha * self._pill_opacity))))
 
     def _region_payload(self, region: CaptureRegion | None) -> dict[str, int] | None:
         if region is None:
