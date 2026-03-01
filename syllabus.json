@@ -1,0 +1,42 @@
+{
+  "course": {
+    "name": "Signals and Systems",
+    "term": "Spring 2026",
+    "timezone": "Asia/Singapore"
+  },
+  "concepts": [
+    {
+      "id": "laplace-transform",
+      "name": "Laplace Transform",
+      "deadline": "2026-03-20",
+      "weight": 1.0
+    },
+    {
+      "id": "fourier-series",
+      "name": "Fourier Series",
+      "deadline": "2026-03-25",
+      "weight": 0.9
+    },
+    {
+      "id": "state-space-models",
+      "name": "State Space Models",
+      "deadline": "2026-03-28",
+      "weight": 1.1
+    },
+    {
+      "id": "control-stability",
+      "name": "Control Stability",
+      "deadline": "2026-04-05",
+      "weight": 1.2
+    }
+  ],
+  "exclusions": [
+    "advanced quantum mechanics",
+    "bioinformatics"
+  ],
+  "socratic_policy": {
+    "no_direct_answers": true,
+    "max_questions": 2,
+    "tone": "coach"
+  }
+}

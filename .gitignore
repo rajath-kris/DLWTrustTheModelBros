@@ -1,0 +1,23 @@
+﻿# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# Runtime artifacts
+.env
+data/state.json
+data/captures/*.png
+data/captures/*.jpg
+data/captures/*.jpeg
+
+# IDE
+.vscode/
+.idea/
+
+# Local scripts and runtime logs
+*.log
+data/*.pid

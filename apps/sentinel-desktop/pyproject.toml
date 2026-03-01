@@ -1,0 +1,13 @@
+﻿[project]
+name = "sentinel-desktop"
+version = "0.1.0"
+description = "Desktop sentinel for ambient study capture"
+requires-python = ">=3.11"
+dependencies = [
+  "mss==10.1.0",
+  "PyQt6==6.8.1",
+  "requests==2.32.3",
+  "keyboard==0.13.5",
+  "pynput==1.7.7",
+  "python-dotenv==1.0.1"
+]
