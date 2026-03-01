@@ -9,6 +9,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $bridgeDir = Join-Path $repoRoot 'services/bridge-api'
 $sentinelDir = Join-Path $repoRoot 'apps/sentinel-desktop'
 $missionDir = Join-Path $repoRoot 'apps/mission-control'
+$npmExe = 'npm.cmd'
 
 $envFile = Join-Path $repoRoot '.env'
 $envExample = Join-Path $repoRoot '.env.example'
@@ -32,7 +33,7 @@ if (-not (Test-Path $sentinelPython)) {
 if (-not $SkipNode) {
     Push-Location $missionDir
     try {
-        npm install
+        & $npmExe install
     }
     finally {
         Pop-Location
