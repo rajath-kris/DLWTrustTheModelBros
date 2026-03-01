@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import sys
-import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -144,6 +144,8 @@ class SentinelController(QObject):
         self._pending_success_was_turn_analysis = False
         self._thinking_visible_request_id: int | None = None
         self._thinking_visible_started_at: float | None = None
+        self._selector_active = False
+        self._analysis_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sentinel-analysis")
 
         self._thinking_hold_timer = QTimer(self)
         self._thinking_hold_timer.setSingleShot(True)
@@ -165,10 +167,26 @@ class SentinelController(QObject):
     def trigger_escape(self, source_mode: str = "programmatic") -> None:
         self.escape_requested.emit(source_mode)
 
+    def shutdown(self) -> None:
+        self._analysis_executor.shutdown(wait=False, cancel_futures=True)
+        self._request_started_at.clear()
+
     def _on_capture_requested(self, source_mode: str) -> None:
         self._cancel_thinking_hold()
+        if self._selector_active:
+            self._log_event(
+                "capture_ignored",
+                source_mode=source_mode,
+                reason="selector_active",
+            )
+            return
+
         self._log_event("capture_triggered", source_mode=source_mode)
-        region = select_region(telemetry_callback=self._on_selector_event)
+        self._selector_active = True
+        try:
+            region = select_region(telemetry_callback=self._on_selector_event)
+        finally:
+            self._selector_active = False
         if region is None:
             self._log_event("capture_aborted", source_mode=source_mode, reason="selector_cancelled")
             return
@@ -453,18 +471,40 @@ class SentinelController(QObject):
                 )
                 traceback.print_exc()
 
-        threading.Thread(target=worker, daemon=True).start()
+        try:
+            self._analysis_executor.submit(worker)
+        except RuntimeError:
+            self._request_started_at.pop(request_id, None)
+            self._log_event(
+                "request_failed",
+                request_id=request_id,
+                source_mode=source_mode,
+                error_category="analysis_worker_unavailable",
+            )
+            self.analysis_ready.emit(
+                AnalysisResult(
+                    request_id=request_id,
+                    status="error",
+                    region=context.region,
+                    thread_id=thread_id or "",
+                    turn_index=effective_turn_index,
+                    source_mode=source_mode,
+                    error_message="Analysis worker is unavailable.",
+                    error_hint="Restart Sentinel and retry capture.",
+                    error_category="analysis_worker_unavailable",
+                )
+            )
 
     def _on_analysis_ready(self, result: AnalysisResult) -> None:
+        duration_ms = self._consume_duration_ms(result.request_id)
         if result.request_id != self._active_request_id:
             self._log_event(
                 "stale_response_ignored",
                 request_id=result.request_id,
                 active_request_id=self._active_request_id,
+                duration_ms=duration_ms,
             )
             return
-
-        duration_ms = self._consume_duration_ms(result.request_id)
 
         if result.status == "success":
             self._active_thread_id = result.thread_id.strip() or self._active_thread_id or result.capture_id or str(uuid4())
@@ -724,6 +764,7 @@ def main() -> None:
     try:
         app.exec()
     finally:
+        controller.shutdown()
         if control_panel is not None:
             control_panel.close()
         hotkeys.stop()
