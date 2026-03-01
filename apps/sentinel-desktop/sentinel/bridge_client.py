@@ -21,6 +21,10 @@ class BridgeClient:
         monitor: MonitorSnapshot,
         region: CaptureRegion,
         image_bytes: bytes,
+        thread_id: str | None = None,
+        turn_index: int = 0,
+        previous_prompt: str | None = None,
+        user_input_text: str | None = None,
     ) -> dict:
         payload = {
             "capture_id": str(uuid4()),
@@ -43,6 +47,13 @@ class BridgeClient:
             },
             "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
         }
+        if thread_id is not None and thread_id.strip():
+            payload["thread_id"] = thread_id.strip()
+        payload["turn_index"] = max(0, int(turn_index))
+        if previous_prompt is not None and previous_prompt.strip():
+            payload["previous_prompt"] = previous_prompt.strip()
+        if user_input_text is not None:
+            payload["user_input_text"] = user_input_text
 
         response = requests.post(
             f"{self.base_url}/api/v1/captures",

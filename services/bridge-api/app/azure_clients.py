@@ -99,7 +99,7 @@ class AzureSocraticClient:
         key = self._settings.azure_openai_key
         deployment = self._settings.azure_openai_deployment
 
-        fallback = self._fallback_output(extraction)
+        fallback = self._fallback_output(capture, extraction)
         if not endpoint or not key or not deployment:
             return fallback
 
@@ -113,7 +113,15 @@ class AzureSocraticClient:
         }
 
         system_prompt = build_system_prompt(syllabus)
-        user_prompt = build_user_prompt(extraction.raw_text, extraction.summary, extraction.tags)
+        user_prompt = build_user_prompt(
+            extraction.raw_text,
+            extraction.summary,
+            extraction.tags,
+            previous_prompt=capture.previous_prompt,
+            user_input_text=capture.user_input_text,
+            thread_id=capture.thread_id,
+            turn_index=capture.turn_index,
+        )
 
         payload = {
             "messages": [
@@ -162,14 +170,20 @@ class AzureSocraticClient:
         except Exception:
             return fallback
 
-    def _fallback_output(self, extraction: VisionExtraction) -> SocraticOutput:
+    def _fallback_output(self, capture: CaptureRequest, extraction: VisionExtraction) -> SocraticOutput:
         seed_concept = "Concept interpretation"
         if extraction.tags:
             seed_concept = extraction.tags[0].replace("_", " ").title()
-        prompt = (
-            "What is the first principle behind this section, and how would you explain it "
-            "in one sentence before solving anything?"
-        )
+        learner_reply = (capture.user_input_text or "").strip()
+        if learner_reply:
+            prompt = (
+                "What assumption in your last response is strongest, and which one needs evidence?"
+            )
+        else:
+            prompt = (
+                "What is the first principle behind this section, and how would you explain it "
+                "in one sentence before solving anything?"
+            )
         return SocraticOutput(
             socratic_prompt=prompt,
             gaps=[
