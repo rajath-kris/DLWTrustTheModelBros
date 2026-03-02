@@ -203,6 +203,8 @@ class SentinelController(QObject):
         self._reset_turn_state()
         self.overlay.reset_manual_position()
         self.overlay.reset_topic()
+        self.overlay.begin_interaction()
+        self.overlay.set_interaction_capture_image(None)
         self._last_region = region
 
         try:
@@ -225,6 +227,7 @@ class SentinelController(QObject):
             return
 
         # Keep launcher hidden through selection; expanded card will unhide overlay on state render.
+        self.overlay.set_interaction_capture_image(context.image_bytes)
         self._last_capture_context = context
         self._start_analysis(
             context,

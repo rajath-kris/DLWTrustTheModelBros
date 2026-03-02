@@ -37,8 +37,8 @@ class SentinelSettings:
 
     overlay_prompt_ttl_ms: int = _env_int("SENTINEL_OVERLAY_PROMPT_TTL_MS", 20000)
     overlay_loading_dot_interval_ms: int = _env_int("SENTINEL_OVERLAY_LOADING_DOT_INTERVAL_MS", 350)
-    overlay_min_width: int = _env_int("SENTINEL_OVERLAY_MIN_WIDTH", 320)
-    overlay_max_width: int = _env_int("SENTINEL_OVERLAY_MAX_WIDTH", 520)
+    overlay_min_width: int = _env_int("SENTINEL_OVERLAY_MIN_WIDTH", 288)
+    overlay_max_width: int = _env_int("SENTINEL_OVERLAY_MAX_WIDTH", 440)
     test_mode: bool = _env_bool("SENTINEL_TEST_MODE", False)
     local_trigger_enabled: bool = _env_bool("SENTINEL_LOCAL_TRIGGER_ENABLED", _env_bool("SENTINEL_TEST_MODE", False))
     local_trigger_key: str = os.getenv("SENTINEL_LOCAL_TRIGGER_KEY", "Ctrl+Shift+S").strip() or "Ctrl+Shift+S"

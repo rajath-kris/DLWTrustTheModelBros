@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 ONE_PIXEL_PNG_BASE64 = (
@@ -27,10 +28,26 @@ def _request_json(url: str, method: str = 'GET', payload: dict | None = None, ti
         return json.loads(response.read().decode('utf-8'))
 
 
-def _wait_for_health(bridge_url: str, timeout_seconds: float) -> dict:
+def _wait_for_health(
+    bridge_url: str,
+    timeout_seconds: float,
+    proc: subprocess.Popen[str] | None = None,
+) -> dict:
     deadline = time.time() + timeout_seconds
     last_error: Exception | None = None
     while time.time() < deadline:
+        if proc is not None and proc.poll() is not None:
+            stderr = ""
+            if proc.stderr is not None:
+                try:
+                    stderr = proc.stderr.read()[-1200:]
+                except Exception:  # noqa: BLE001
+                    stderr = ""
+            raise RuntimeError(
+                "Bridge process exited before health check passed. "
+                f"Exit code: {proc.returncode}. "
+                f"Stderr tail: {stderr.strip()}"
+            )
         try:
             return _request_json(f'{bridge_url}/healthz', timeout=2.5)
         except Exception as exc:  # noqa: BLE001
@@ -64,9 +81,12 @@ def main() -> int:
     repo_root = Path(args.repo_root).resolve()
     bridge_dir = repo_root / 'services/bridge-api'
     bridge_python = _resolve_bridge_python(repo_root, args.bridge_python)
+    parsed = urlparse(args.bridge_url.rstrip('/'))
+    bridge_host = parsed.hostname or '127.0.0.1'
+    bridge_port = parsed.port or 8000
 
     proc = subprocess.Popen(
-        [bridge_python, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'],
+        [bridge_python, '-m', 'uvicorn', 'app.main:app', '--host', bridge_host, '--port', str(bridge_port)],
         cwd=str(bridge_dir),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -75,9 +95,23 @@ def main() -> int:
 
     stdout_tail = ''
     stderr_tail = ''
+    exit_code = 0
 
     try:
-        health = _wait_for_health(args.bridge_url.rstrip('/'), args.startup_timeout)
+        health = _wait_for_health(args.bridge_url.rstrip('/'), args.startup_timeout, proc=proc)
+        time.sleep(0.2)
+        if proc.poll() is not None:
+            stderr = ''
+            if proc.stderr is not None:
+                try:
+                    stderr = proc.stderr.read()[-1200:]
+                except Exception:  # noqa: BLE001
+                    stderr = ''
+            raise RuntimeError(
+                "Bridge process exited after health check. "
+                f"Exit code: {proc.returncode}. "
+                f"Stderr tail: {stderr.strip()}"
+            )
         state_before = _request_json(f"{args.bridge_url.rstrip('/')}/api/v1/state")
 
         sample_path = repo_root / 'data/captures/smoke-test-capture.png'
@@ -117,12 +151,11 @@ def main() -> int:
         print(json.dumps(summary, indent=2))
 
         if not summary['ok']:
-            return 1
-        return 0
+            exit_code = 1
 
     except (RuntimeError, URLError, OSError, ValueError) as exc:
         print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
-        return 1
+        exit_code = 1
 
     finally:
         if proc.poll() is None:
@@ -139,13 +172,17 @@ def main() -> int:
             stdout_tail = out[-800:]
             stderr_tail = err[-1200:]
 
-        if proc.returncode not in (None, 0):
+        lowered_stderr = stderr_tail.lower()
+        if 'error while attempting to bind' in lowered_stderr or 'address already in use' in lowered_stderr:
+            exit_code = 1
+        if proc.returncode not in (None, 0) or exit_code != 0:
             if stdout_tail.strip():
                 print('---BRIDGE_STDOUT---')
                 print(stdout_tail)
             if stderr_tail.strip():
                 print('---BRIDGE_STDERR---')
                 print(stderr_tail)
+    return exit_code
 
 
 if __name__ == '__main__':

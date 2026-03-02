@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentinel-ai.local/schemas/brain-overview.schema.json",
+  "title": "BrainOverviewResponse",
+  "type": "object",
+  "required": ["course_id", "state"],
+  "properties": {
+    "course_id": {
+      "type": "string"
+    },
+    "state": {
+      "$ref": "learning-state.schema.json"
+    }
+  }
+}

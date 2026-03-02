@@ -1,11 +1,12 @@
 ﻿from __future__ import annotations
 
 import html
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
 
 from PyQt6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QGuiApplication, QPalette
+from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath, QPalette, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -53,6 +54,14 @@ class ComposerLineEdit(QLineEdit):
             event.accept()
             return
         super().keyPressEvent(event)
+
+
+@dataclass
+class InteractionPage:
+    turn_index: int
+    prompt_text: str
+    show_capture_preview: bool
+    user_response_text: str
 
 
 class OverlayBubble(QWidget):
@@ -112,6 +121,18 @@ class OverlayBubble(QWidget):
         self._geometry_animation_mode: str | None = None
         self._pending_collapse_reason = "manual"
         self._pending_collapse_previous_state = OverlayState.HIDDEN.value
+        self._interaction_pages: list[InteractionPage] = []
+        self._selected_page_index = -1
+        self._visible_page_indices: list[int] = []
+        self._max_visible_page_dots = 7
+        self._prompt_text_max_chars = 230
+        self._prompt_message_min_height = 72
+        self._interaction_capture_pixmap: QPixmap | None = None
+        self._capture_preview_height = 96
+        self._capture_preview_radius = 11
+        self._prompt_locked_height: int | None = None
+        self._composer_input_height = 24
+        self._composer_panel_height = 34
 
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
@@ -158,8 +179,25 @@ class OverlayBubble(QWidget):
         self._message_label.setObjectName("MessageLabel")
         self._message_label.setWordWrap(True)
         self._message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._message_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # Let layout width drive wrapping so long text does not force card expansion.
+        self._message_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self._message_label.setMinimumWidth(0)
+
+        self._capture_preview_label = QLabel("", self._card)
+        self._capture_preview_label.setObjectName("CapturePreview")
+        self._capture_preview_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self._capture_preview_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._capture_preview_label.setFixedHeight(self._capture_preview_height)
+        self._capture_preview_label.hide()
+
+        self._message_content = QFrame(self._card)
+        self._message_content.setObjectName("MessageContent")
+        message_content_layout = QVBoxLayout()
+        message_content_layout.setContentsMargins(0, 0, 0, 0)
+        message_content_layout.setSpacing(6)
+        message_content_layout.addWidget(self._capture_preview_label)
+        message_content_layout.addWidget(self._message_label)
+        self._message_content.setLayout(message_content_layout)
 
         self._message_row = QFrame(self._card)
         self._message_row.setObjectName("MessageRow")
@@ -167,8 +205,27 @@ class OverlayBubble(QWidget):
         message_layout.setContentsMargins(0, 0, 0, 0)
         message_layout.setSpacing(8)
         message_layout.addWidget(self._dismiss_button, stretch=0, alignment=Qt.AlignmentFlag.AlignTop)
-        message_layout.addWidget(self._message_label, stretch=1)
+        message_layout.addWidget(self._message_content, stretch=1)
         self._message_row.setLayout(message_layout)
+
+        self._page_rail = QFrame(self._card)
+        self._page_rail.setObjectName("PageRail")
+        self._page_rail.setFixedWidth(20)
+        page_rail_layout = QVBoxLayout()
+        page_rail_layout.setContentsMargins(0, 1, 0, 1)
+        page_rail_layout.setSpacing(4)
+        page_rail_layout.addStretch(1)
+        self._page_rail.setLayout(page_rail_layout)
+
+        self._message_shell = QFrame(self._card)
+        self._message_shell.setObjectName("MessageShell")
+        self._message_shell.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        message_shell_layout = QHBoxLayout()
+        message_shell_layout.setContentsMargins(0, 0, 0, 0)
+        message_shell_layout.setSpacing(6)
+        message_shell_layout.addWidget(self._message_row, stretch=1)
+        message_shell_layout.addWidget(self._page_rail, stretch=0, alignment=Qt.AlignmentFlag.AlignTop)
+        self._message_shell.setLayout(message_shell_layout)
 
         self._loading_label = QLabel("", self._card)
         self._loading_label.setObjectName("LoadingLabel")
@@ -180,6 +237,8 @@ class OverlayBubble(QWidget):
 
         self._composer = QFrame(self._card)
         self._composer.setObjectName("ComposerPanel")
+        self._composer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._composer.setFixedHeight(self._composer_panel_height)
 
         self._input_edit = ComposerLineEdit(self._composer)
         self._input_edit.setObjectName("InputEdit")
@@ -188,18 +247,19 @@ class OverlayBubble(QWidget):
         self._input_edit.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self._input_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._input_edit.setMinimumWidth(0)
+        self._input_edit.setFixedHeight(self._composer_input_height)
         self._input_edit.submit_pressed.connect(self._on_submit_clicked)
         self._input_edit.focus_intent.connect(self._on_input_focus_intent)
         self._input_edit.escape_pressed.connect(self._on_dismiss_clicked)
 
-        self._submit_button = QPushButton("→", self._composer)
+        self._submit_button = QPushButton("\u2192", self._composer)
         self._submit_button.setObjectName("SubmitButton")
         self._submit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._submit_button.clicked.connect(self._on_submit_clicked)
         self._submit_button.setToolTip("Submit (Enter)")
         self._submit_button.setAccessibleName("Submit")
         self._submit_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._submit_button.setFixedSize(24, 24)
+        self._submit_button.setFixedSize(self._composer_input_height, self._composer_input_height)
 
         input_palette = self._input_edit.palette()
         input_palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(214, 225, 238, 170))
@@ -215,7 +275,7 @@ class OverlayBubble(QWidget):
         self._actions_row = QFrame(self._card)
         self._actions_row.setObjectName("ActionsRow")
 
-        self._retry_button = QPushButton("↻", self._actions_row)
+        self._retry_button = QPushButton("\u21BB", self._actions_row)
         self._retry_button.setObjectName("RetryButton")
         self._retry_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._retry_button.clicked.connect(self._on_retry_clicked)
@@ -238,7 +298,7 @@ class OverlayBubble(QWidget):
         card_layout.setContentsMargins(14, 10, 14, 10)
         card_layout.setSpacing(6)
         card_layout.addWidget(self._top_highlight)
-        card_layout.addWidget(self._message_row)
+        card_layout.addWidget(self._message_shell)
         card_layout.addWidget(self._loading_label)
         card_layout.addWidget(self._prompt_divider)
         card_layout.addWidget(self._composer)
@@ -271,6 +331,7 @@ class OverlayBubble(QWidget):
         self._set_prompt_mode_visible(False)
         self._set_error_mode_visible(False)
         self._loading_label.hide()
+        self._refresh_page_dots()
         self._card.hide()
         self._launcher_button.show()
         self.hide()
@@ -298,6 +359,25 @@ class OverlayBubble(QWidget):
     # Compatibility no-op in UI: topic header was removed, topic remains telemetry-only.
     def reset_topic(self) -> None:
         self._current_topic = "Inference pending"
+
+    def begin_interaction(self) -> None:
+        self._interaction_pages.clear()
+        self._selected_page_index = -1
+        self._visible_page_indices.clear()
+        self._interaction_capture_pixmap = None
+        self._prompt_locked_height = None
+        self._reset_capture_preview()
+        self._refresh_page_dots()
+
+    def set_interaction_capture_image(self, capture_png_bytes: bytes | None) -> None:
+        pixmap: QPixmap | None = None
+        if capture_png_bytes:
+            loaded = QPixmap()
+            if loaded.loadFromData(capture_png_bytes, "PNG") and not loaded.isNull():
+                pixmap = loaded
+        self._interaction_capture_pixmap = pixmap
+        if self._state == OverlayState.PROMPT:
+            self._render_selected_prompt_page()
 
     def show_launcher(self, animated: bool = False) -> None:
         previous_state = self._state.value
@@ -430,6 +510,7 @@ class OverlayBubble(QWidget):
         retry_enabled: bool = True,
         topic_label: str | None = None,
     ) -> None:
+        previous_state = self._state
         self._launcher_temporarily_hidden = False
         self._state = OverlayState.PROMPT
         self._anchor_region = region
@@ -441,12 +522,37 @@ class OverlayBubble(QWidget):
         self._set_prompt_mode_visible(True)
         self._clear_input()
         self._message_label.setTextFormat(Qt.TextFormat.PlainText)
-        self._message_label.setText(prompt.strip())
-        self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self._loading_timer.stop()
-        self._loading_label.hide()
-        self.set_retry_enabled(retry_enabled)
-        self._render_and_show(region)
+        normalized_prompt = " ".join(prompt.strip().split()) or "What concept feels least clear in this capture?"
+        page_idx = self._upsert_interaction_page(
+            prompt_text=normalized_prompt,
+            turn_index=self._turn_index,
+        )
+        self._selected_page_index = page_idx
+        self._refresh_page_dots(selected_source="auto")
+
+        from_thinking = (
+            previous_state == OverlayState.THINKING
+            and self.isVisible()
+            and self._card.isVisible()
+        )
+        if from_thinking:
+            # Use the same animated geometry transition path used for page switches.
+            self._render_selected_prompt_page()
+            self._sync_prompt_input_availability()
+            self.set_retry_enabled(retry_enabled)
+            self._loading_timer.stop()
+            self._loading_label.hide()
+            self._reflow_prompt_card_geometry()
+        else:
+            # Paint a lightweight prompt first so shimmer->prompt handoff stays responsive.
+            self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            self._message_label.setText(self._truncate_for_page(normalized_prompt, self._prompt_text_max_chars))
+            self._reset_capture_preview()
+            self._sync_prompt_input_availability()
+            self.set_retry_enabled(retry_enabled)
+            self._render_and_show(region)
+            self._loading_label.hide()
+            QTimer.singleShot(0, self._render_prompt_page_and_reflow)
 
         if self._input_required:
             self._auto_hide_timer.stop()
@@ -542,6 +648,12 @@ class OverlayBubble(QWidget):
         self._actions_row.setVisible(False)
         self._input_edit.setEnabled(visible)
         self._dismiss_button.setVisible(visible)
+        self._message_label.setMinimumHeight(self._prompt_message_min_height if visible else 0)
+        if visible:
+            self._refresh_page_dots()
+        else:
+            self._reset_capture_preview()
+            self._page_rail.hide()
 
     def _set_error_mode_visible(self, visible: bool) -> None:
         self._composer.setVisible(False)
@@ -552,6 +664,8 @@ class OverlayBubble(QWidget):
         self._actions_row.setVisible(visible)
         self._input_edit.setEnabled(False)
         self._dismiss_button.setVisible(visible)
+        self._reset_capture_preview()
+        self._page_rail.hide()
 
     def _render_and_show(
         self,
@@ -571,12 +685,20 @@ class OverlayBubble(QWidget):
 
         self._card.setMinimumWidth(min_width)
         self._card.setMaximumWidth(max_width)
-        self.adjustSize()
+        card_layout = self._card.layout()
+        if card_layout is not None:
+            card_layout.activate()
+        root_layout = self.layout()
+        if root_layout is not None:
+            root_layout.activate()
 
-        natural_width = max(1, self.sizeHint().width())
-        width = min(max_width, max(min_width, natural_width))
-        natural_height = max(self.sizeHint().height(), self.minimumSizeHint().height(), 1)
-        height = min(natural_height, available_height)
+        width, height = self._measure_card_target_size(
+            min_width=min_width,
+            max_width=max_width,
+            available_height=available_height,
+        )
+        if self._state == OverlayState.PROMPT:
+            height = self._resolve_prompt_height(height, available_height)
         origin = self._launcher_origin()
         target_rect = QRect(origin.x(), origin.y(), width, height)
 
@@ -617,6 +739,262 @@ class OverlayBubble(QWidget):
     def _launcher_rect(self) -> QRect:
         origin = self._launcher_origin()
         return QRect(origin.x(), origin.y(), self._launcher_size, self._launcher_size)
+
+    def _upsert_interaction_page(self, prompt_text: str, turn_index: int) -> int:
+        normalized_prompt = " ".join(prompt_text.split()) or "What concept feels least clear in this capture?"
+        page_turn = max(0, int(turn_index))
+        show_capture_preview = page_turn == 0
+        existing_index: int | None = None
+        for idx, page in enumerate(self._interaction_pages):
+            if page.turn_index == page_turn:
+                existing_index = idx
+                break
+
+        if existing_index is None:
+            page = InteractionPage(
+                turn_index=page_turn,
+                prompt_text=normalized_prompt,
+                show_capture_preview=show_capture_preview,
+                user_response_text="",
+            )
+            self._interaction_pages.append(page)
+            self._interaction_pages.sort(key=lambda item: item.turn_index)
+            resolved_index = self._interaction_pages.index(page)
+            self._emit(
+                "overlay_page_added",
+                state=self._state.value,
+                page_index=resolved_index,
+                page_count=len(self._interaction_pages),
+                thread_id=self._thread_id,
+                turn_index=page.turn_index,
+            )
+        else:
+            page = self._interaction_pages[existing_index]
+            page.prompt_text = normalized_prompt
+            page.show_capture_preview = show_capture_preview
+            resolved_index = existing_index
+
+        return resolved_index
+
+    def _current_turn_page_index(self) -> int:
+        for idx, page in enumerate(self._interaction_pages):
+            if page.turn_index == self._turn_index:
+                return idx
+        return -1
+
+    def _is_selected_page_current_turn(self) -> bool:
+        current_idx = self._current_turn_page_index()
+        return current_idx >= 0 and self._selected_page_index == current_idx
+
+    def _sync_prompt_input_availability(self) -> None:
+        if self._state != OverlayState.PROMPT:
+            return
+        can_respond = self._is_selected_page_current_turn()
+        self._input_edit.setEnabled(can_respond)
+        self._submit_button.setEnabled(can_respond)
+        self._input_edit.setPlaceholderText(
+            "Type your response..." if can_respond else "Switch to current turn to respond..."
+        )
+        if not can_respond:
+            self._set_input_mode(False)
+
+    def _render_selected_prompt_page(self) -> None:
+        if self._state != OverlayState.PROMPT:
+            return
+        if not self._interaction_pages:
+            self._message_label.setText("")
+            return
+        selected = self._selected_page_index
+        if selected < 0 or selected >= len(self._interaction_pages):
+            selected = len(self._interaction_pages) - 1
+            self._selected_page_index = selected
+        page = self._interaction_pages[selected]
+        prompt_text = self._truncate_for_page(page.prompt_text, self._prompt_text_max_chars)
+        lines = [prompt_text]
+        self._reset_capture_preview()
+        if page.show_capture_preview and self._interaction_capture_pixmap is not None:
+            content_width = self._message_content.width()
+            if content_width <= 0:
+                content_width = max(180, self._card.width() - 82)
+            preview_width = max(160, content_width - 2)
+            rounded = self._rounded_capture_preview(
+                source=self._interaction_capture_pixmap,
+                target_w=preview_width,
+                target_h=self._capture_preview_height,
+                radius=self._capture_preview_radius,
+            )
+            self._capture_preview_label.setPixmap(rounded)
+            self._capture_preview_label.setMinimumWidth(rounded.width())
+            self._capture_preview_label.setMaximumWidth(rounded.width())
+            self._capture_preview_label.setFixedHeight(rounded.height())
+            self._capture_preview_label.show()
+        if page.user_response_text and not self._is_selected_page_current_turn():
+            lines.extend(["", f"You: {page.user_response_text}"])
+        self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self._message_label.setText("\n".join(lines))
+
+    def _visible_page_window(self) -> list[int]:
+        total = len(self._interaction_pages)
+        if total <= 0:
+            return []
+        if total <= self._max_visible_page_dots:
+            return list(range(total))
+        selected = self._selected_page_index
+        if selected < 0 or selected >= total:
+            selected = total - 1
+        half = self._max_visible_page_dots // 2
+        start = selected - half
+        end = start + self._max_visible_page_dots
+        if start < 0:
+            start = 0
+            end = self._max_visible_page_dots
+        if end > total:
+            end = total
+            start = end - self._max_visible_page_dots
+        return list(range(start, end))
+
+    def _refresh_page_dots(self, selected_source: str | None = None) -> None:
+        layout = self._page_rail.layout()
+        if layout is None:
+            return
+        while layout.count() > 1:
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        self._visible_page_indices = self._visible_page_window()
+        in_prompt = self._state == OverlayState.PROMPT
+        self._page_rail.setVisible(in_prompt and bool(self._visible_page_indices))
+        if not in_prompt or not self._visible_page_indices:
+            return
+
+        for page_idx in self._visible_page_indices:
+            page = self._interaction_pages[page_idx]
+            dot = QPushButton("", self._page_rail)
+            dot.setObjectName("PageDot")
+            dot.setCheckable(True)
+            dot.setChecked(page_idx == self._selected_page_index)
+            dot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            dot.setCursor(Qt.CursorShape.PointingHandCursor)
+            dot.setFixedSize(10, 10)
+            dot.setToolTip(f"Turn {page.turn_index + 1}")
+            dot.clicked.connect(lambda _checked=False, idx=page_idx: self._on_page_dot_clicked(idx))
+            layout.insertWidget(layout.count() - 1, dot, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        if selected_source and 0 <= self._selected_page_index < len(self._interaction_pages):
+            page = self._interaction_pages[self._selected_page_index]
+            self._emit(
+                "overlay_page_selected",
+                state=self._state.value,
+                page_index=self._selected_page_index,
+                page_count=len(self._interaction_pages),
+                thread_id=self._thread_id,
+                turn_index=page.turn_index,
+                source=selected_source,
+            )
+
+    def _on_page_dot_clicked(self, page_index: int) -> None:
+        if self._state != OverlayState.PROMPT:
+            return
+        if page_index < 0 or page_index >= len(self._interaction_pages):
+            return
+        self._selected_page_index = page_index
+        self._refresh_page_dots(selected_source="dot_click")
+        self._render_selected_prompt_page()
+        self._reflow_prompt_card_geometry()
+        self._sync_prompt_input_availability()
+
+    @staticmethod
+    def _truncate_for_page(text: str, limit: int) -> str:
+        compact = " ".join((text or "").split())
+        if len(compact) <= limit:
+            return compact
+        return f"{compact[: max(0, limit - 3)]}..."
+
+    def _rounded_capture_preview(self, source: QPixmap, target_w: int, target_h: int, radius: int) -> QPixmap:
+        width = max(1, int(target_w))
+        height = max(1, int(target_h))
+        rounded = QPixmap(width, height)
+        rounded.fill(Qt.GlobalColor.transparent)
+        scaled = source.scaled(
+            width,
+            height,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = max(0, (scaled.width() - width) // 2)
+        y = max(0, (scaled.height() - height) // 2)
+        cropped = scaled.copy(x, y, width, height)
+
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, width, height, float(radius), float(radius))
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, cropped)
+        painter.end()
+        return rounded
+
+    def _reset_capture_preview(self) -> None:
+        self._capture_preview_label.clear()
+        self._capture_preview_label.hide()
+        self._capture_preview_label.setMinimumWidth(0)
+        self._capture_preview_label.setMaximumWidth(16777215)
+        self._capture_preview_label.setFixedHeight(self._capture_preview_height)
+
+    def _render_prompt_page_and_reflow(self) -> None:
+        if self._state != OverlayState.PROMPT:
+            return
+        self._render_selected_prompt_page()
+        self._reflow_prompt_card_geometry()
+
+    def _reflow_prompt_card_geometry(self) -> None:
+        if self._state != OverlayState.PROMPT or not self.isVisible() or not self._card.isVisible():
+            return
+        geometry = self._primary_available_geometry()
+        available_height = max(120, geometry.height() - (self._launcher_margin * 2))
+        available_width = max(160, geometry.width() - (self._launcher_margin * 2))
+
+        min_width = min(self._min_width, available_width)
+        max_width = min(max(self._min_width, self._max_width), available_width)
+        self._card.setMinimumWidth(min_width)
+        self._card.setMaximumWidth(max_width)
+        card_layout = self._card.layout()
+        if card_layout is not None:
+            card_layout.activate()
+        root_layout = self.layout()
+        if root_layout is not None:
+            root_layout.activate()
+
+        width, measured_height = self._measure_card_target_size(
+            min_width=min_width,
+            max_width=max_width,
+            available_height=available_height,
+        )
+        height = self._resolve_prompt_height(measured_height, available_height)
+        origin = self._launcher_origin()
+        self._apply_window_geometry(
+            x=origin.x(),
+            y=origin.y(),
+            width=width,
+            height=height,
+        )
+
+    def _measure_card_target_size(self, min_width: int, max_width: int, available_height: int) -> tuple[int, int]:
+        card_hint = self._card.sizeHint()
+        card_min_hint = self._card.minimumSizeHint()
+        natural_width = max(1, card_hint.width(), card_min_hint.width())
+        width = min(max_width, max(min_width, natural_width))
+        natural_height = max(1, card_hint.height(), card_min_hint.height())
+        height = min(natural_height, available_height)
+        return width, height
+
+    def _resolve_prompt_height(self, candidate_height: int, available_height: int) -> int:
+        clamped = max(1, min(int(candidate_height), int(available_height)))
+        # Adaptive page sizing: allow both expansion and compression based on selected page content.
+        self._prompt_locked_height = clamped
+        return self._prompt_locked_height
 
     def _expand_from_launcher_to_card(self, target_rect: QRect) -> None:
         if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
@@ -935,12 +1313,16 @@ class OverlayBubble(QWidget):
     def _on_submit_clicked(self) -> None:
         if self._state != OverlayState.PROMPT:
             return
+        if not self._is_selected_page_current_turn():
+            return
         raw_text = self._input_edit.text().strip()
         payload_text = raw_text or self._submit_default_intent
-        self._emit_submission(payload_text, used_default=not bool(raw_text))
+        self._emit_submission(payload_text, used_default=not bool(raw_text), raw_text=raw_text)
 
     def _on_input_focus_intent(self) -> None:
         if self._state != OverlayState.PROMPT or self._input_mode_enabled:
+            return
+        if not self._is_selected_page_current_turn():
             return
         self._set_input_mode(True)
         self._emit(
@@ -966,8 +1348,13 @@ class OverlayBubble(QWidget):
         if enabled and self.isVisible():
             self.activateWindow()
 
-    def _emit_submission(self, payload_text: str, used_default: bool) -> None:
+    def _emit_submission(self, payload_text: str, used_default: bool, raw_text: str = "") -> None:
         self._last_submitted_text = payload_text
+        user_text = " ".join(raw_text.split())
+        if user_text:
+            idx = self._current_turn_page_index()
+            if 0 <= idx < len(self._interaction_pages):
+                self._interaction_pages[idx].user_response_text = user_text
         self._set_input_mode(False)
         payload_region = self._region_payload(self._anchor_region)
         self._emit(
@@ -1141,9 +1528,9 @@ class OverlayBubble(QWidget):
             return
 
         delta = abs(target_rect.width() - current_rect.width()) + abs(target_rect.height() - current_rect.height())
-        expanding = target_rect.width() > current_rect.width() or target_rect.height() > current_rect.height()
-        if self._state == OverlayState.PROMPT and expanding:
-            duration = self._clamp(int(220 + (delta * 0.45)), 220, 360)
+        if self._state in (OverlayState.PROMPT, OverlayState.THINKING):
+            # Keep prompt<->thinking/page transitions on the same smooth motion profile.
+            duration = self._clamp(int(700 + (delta * 0.30)), 700, 900)
             self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
         else:
             duration = self._clamp(int(120 + (delta * 0.35)), 120, 220)
@@ -1210,6 +1597,43 @@ class OverlayBubble(QWidget):
                 border: none;
             }
 
+            QFrame#MessageContent {
+                background: transparent;
+                border: none;
+            }
+
+            QLabel#CapturePreview {
+                background: transparent;
+                border: none;
+            }
+
+            QFrame#MessageShell {
+                background: transparent;
+                border: none;
+            }
+
+            QFrame#PageRail {
+                background: transparent;
+                border: none;
+            }
+
+            QPushButton#PageDot {
+                background: rgba(153, 176, 198, 116);
+                border: 1px solid rgba(209, 223, 238, 72);
+                border-radius: 5px;
+                padding: 0px;
+                margin: 0px;
+            }
+
+            QPushButton#PageDot:hover {
+                background: rgba(176, 197, 218, 158);
+            }
+
+            QPushButton#PageDot:checked {
+                background: rgba(22, 124, 203, 236);
+                border-color: rgba(116, 184, 236, 196);
+            }
+
             QPushButton#DismissButton {
                 background: rgba(34, 41, 50, 232);
                 border: 1px solid rgba(214, 226, 241, 38);
@@ -1262,6 +1686,8 @@ class OverlayBubble(QWidget):
                 background: rgba(0, 0, 0, 214);
                 border: 1px solid rgba(220, 231, 244, 74);
                 border-radius: 11px;
+                min-height: 34px;
+                max-height: 34px;
             }
 
             QLineEdit#InputEdit {
@@ -1272,12 +1698,19 @@ class OverlayBubble(QWidget):
                 font-size: 12px;
                 font-weight: 450;
                 padding: 3px 1px;
+                min-height: 24px;
+                max-height: 24px;
                 selection-background-color: rgba(105, 139, 170, 132);
                 selection-color: rgba(248, 251, 255, 250);
             }
 
             QLineEdit#InputEdit:focus {
                 border: none;
+            }
+
+            QLineEdit#InputEdit:disabled {
+                border: none;
+                color: rgba(183, 198, 214, 178);
             }
 
             QFrame#ActionsRow {
@@ -1342,3 +1775,5 @@ class OverlayBubble(QWidget):
             }
         """.replace("__FONT_STACK__", font_stack)
         self.setStyleSheet(stylesheet)
+
+

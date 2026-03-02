@@ -205,6 +205,41 @@ class OpenAISocraticClient:
             return fallback
         return self._parse_socratic_output(content, fallback)
 
+    def ask(
+        self,
+        *,
+        message: str,
+        thread_id: str,
+        turn_index: int,
+        course_id: str,
+    ) -> str:
+        cleaned_message = _normalize_text(message, max_chars=900) or "Help me understand this topic."
+        fallback = (
+            "What assumption are you making right now, and what evidence from your notes supports it?"
+        )
+        system_prompt = (
+            "You are Sentinel AI, a Socratic tutor. "
+            "Respond with one concise Socratic question only. "
+            "Do not provide direct final answers."
+        )
+        user_prompt = (
+            f"Course id: {course_id}\n"
+            f"Thread id: {thread_id}\n"
+            f"Turn index: {max(0, int(turn_index))}\n"
+            f"Learner message: {cleaned_message}\n"
+            "Return only the next Socratic question."
+        )
+        content = self._chat_client.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.25,
+            max_tokens=160,
+        )
+        if content is None:
+            return fallback
+        single_line = _normalize_text(content, max_chars=500)
+        return single_line or fallback
+
     def _parse_socratic_output(self, content: str, fallback: SocraticOutput) -> SocraticOutput:
         blob = _extract_json_blob(content)
         if not blob:

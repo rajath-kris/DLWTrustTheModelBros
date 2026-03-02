@@ -11,6 +11,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(PROJECT_ROOT / ".env")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if raw == "":
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     bridge_host: str = os.getenv("BRIDGE_HOST", "127.0.0.1")
@@ -23,6 +30,10 @@ class Settings:
 
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "12.0"))
     material_upload_max_bytes: int = int(os.getenv("BRIDGE_MATERIAL_UPLOAD_MAX_BYTES", "15728640"))
+    sentinel_runtime_enabled: bool = _env_bool("SENTINEL_RUNTIME_ENABLED", True)
+    sentinel_runtime_python: str = os.getenv("SENTINEL_RUNTIME_PYTHON", "").strip()
+    sentinel_runtime_workdir: str = os.getenv("SENTINEL_RUNTIME_WORKDIR", "").strip()
+    sentinel_runtime_stop_timeout_seconds: float = float(os.getenv("SENTINEL_RUNTIME_STOP_TIMEOUT_SECONDS", "2.0"))
 
     @property
     def dashboard_origins(self) -> list[str]:
@@ -37,6 +48,10 @@ class Settings:
         return PROJECT_ROOT / "data" / "captures"
 
     @property
+    def documents_dir(self) -> Path:
+        return PROJECT_ROOT / "data" / "course-documents"
+
+    @property
     def state_file(self) -> Path:
         return PROJECT_ROOT / "data" / "state.json"
 
@@ -47,6 +62,22 @@ class Settings:
     @property
     def syllabus_file(self) -> Path:
         return PROJECT_ROOT / "syllabus.json"
+
+    @property
+    def sentinel_runtime_default_python(self) -> Path:
+        return PROJECT_ROOT / "apps" / "sentinel-desktop" / ".venv" / "Scripts" / "python.exe"
+
+    @property
+    def sentinel_runtime_default_workdir(self) -> Path:
+        return PROJECT_ROOT / "apps" / "sentinel-desktop"
+
+    @property
+    def sentinel_runtime_metadata_file(self) -> Path:
+        return PROJECT_ROOT / "data" / "sentinel-runtime.json"
+
+    @property
+    def sentinel_runtime_logs_dir(self) -> Path:
+        return PROJECT_ROOT / "artifacts" / "sentinel-runtime"
 
 
 settings = Settings()

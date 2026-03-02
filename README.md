@@ -49,15 +49,47 @@ Recommended branch split:
 ## API Surface
 
 - `GET /healthz`
+- `GET /api/v1/sentinel/runtime`
+- `POST /api/v1/sentinel/runtime/start`
+- `POST /api/v1/sentinel/runtime/stop`
 - `GET /api/v1/state`
+- `GET /api/v1/brain/overview?course_id=<id|all>`
 - `GET /api/v1/events/stream`
 - `POST /api/v1/captures`
 - `POST /api/v1/gaps/{gap_id}/status`
+- `GET /api/v1/courses/{course_id}/deadlines`
+- `POST /api/v1/courses/{course_id}/deadlines`
+- `GET /api/v1/courses/{course_id}/documents`
+- `POST /api/v1/courses/{course_id}/documents/upload`
+- `POST /api/v1/courses/{course_id}/documents/{doc_id}/anchor`
+- `DELETE /api/v1/courses/{course_id}/documents/{doc_id}`
+- `GET /api/v1/courses/{course_id}/sessions`
+- `POST /api/v1/ask`
 - `POST /api/v1/modules`
 - `GET /api/v1/modules`
 - `POST /api/v1/modules/{module_id}/materials`
 - `POST /api/v1/modules/active`
 - `GET /api/v1/modules/active`
+
+## Sentinel Runtime Control (Windows-First)
+
+Mission Control can toggle Sentinel desktop runtime directly from the TopBar control.
+
+- `POST /api/v1/sentinel/runtime/start` starts Sentinel (idempotent if already running).
+- `POST /api/v1/sentinel/runtime/stop` stops all detected Sentinel processes (force-control-all).
+- `GET /api/v1/sentinel/runtime` returns runtime status for button state.
+
+Default runtime paths:
+
+- Python: `apps/sentinel-desktop/.venv/Scripts/python.exe`
+- Working dir: `apps/sentinel-desktop`
+
+Optional overrides via `.env`:
+
+- `SENTINEL_RUNTIME_ENABLED=1`
+- `SENTINEL_RUNTIME_PYTHON=<path>`
+- `SENTINEL_RUNTIME_WORKDIR=<path>`
+- `SENTINEL_RUNTIME_STOP_TIMEOUT_SECONDS=2.0`
 
 ## Environment
 

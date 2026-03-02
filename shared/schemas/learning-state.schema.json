@@ -5,7 +5,10 @@
   "type": "object",
   "required": ["updated_at", "captures", "gaps", "readiness_axes"],
   "properties": {
-    "updated_at": { "type": "string", "format": "date-time" },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "captures": {
       "type": "array",
       "items": {
@@ -18,6 +21,7 @@
           "window_title": { "type": "string" },
           "socratic_prompt": { "type": "string" },
           "gaps": { "type": "array", "items": { "type": "string" } },
+          "course_id": { "type": "string", "default": "all" },
           "module_id": { "type": ["string", "null"] },
           "material_id": { "type": ["string", "null"] },
           "source_warning": { "type": ["string", "null"] },
@@ -49,14 +53,124 @@
           "basis_question": { "type": ["string", "null"] },
           "basis_answer_excerpt": { "type": ["string", "null"] },
           "gap_type": { "type": ["string", "null"], "enum": ["concept", "reasoning", "misconception", null] },
+          "course_id": { "type": "string", "default": "all" },
           "module_id": { "type": ["string", "null"] },
           "material_id": { "type": ["string", "null"] },
           "status": { "type": "string", "enum": ["open", "reviewing", "closed"] },
           "capture_id": { "type": "string" },
           "evidence_url": { "type": "string" },
+          "deadline_score": { "type": "number", "minimum": 0, "maximum": 1 },
           "priority_score": { "type": "number", "minimum": 0, "maximum": 1 }
         }
       }
+    },
+    "courses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["course_id", "course_name"],
+        "properties": {
+          "course_id": { "type": "string" },
+          "course_name": { "type": "string" }
+        }
+      },
+      "default": []
+    },
+    "topic_mastery": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["topic_id", "course_id", "name", "current", "target", "open_gaps"],
+        "properties": {
+          "topic_id": { "type": "string" },
+          "course_id": { "type": "string" },
+          "name": { "type": "string" },
+          "current": { "type": "number", "minimum": 0, "maximum": 1 },
+          "target": { "type": "number", "minimum": 0, "maximum": 1 },
+          "open_gaps": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "default": []
+    },
+    "study_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action_id", "course_id", "topic_id", "title", "rationale", "eta_minutes", "priority", "source_gap_ids"],
+        "properties": {
+          "action_id": { "type": "string" },
+          "course_id": { "type": "string" },
+          "topic_id": { "type": "string" },
+          "title": { "type": "string" },
+          "rationale": { "type": "string" },
+          "eta_minutes": { "type": "integer", "minimum": 5, "maximum": 240 },
+          "priority": { "type": "number", "minimum": 0, "maximum": 1 },
+          "source_gap_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "default": []
+    },
+    "deadlines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["deadline_id", "course_id", "name", "due_date", "readiness_score", "associated_gap_ids"],
+        "properties": {
+          "deadline_id": { "type": "string" },
+          "course_id": { "type": "string" },
+          "name": { "type": "string" },
+          "due_date": { "type": "string", "format": "date-time" },
+          "readiness_score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "associated_gap_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "default": []
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["doc_id", "course_id", "name", "size_bytes", "type", "uploaded_at", "file_url", "is_anchor"],
+        "properties": {
+          "doc_id": { "type": "string" },
+          "course_id": { "type": "string" },
+          "name": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "type": { "type": "string" },
+          "uploaded_at": { "type": "string", "format": "date-time" },
+          "file_url": { "type": "string" },
+          "is_anchor": { "type": "boolean" }
+        }
+      },
+      "default": []
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["session_id", "course_id", "thread_id", "turn_index", "timestamp_utc", "summary", "topic", "gap_ids"],
+        "properties": {
+          "session_id": { "type": "string" },
+          "course_id": { "type": "string" },
+          "thread_id": { "type": "string" },
+          "turn_index": { "type": "integer", "minimum": 0 },
+          "timestamp_utc": { "type": "string", "format": "date-time" },
+          "summary": { "type": "string" },
+          "topic": { "type": "string" },
+          "gap_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "capture_id": { "type": ["string", "null"] }
+        }
+      },
+      "default": []
     },
     "readiness_axes": {
       "type": "object",

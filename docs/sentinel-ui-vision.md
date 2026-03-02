@@ -34,6 +34,7 @@ Use these tokens as target values unless explicitly overridden by component cons
 
 | Token | Target |
 | --- | --- |
+| `card.width.min/max` | `288px / 440px` |
 | `card.radius` | `16px` |
 | `card.border.alpha` | `88` |
 | `card.fill` | solid black tint `rgba(8,11,15,166)` (no gradient) |
@@ -161,6 +162,31 @@ Overlay materials are QSS-authored only for this UI baseline. Runtime blur injec
   - Launcher is fixed to top-left of primary-screen available geometry.
   - Expanded card grows from launcher origin and stays in the same anchor zone.
   - Launcher is temporarily hidden while region selection is active to avoid capture contamination.
+
+### Interaction Pages
+
+- Model:
+  - One interaction = one capture session.
+  - One page = one prompt turn inside that interaction.
+- Prompt paging:
+  - Every new prompt creates or updates the page for its `turn_index`.
+  - Only one page is visible in the interaction box at a time.
+  - New prompts auto-select the latest page.
+- Page content:
+  - Current turn page shows compact prompt question text only.
+  - Historical pages show compact prompt + the previous user input text for that turn.
+  - First-turn page (`turn_index = 0`) embeds the capture image at the top with rounded corners.
+- Navigation:
+  - Dot controls live on the right side inside the overlay card.
+  - Dot list is capped to 7 visible buttons using a sliding window for long interactions.
+  - Dot click changes the visible page only; it does not mutate bridge/controller turn flow.
+- Reset behavior:
+  - Starting a new capture clears the previous interaction page stack.
+- Input behavior:
+  - Only the current turn page accepts typing/submission.
+  - Non-current pages are read-only views.
+- Layout stability:
+  - Prompt message area keeps a minimum height so page switches need minimal card readjustment.
 
 ## 7) Accessibility and Legibility
 

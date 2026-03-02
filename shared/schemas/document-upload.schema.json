@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentinel-ai.local/schemas/document-upload.schema.json",
+  "title": "DocumentUploadMetadata",
+  "type": "object",
+  "properties": {
+    "document_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "document_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    }
+  },
+  "additionalProperties": false
+}

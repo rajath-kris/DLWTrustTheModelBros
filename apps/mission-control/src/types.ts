@@ -1,4 +1,4 @@
-﻿export type GapStatus = "open" | "reviewing" | "closed";
+export type GapStatus = "open" | "reviewing" | "closed";
 
 export interface ReadinessAxes {
   concept_mastery: number;
@@ -15,6 +15,7 @@ export interface CaptureEvent {
   window_title: string;
   socratic_prompt: string;
   gaps: string[];
+  course_id?: string;
 }
 
 export interface KnowledgeGap {
@@ -30,13 +31,82 @@ export interface KnowledgeGap {
   evidence_url: string;
   deadline_score: number;
   priority_score: number;
+  course_id?: string;
+}
+
+export interface CourseSummary {
+  course_id: string;
+  course_name: string;
+}
+
+export interface TopicMasteryItem {
+  topic_id: string;
+  course_id: string;
+  name: string;
+  current: number;
+  target: number;
+  open_gaps: number;
+}
+
+export interface StudyAction {
+  action_id: string;
+  course_id: string;
+  topic_id: string;
+  title: string;
+  rationale: string;
+  eta_minutes: number;
+  priority: number;
+  source_gap_ids: string[];
+}
+
+export interface CourseDeadline {
+  deadline_id: string;
+  course_id: string;
+  name: string;
+  due_date: string;
+  readiness_score: number;
+  associated_gap_ids: string[];
+}
+
+export interface CourseDocument {
+  doc_id: string;
+  course_id: string;
+  name: string;
+  size_bytes: number;
+  type: string;
+  uploaded_at: string;
+  file_url: string;
+  is_anchor: boolean;
+}
+
+export interface SessionEvent {
+  session_id: string;
+  course_id: string;
+  thread_id: string;
+  turn_index: number;
+  timestamp_utc: string;
+  summary: string;
+  topic: string;
+  gap_ids: string[];
+  capture_id?: string | null;
 }
 
 export interface LearningState {
   updated_at: string;
   captures: CaptureEvent[];
   gaps: KnowledgeGap[];
+  courses: CourseSummary[];
+  topic_mastery: TopicMasteryItem[];
+  study_actions: StudyAction[];
+  deadlines: CourseDeadline[];
+  documents: CourseDocument[];
+  sessions: SessionEvent[];
   readiness_axes: ReadinessAxes;
+}
+
+export interface BrainOverviewResponse {
+  course_id: string;
+  state: LearningState;
 }
 
 export interface ServerEventEnvelope {
@@ -46,4 +116,30 @@ export interface ServerEventEnvelope {
     gap_id?: string;
     status?: GapStatus;
   };
+}
+
+export interface AskResponse {
+  thread_id: string;
+  turn_index: number;
+  socratic_prompt: string;
+  citations: string[];
+}
+
+export interface SentinelRuntimeStatus {
+  running: boolean;
+  process_count: number;
+  detected_pids: number[];
+  managed_pids: number[];
+  last_action: "none" | "start" | "stop";
+  last_action_at: string | null;
+  last_error: string | null;
+}
+
+export interface SentinelRuntimeActionResponse {
+  ok: boolean;
+  action: "start" | "stop";
+  message: string | null;
+  stopped_count: number | null;
+  failed_count: number | null;
+  status: SentinelRuntimeStatus;
 }
