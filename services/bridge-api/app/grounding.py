@@ -5,7 +5,156 @@ from pathlib import Path
 import re
 
 
-_TOKEN_PATTERN = re.compile(r"[a-z0-9_]+")
+_WORD_PATTERN = re.compile(r"[^\W_]+(?:_[^\W_]+)?", re.UNICODE)
+_MATH_EXPRESSION_PATTERN = re.compile(
+    r"[A-Za-z0-9\u0370-\u03FF][A-Za-z0-9\u0370-\u03FF(){}\[\].,_]*"
+    r"(?:\s*(?:\^|[*/+\-=<>!~]+)\s*[A-Za-z0-9\u0370-\u03FF(){}\[\].,_^*/+\-]+)+",
+    re.UNICODE,
+)
+_MATH_SYMBOL_PATTERN = re.compile(r"(<=|>=|!=|~=|<->|->|<-|[+\-*/^=<>])")
+
+_SUPERSCRIPT_TO_ASCII = {
+    "\u2070": "0",
+    "\u00b9": "1",
+    "\u00b2": "2",
+    "\u00b3": "3",
+    "\u2074": "4",
+    "\u2075": "5",
+    "\u2076": "6",
+    "\u2077": "7",
+    "\u2078": "8",
+    "\u2079": "9",
+    "\u207a": "+",
+    "\u207b": "-",
+}
+_SUBSCRIPT_TO_ASCII = {
+    "\u2080": "0",
+    "\u2081": "1",
+    "\u2082": "2",
+    "\u2083": "3",
+    "\u2084": "4",
+    "\u2085": "5",
+    "\u2086": "6",
+    "\u2087": "7",
+    "\u2088": "8",
+    "\u2089": "9",
+    "\u208a": "+",
+    "\u208b": "-",
+}
+_SUPERSCRIPT_PATTERN = re.compile("[" + re.escape("".join(_SUPERSCRIPT_TO_ASCII.keys())) + "]+")
+_SUBSCRIPT_PATTERN = re.compile("[" + re.escape("".join(_SUBSCRIPT_TO_ASCII.keys())) + "]+")
+
+_UNICODE_OPERATOR_TRANSLATION = str.maketrans(
+    {
+        "\u00d7": "*",
+        "\u00f7": "/",
+        "\u22c5": "*",
+        "\u00b7": "*",
+        "\u2212": "-",
+        "\u2215": "/",
+        "\u2044": "/",
+        "\u2264": "<=",
+        "\u2265": ">=",
+        "\u2248": "~=",
+        "\u2260": "!=",
+        "\u2192": "->",
+        "\u2190": "<-",
+        "\u2194": "<->",
+    }
+)
+
+_GREEK_ALIAS_MAP = {
+    "\u03b1": "alpha",
+    "\u03b2": "beta",
+    "\u03b3": "gamma",
+    "\u03b4": "delta",
+    "\u03b5": "epsilon",
+    "\u03b6": "zeta",
+    "\u03b7": "eta",
+    "\u03b8": "theta",
+    "\u03bb": "lambda",
+    "\u03bc": "mu",
+    "\u03bd": "nu",
+    "\u03c0": "pi",
+    "\u03c1": "rho",
+    "\u03c3": "sigma",
+    "\u03c4": "tau",
+    "\u03c6": "phi",
+    "\u03c7": "chi",
+    "\u03c8": "psi",
+    "\u03c9": "omega",
+    "\u0394": "delta",
+    "\u2202": "partial",
+    "\u2207": "nabla",
+}
+
+_WORD_ALIAS_MAP = {
+    "squared": "^2",
+    "cubed": "^3",
+    "square": "^2",
+    "cube": "^3",
+    "integral": "int",
+    "summation": "sum",
+    "derivative": "d/dx",
+    "gradient": "nabla",
+}
+
+
+def _normalize_math_expression(text: str) -> str:
+    collapsed = re.sub(r"\s+", "", text)
+    return re.sub(r"^[,.;:]+|[,.;:]+$", "", collapsed)
+
+
+def _translate_script_sequence(value: str, mapping: dict[str, str]) -> str:
+    return "".join(mapping.get(char, char) for char in value)
+
+
+def _replace_unicode_script_tokens(text: str) -> str:
+    replaced = _SUPERSCRIPT_PATTERN.sub(
+        lambda match: f"^{_translate_script_sequence(match.group(0), _SUPERSCRIPT_TO_ASCII)}",
+        text,
+    )
+    replaced = _SUBSCRIPT_PATTERN.sub(
+        lambda match: f"_{_translate_script_sequence(match.group(0), _SUBSCRIPT_TO_ASCII)}",
+        replaced,
+    )
+    return replaced
+
+
+def _normalize_math_text(text: str) -> str:
+    normalized = text.translate(_UNICODE_OPERATOR_TRANSLATION)
+    normalized = _replace_unicode_script_tokens(normalized)
+    normalized = normalized.replace("\u00a0", " ")
+    return normalized
+
+
+def _append_token(token: str, normalized: list[str], seen: set[str]) -> None:
+    if not token:
+        return
+    if token in seen:
+        return
+    seen.add(token)
+    normalized.append(token)
+
+
+def _append_expression_and_variants(expression: str, normalized: list[str], seen: set[str]) -> None:
+    clean = _normalize_math_expression(expression)
+    if not clean:
+        return
+    _append_token(clean, normalized, seen)
+    compact = clean.replace("{", "").replace("}", "")
+    if compact != clean:
+        _append_token(compact, normalized, seen)
+    without_underscores = clean.replace("_", "")
+    if without_underscores != clean:
+        _append_token(without_underscores, normalized, seen)
+
+
+def _append_greek_aliases(value: str, normalized: list[str], seen: set[str]) -> None:
+    for char in value:
+        alias = _GREEK_ALIAS_MAP.get(char)
+        if alias:
+            _append_token(alias, normalized, seen)
 
 
 @dataclass
@@ -16,12 +165,27 @@ class GroundingBundle:
 
 
 def tokenize(text: str) -> list[str]:
-    tokens = _TOKEN_PATTERN.findall((text or "").lower())
+    raw_value = (text or "").lower()
+    value = _normalize_math_text(raw_value)
     normalized: list[str] = []
-    for token in tokens:
-        if token.endswith("s") and len(token) > 3:
-            token = token[:-1]
-        normalized.append(token)
+    seen: set[str] = set()
+
+    for expression in _MATH_EXPRESSION_PATTERN.findall(value):
+        _append_expression_and_variants(expression, normalized, seen)
+
+    for token in _WORD_PATTERN.findall(value):
+        clean = token
+        if clean.isascii() and clean.isalpha() and clean.endswith("s") and len(clean) > 3:
+            clean = clean[:-1]
+        _append_token(clean, normalized, seen)
+        alias = _WORD_ALIAS_MAP.get(clean)
+        if alias:
+            _append_token(alias, normalized, seen)
+
+    for symbol in _MATH_SYMBOL_PATTERN.findall(value):
+        _append_token(symbol, normalized, seen)
+
+    _append_greek_aliases(raw_value, normalized, seen)
     return normalized
 
 
@@ -43,7 +207,7 @@ def select_top_chunks(query_text: str, chunks: list[str], limit: int = 3) -> lis
 
     query_tokens = set(tokenize(query_text))
     if not query_tokens:
-        return chunks[:limit]
+        return []
 
     scored: list[tuple[int, str]] = []
     for chunk in chunks:
@@ -52,10 +216,7 @@ def select_top_chunks(query_text: str, chunks: list[str], limit: int = 3) -> lis
         scored.append((score, chunk))
     scored.sort(key=lambda item: item[0], reverse=True)
 
-    top = [chunk for score, chunk in scored[:limit] if score > 0]
-    if not top:
-        return chunks[:limit]
-    return top
+    return [chunk for score, chunk in scored[:limit] if score > 0]
 
 
 def extract_supported_text(path: Path) -> tuple[str, str | None]:

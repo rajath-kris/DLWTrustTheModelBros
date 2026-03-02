@@ -1,0 +1,38 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:8000",
+  "thread_id": "module-bound-mock-thread",
+  "modules": {
+    "fallback_module_id": "module-fallback-grounding",
+    "laplace_module_id": "module-laplace-transform"
+  },
+  "materials": {
+    "fallback_material_id": "2c55049b-9449-44a6-926e-f72d6fe82e40",
+    "laplace_material_id": "5e5220c1-7b69-435b-a43b-aeec6f5968f6"
+  },
+  "matched_path": {
+    "capture_id": "b4b52894-6bd8-488c-9905-e9e3b886a6c3",
+    "source_warning": null,
+    "source_context": {
+      "module_id": "",
+      "module_name": "Unresolved",
+      "material_id": null,
+      "material_name": null,
+      "match_score": 0.0,
+      "matched": false
+    }
+  },
+  "unmatched_path": {
+    "capture_id": "449f151b-b1fb-49cf-b495-1538cdbe0107",
+    "source_warning": null,
+    "source_context": {
+      "module_id": "",
+      "module_name": "Unresolved",
+      "material_id": null,
+      "material_name": null,
+      "match_score": 0.0,
+      "matched": false
+    }
+  },
+  "note": "This flow is deterministic when bridge runs without OPENAI_API_KEY, because vision fallback text is stable. With live OpenAI vision, match scores can vary by image parsing."
+}

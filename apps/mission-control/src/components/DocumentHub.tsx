@@ -20,7 +20,9 @@ export function DocumentHub({
   onUploadClickRef,
   onUploadFiles,
   onSetAnchor,
+  onMoveTopic,
   onDeleteDocument,
+  topicOptions = [],
 }: {
   sectionId?: string;
   documents?: MockDocument[];
@@ -28,11 +30,12 @@ export function DocumentHub({
   showRowActions?: boolean;
   uploadEnabled?: boolean;
   uploadRequirementHint?: string;
-  /** Set from parent so "+ Upload" can trigger file input. */
   onUploadClickRef?: React.MutableRefObject<(() => void) | null>;
   onUploadFiles?: (files: File[]) => Promise<void>;
   onSetAnchor?: (doc: MockDocument) => Promise<void>;
+  onMoveTopic?: (doc: MockDocument, topicId: string) => Promise<void>;
   onDeleteDocument?: (doc: MockDocument) => Promise<void>;
+  topicOptions?: Array<{ topic_id: string; topic_name: string }>;
 }) {
   const [documents, setDocuments] = useState<MockDocument[]>(initialDocuments ?? MOCK_DOCUMENTS);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,19 +47,39 @@ export function DocumentHub({
   }, [uploadEnabled]);
 
   useEffect(() => {
-    if (onUploadClickRef) onUploadClickRef.current = openFileDialog;
+    if (onUploadClickRef) {
+      onUploadClickRef.current = openFileDialog;
+    }
     return () => {
-      if (onUploadClickRef) onUploadClickRef.current = null;
+      if (onUploadClickRef) {
+        onUploadClickRef.current = null;
+      }
     };
   }, [onUploadClickRef, openFileDialog]);
 
   useEffect(() => {
-    if (initialDocuments != null) setDocuments(initialDocuments);
+    if (initialDocuments != null) {
+      setDocuments(initialDocuments);
+    }
   }, [initialDocuments]);
 
   const [dragging, setDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [workingDocId, setWorkingDocId] = useState<string | null>(null);
+  const [moveSelectionByDocId, setMoveSelectionByDocId] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setMoveSelectionByDocId((current) => {
+      const next = { ...current };
+      for (const doc of documents) {
+        if (!doc.doc_id || next[doc.doc_id]) {
+          continue;
+        }
+        next[doc.doc_id] = (doc.topic_id || "").toString();
+      }
+      return next;
+    });
+  }, [documents]);
 
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
@@ -91,10 +114,12 @@ export function DocumentHub({
       }
       setDragging(false);
       const files = e.dataTransfer?.files;
-      if (!files?.length) return;
+      if (!files?.length) {
+        return;
+      }
       void handleFiles(Array.from(files));
     },
-    [onUploadFiles, uploadEnabled]
+    [uploadEnabled]
   );
 
   const handleFileInput = useCallback(
@@ -103,11 +128,13 @@ export function DocumentHub({
         return;
       }
       const files = e.target.files;
-      if (!files?.length) return;
+      if (!files?.length) {
+        return;
+      }
       void handleFiles(Array.from(files));
       e.target.value = "";
     },
-    [onUploadFiles, uploadEnabled]
+    [uploadEnabled]
   );
 
   async function handleFiles(files: File[]) {
@@ -120,7 +147,6 @@ export function DocumentHub({
       }
       return;
     }
-    console.log("Document upload (fallback):", files.map((f) => f.name));
     setUploadError("Live upload is unavailable for this view.");
   }
 
@@ -154,6 +180,26 @@ export function DocumentHub({
     }
   }
 
+  async function handleMoveTopic(doc: MockDocument) {
+    if (!onMoveTopic || !doc.doc_id) {
+      return;
+    }
+    const targetTopicId = (moveSelectionByDocId[doc.doc_id] || "").trim();
+    const currentTopicId = (doc.topic_id || "").trim();
+    if (!targetTopicId || targetTopicId === currentTopicId) {
+      return;
+    }
+    setUploadError(null);
+    setWorkingDocId(doc.doc_id);
+    try {
+      await onMoveTopic(doc, targetTopicId);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not move document to selected topic.");
+    } finally {
+      setWorkingDocId(null);
+    }
+  }
+
   return (
     <article id={sectionId} className="card document-hub-card">
       {!hideHeader && (
@@ -164,7 +210,9 @@ export function DocumentHub({
       )}
 
       <div
-        className={`document-hub-dropzone document-hub-dropzone-compact ${dragging ? "dragging" : ""} ${uploadEnabled ? "" : "upload-disabled"}`}
+        className={`document-hub-dropzone document-hub-dropzone-compact ${dragging ? "dragging" : ""} ${
+          uploadEnabled ? "" : "upload-disabled"
+        }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -200,7 +248,10 @@ export function DocumentHub({
           <li className="status-line">No documents yet.</li>
         ) : (
           documents.map((doc) => (
-            <li key={doc.doc_id ?? `${doc.name}-${doc.upload_date}`} className={`document-hub-item-new ${showRowActions ? "document-hub-item-with-actions" : ""}`}>
+            <li
+              key={doc.doc_id ?? `${doc.name}-${doc.upload_date}`}
+              className={`document-hub-item-new ${showRowActions ? "document-hub-item-with-actions" : ""}`}
+            >
               <div className="document-hub-item-icon" aria-hidden>
                 {DOC_ICON}
               </div>
@@ -209,20 +260,18 @@ export function DocumentHub({
                 <span className="document-hub-item-meta">
                   {doc.size} | {doc.upload_date}
                 </span>
-                {showRowActions && (doc.course_label || doc.course_id || doc.module_label || doc.module_id) && (
+                {showRowActions && (doc.course_label || doc.course_id || doc.topic_label || doc.topic_id) && (
                   <div className="document-hub-item-tags">
                     {(doc.course_label || doc.course_id) && (
                       <span className="pill pill-doc-tag">{(doc.course_label || doc.course_id || "").toString()}</span>
                     )}
-                    {(doc.module_label || doc.module_id) && (
-                      <span className="pill pill-doc-tag pill-doc-tag-module">{(doc.module_label || doc.module_id || "").toString()}</span>
+                    {(doc.topic_label || doc.topic_id) && (
+                      <span className="pill pill-doc-tag pill-doc-tag-topic">{(doc.topic_label || doc.topic_id || "").toString()}</span>
                     )}
                   </div>
                 )}
               </div>
-              {(doc.type === "anchor" || doc.is_anchor) && (
-                <span className="pill pill-syllabus-anchor">Syllabus Anchor</span>
-              )}
+              {(doc.type === "anchor" || doc.is_anchor) && <span className="pill pill-syllabus-anchor">Syllabus Anchor</span>}
               {showRowActions && (
                 <div className="document-hub-item-actions">
                   <button type="button" className="doc-hub-action-btn" onClick={() => doc.path && window.open(doc.path, "_blank", "noopener,noreferrer")}>
@@ -243,6 +292,41 @@ export function DocumentHub({
                     onClick={() => void handleDelete(doc)}
                   >
                     Delete
+                  </button>
+                  <select
+                    className="doc-hub-topic-select"
+                    aria-label={`Select target topic for ${doc.name}`}
+                    value={doc.doc_id ? moveSelectionByDocId[doc.doc_id] ?? (doc.topic_id || "") : ""}
+                    disabled={!doc.doc_id || workingDocId === doc.doc_id || topicOptions.length === 0}
+                    onChange={(event) => {
+                      if (!doc.doc_id) {
+                        return;
+                      }
+                      const nextValue = event.target.value;
+                      setMoveSelectionByDocId((current) => ({ ...current, [doc.doc_id as string]: nextValue }));
+                    }}
+                  >
+                    <option value="">Move to topic</option>
+                    {topicOptions.map((topic) => (
+                      <option key={topic.topic_id} value={topic.topic_id}>
+                        {topic.topic_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="doc-hub-action-btn"
+                    disabled={
+                      !doc.doc_id ||
+                      !onMoveTopic ||
+                      workingDocId === doc.doc_id ||
+                      topicOptions.length === 0 ||
+                      !(moveSelectionByDocId[doc.doc_id] || "").trim() ||
+                      (moveSelectionByDocId[doc.doc_id] || "").trim() === (doc.topic_id || "").trim()
+                    }
+                    onClick={() => void handleMoveTopic(doc)}
+                  >
+                    Move
                   </button>
                 </div>
               )}

@@ -42,7 +42,7 @@ def _env_bool(name: str, default: bool) -> bool:
 class SentinelSettings:
     bridge_url: str = os.getenv("SENTINEL_BRIDGE_URL", "http://127.0.0.1:8000")
     bridge_timeout_seconds: float = _env_float("SENTINEL_BRIDGE_TIMEOUT_SECONDS", 45.0)
-    active_module_id: str = os.getenv("SENTINEL_ACTIVE_MODULE_ID", "").strip()
+    active_topic_id: str = (os.getenv("SENTINEL_ACTIVE_TOPIC_ID") or os.getenv("SENTINEL_ACTIVE_MODULE_ID", "")).strip()
     capture_hotkey: str = os.getenv("SENTINEL_CAPTURE_HOTKEY", "alt+s")
     escape_hotkey: str = os.getenv("SENTINEL_ESCAPE_HOTKEY", "esc")
 

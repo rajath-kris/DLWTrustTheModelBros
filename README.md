@@ -64,12 +64,13 @@ Recommended branch split:
 - `POST /api/v1/courses/{course_id}/documents/{doc_id}/anchor`
 - `DELETE /api/v1/courses/{course_id}/documents/{doc_id}`
 - `GET /api/v1/courses/{course_id}/sessions`
-- `POST /api/v1/ask`
-- `POST /api/v1/modules`
-- `GET /api/v1/modules`
-- `POST /api/v1/modules/{module_id}/materials`
-- `POST /api/v1/modules/active`
-- `GET /api/v1/modules/active`
+- `POST /api/v1/quizzes/prepare`
+- `POST /api/v1/quizzes/submit`
+- `POST /api/v1/topics`
+- `GET /api/v1/topics`
+- `POST /api/v1/topics/{topic_id}/materials`
+- `POST /api/v1/topics/active`
+- `GET /api/v1/topics/active`
 
 ## Sentinel Runtime Control (Windows-First)
 
@@ -97,7 +98,7 @@ Copy `.env.example` to `.env` (done by `bootstrap.ps1` if missing).
 
 - With `OPENAI_API_KEY`: live OpenAI Vision + Socratic pipeline.
 - Without `OPENAI_API_KEY`: local fallback prompt/gap path still works end-to-end.
-- Optional `SENTINEL_ACTIVE_MODULE_ID`: desktop capture payload includes this module context.
+- Optional `SENTINEL_ACTIVE_TOPIC_ID`: desktop capture payload includes this topic context.
 
 ## Smoke Check
 
@@ -124,25 +125,25 @@ Fixtures:
 
 The script posts both captures to `POST /api/v1/captures`, reuses thread context across turns, and writes a summary artifact under `artifacts/mock-laplace/`.
 
-## Module-Bound Screenshot Flow (Warn + Continue)
+## Topic-Bound Screenshot Flow (Warn + Continue)
 
-Bridge supports module/material uploads and active-module grounding without Mission Control UI changes:
+Bridge supports topic/material uploads and active-topic grounding without Mission Control UI changes:
 
-1. Create module metadata with `POST /api/v1/modules`.
-2. Upload module materials with `POST /api/v1/modules/{module_id}/materials` (`.pdf`, `.txt`, `.md`, `.png`, `.jpg`, `.jpeg`).
-3. Set active module with `POST /api/v1/modules/active`.
+1. Create topic metadata with `POST /api/v1/topics`.
+2. Upload topic materials with `POST /api/v1/topics/{topic_id}/materials` (`.pdf`, `.txt`, `.md`, `.png`, `.jpg`, `.jpeg`).
+3. Set active topic with `POST /api/v1/topics/active`.
 4. Submit captures to `POST /api/v1/captures`.
 5. Capture response includes optional `source_context` and `source_warning`.
-   - No active module warning: response continues with Socratic output.
-   - Unmatched active module warning: response continues with Socratic output.
+   - No active topic warning: response continues with Socratic output.
+   - Unmatched active topic warning: response continues with Socratic output.
 
 Deterministic helper:
 
 ```powershell
-python .\\scripts\\run-module-bound-mock-flow.py
+python .\\scripts\\run-topic-bound-mock-flow.py
 ```
 
-This writes an artifact under `artifacts/module-bound-flow/` showing one matched and one unmatched path.
+This writes an artifact under `artifacts/topic-bound-flow/` showing one matched and one unmatched path.
 
 ## Overlay Isolated Journey (One Command)
 

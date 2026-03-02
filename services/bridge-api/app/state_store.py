@@ -162,3 +162,5 @@ class StateStore:
             state.question_bank = [item.model_copy(deep=True) for item in DEFAULT_QUESTION_BANK]
         if state.quizzes is None:
             state.quizzes = []
+        if state.topics is None:
+            state.topics = []

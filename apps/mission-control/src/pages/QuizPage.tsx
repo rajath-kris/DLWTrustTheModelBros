@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useBrainState } from "../context/BrainStateContext";
 import { useCourse } from "../context/CourseContext";
-import type { QuestionBankItem, QuizSourceType, QuizSubmitResponse } from "../types";
+import type { QuestionBankItem, QuizSelectionSummary, QuizSourceType, QuizSubmitResponse } from "../types";
 
 const ALL_TOPICS = "All Topics";
 const ALL_SOURCES: QuizSourceType[] = ["pyq", "tutorial", "sentinel"];
@@ -14,6 +14,8 @@ const SOURCE_LABEL: Record<QuizSourceType, string> = {
 };
 
 type QuizSession = {
+  sessionId: string;
+  topic: string;
   questions: QuestionBankItem[];
   currentIndex: number;
   answers: Record<string, string>;
@@ -30,14 +32,16 @@ function scorePercent(result: QuizSubmitResponse): number {
 
 export function QuizPage() {
   const { courseId } = useCourse();
-  const { state, loading, error: stateError, submitQuiz } = useBrainState();
+  const { state, loading, error: stateError, prepareQuiz, submitQuiz } = useBrainState();
   const [selectedTopic, setSelectedTopic] = useState<string>(ALL_TOPICS);
   const [selectedSources, setSelectedSources] = useState<QuizSourceType[]>([...ALL_SOURCES]);
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [session, setSession] = useState<QuizSession | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [result, setResult] = useState<QuizSubmitResponse | null>(null);
+  const [selectionSummary, setSelectionSummary] = useState<QuizSelectionSummary | null>(null);
 
   const scopedQuestions = useMemo(() => {
     return state.question_bank.filter((item) => {
@@ -101,22 +105,40 @@ export function QuizPage() {
     });
   }
 
-  function startQuiz() {
+  async function startQuiz() {
     if (eligibleQuestions.length === 0) {
       setRequestError("No questions available for the selected topic/source filters.");
       return;
     }
-    const desiredCount = Math.max(1, Math.min(25, questionCount));
-    const shuffled = [...eligibleQuestions].sort(() => Math.random() - 0.5);
-    const picked = shuffled.slice(0, desiredCount);
-    setResult(null);
-    setRequestError(null);
-    setSession({
-      questions: picked,
-      currentIndex: 0,
-      answers: {},
-      submitted: {},
-    });
+    setPreparing(true);
+    try {
+      const desiredCount = Math.max(1, Math.min(25, questionCount));
+      const prepared = await prepareQuiz({
+        topic: selectedTopic,
+        sources: selectedSources,
+        question_count: desiredCount,
+        course_id: courseId === "all" ? "all" : courseId,
+      });
+      if (!prepared.questions.length) {
+        setRequestError("Quiz preparation returned no questions for this filter set.");
+        return;
+      }
+      setResult(null);
+      setRequestError(null);
+      setSelectionSummary(prepared.selection_summary);
+      setSession({
+        sessionId: prepared.session_id,
+        topic: prepared.topic,
+        questions: prepared.questions,
+        currentIndex: 0,
+        answers: {},
+        submitted: {},
+      });
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : "Quiz preparation failed.");
+    } finally {
+      setPreparing(false);
+    }
   }
 
   function chooseAnswer(questionId: string, answer: string) {
@@ -157,13 +179,14 @@ export function QuizPage() {
     setRequestError(null);
     try {
       const response = await submitQuiz({
-        topic: selectedTopic,
+        topic: session.topic,
         sources: selectedSources,
         answers: session.questions.map((item) => ({
           question_id: item.question_id,
           user_answer: session.answers[item.question_id] ?? "",
         })),
         course_id: courseId === "all" ? "all" : courseId,
+        session_id: session.sessionId,
       });
       setResult(response);
       setSession(null);
@@ -226,11 +249,16 @@ export function QuizPage() {
           <button
             type="button"
             className="top-bar-btn primary"
-            onClick={startQuiz}
-            disabled={selectedSources.length === 0 || eligibleQuestions.length === 0}
+            onClick={() => void startQuiz()}
+            disabled={preparing || selectedSources.length === 0 || eligibleQuestions.length === 0}
           >
-            Start Quiz
+            {preparing ? "Preparing..." : "Start Quiz"}
           </button>
+          {selectionSummary && (
+            <p className="doc-upload-helper" style={{ marginTop: 8 }}>
+              Mix: gap {selectionSummary.gap_matched_count}, wrong-repeat {selectionSummary.wrong_repeat_count}, deadline {selectionSummary.deadline_boosted_count}, coverage {selectionSummary.coverage_count}
+            </p>
+          )}
         </article>
 
         <article className="card">

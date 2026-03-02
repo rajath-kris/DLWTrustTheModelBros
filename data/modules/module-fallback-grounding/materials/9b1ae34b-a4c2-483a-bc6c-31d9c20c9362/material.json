@@ -1,0 +1,14 @@
+{
+  "material_id": "9b1ae34b-a4c2-483a-bc6c-31d9c20c9362",
+  "module_id": "module-fallback-grounding",
+  "material_name": "OpenAI fallback grounding",
+  "material_type": "text",
+  "original_filename": "fallback-grounding.md",
+  "source_path": "module-fallback-grounding/materials/9b1ae34b-a4c2-483a-bc6c-31d9c20c9362/source.md",
+  "extracted_path": "module-fallback-grounding/materials/9b1ae34b-a4c2-483a-bc6c-31d9c20c9362/extracted.txt",
+  "tokens_path": "module-fallback-grounding/materials/9b1ae34b-a4c2-483a-bc6c-31d9c20c9362/tokens.json",
+  "tokens_count": 21,
+  "parse_warning": null,
+  "created_at": "2026-03-02T20:16:15.720624Z",
+  "updated_at": "2026-03-02T20:16:15.720624Z"
+}

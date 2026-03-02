@@ -27,6 +27,11 @@ class Settings:
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "").strip()
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o").strip()
+    agent_backend: str = os.getenv("SENTINEL_AGENT_BACKEND", "bridge").strip().lower()
+    friend_agent_script_path: str = os.getenv("SENTINEL_FRIEND_AGENT_SCRIPT_PATH", "").strip()
+    friend_agent_notes_path: str = os.getenv("SENTINEL_FRIEND_AGENT_NOTES_PATH", "").strip()
+    friend_agent_model: str = os.getenv("SENTINEL_TUTOR_MODEL", "").strip()
+    friend_agent_aux_model: str = os.getenv("SENTINEL_AUX_MODEL", "").strip()
 
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "12.0"))
     material_upload_max_bytes: int = int(os.getenv("BRIDGE_MATERIAL_UPLOAD_MAX_BYTES", "15728640"))
@@ -56,8 +61,23 @@ class Settings:
         return PROJECT_ROOT / "data" / "state.json"
 
     @property
+    def topics_dir(self) -> Path:
+        preferred = PROJECT_ROOT / "data" / "topics"
+        legacy = PROJECT_ROOT / "data" / "modules"
+        if preferred.exists():
+            return preferred
+        if legacy.exists():
+            return legacy
+        return preferred
+
+    @property
     def modules_dir(self) -> Path:
-        return PROJECT_ROOT / "data" / "modules"
+        # Backward-compatible alias for legacy imports.
+        return self.topics_dir
+
+    @property
+    def friend_agent_state_dir(self) -> Path:
+        return PROJECT_ROOT / "data" / "friend-agent-state"
 
     @property
     def syllabus_file(self) -> Path:

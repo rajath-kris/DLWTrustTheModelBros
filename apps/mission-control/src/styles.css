@@ -683,7 +683,12 @@
 .docs-page-title-row h1 { font-size: 1.5rem; margin: 0; }
 .docs-upload-controls { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .docs-upload-control { display: flex; flex-direction: column; gap: 0.35rem; min-width: 180px; font-size: 0.8rem; color: var(--muted); }
-.docs-upload-control select { font-size: 0.9rem; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); color: var(--text); }
+.docs-upload-control select, .docs-upload-control input { font-size: 0.9rem; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); color: var(--text); }
+.docs-upload-control input::placeholder { color: var(--muted); }
+.docs-upload-control-create-topic { min-width: 300px; }
+.docs-topic-create-row { display: flex; gap: 0.5rem; align-items: center; }
+.docs-topic-create-row input { flex: 1; min-width: 160px; }
+.docs-topic-create-row .top-bar-btn { white-space: nowrap; }
 .docs-page-footer { font-size: 0.85rem; color: var(--muted); margin: 1rem 0 0; }
 .document-hub-item-with-actions .document-hub-item-actions { opacity: 0; }
 .document-hub-item-with-actions:hover .document-hub-item-actions { opacity: 1; }
@@ -691,6 +696,8 @@
 .doc-hub-action-btn { font-size: 0.75rem; padding: 0.25rem 0.5rem; border: 1px solid var(--panel-border); background: transparent; color: var(--text); cursor: pointer; border-radius: 6px; }
 .doc-hub-action-btn:disabled { opacity: 0.5; cursor: default; }
 .doc-hub-action-delete { color: #e74c3c; border-color: #e74c3c; }
+.doc-hub-topic-select { font-size: 0.75rem; min-width: 120px; padding: 0.22rem 0.35rem; border-radius: 6px; border: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); color: var(--text); }
+.doc-hub-topic-select:disabled { opacity: 0.5; }
 
 .history-page-header { margin-bottom: 1rem; }
 .history-page-title-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
@@ -2023,7 +2030,7 @@ h1 {
   padding: 0.12rem 0.4rem;
 }
 
-.pill-doc-tag-module {
+.pill-doc-tag-topic {
   background: rgba(34, 197, 94, 0.18);
   color: #86efac;
   border-color: rgba(134, 239, 172, 0.45);

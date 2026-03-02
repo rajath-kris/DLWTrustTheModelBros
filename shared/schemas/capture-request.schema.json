@@ -41,6 +41,6 @@
       }
     },
     "image_base64": { "type": "string", "minLength": 1 },
-    "module_id": { "type": "string" }
+    "topic_id": { "type": "string" }
   }
 }

@@ -4,7 +4,7 @@
   "title": "DocumentUploadMetadata",
   "type": "object",
   "properties": {
-    "module_id": {
+    "topic_id": {
       "type": "string",
       "minLength": 1,
       "maxLength": 120
@@ -20,6 +20,6 @@
       "maxLength": 40
     }
   },
-  "required": ["module_id"],
+  "required": ["topic_id"],
   "additionalProperties": false
 }

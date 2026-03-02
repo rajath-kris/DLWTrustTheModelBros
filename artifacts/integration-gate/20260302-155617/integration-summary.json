@@ -1,0 +1,170 @@
+{
+  "ok": true,
+  "started_at_utc": "2026-03-02T07:56:17.591775Z",
+  "finished_at_utc": "2026-03-02T07:56:21.306724Z",
+  "repo_root": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+  "base_branch": "overlay",
+  "integration_branch": "integration/overlay-gpt4o-gap-pipeline",
+  "feature_branches": [
+    "feature/bridge-gpt4o-provider-default",
+    "feature/bridge-socratic-gap-reasoning",
+    "feature/bridge-gap-contract-brain-ready",
+    "chore/mock-laplace-lecture-flow"
+  ],
+  "allow_dirty": true,
+  "skipped": {
+    "merge": true,
+    "smoke_check": false,
+    "mission_build": false,
+    "python_compile": false,
+    "code_review": false
+  },
+  "failure_reason": "",
+  "code_review": {
+    "skipped": false,
+    "changed_files": [
+      ".env.example",
+      "README.md",
+      "apps/mission-control/src/types.ts",
+      "docs/mock-content/laplace_lecture_slide.md",
+      "docs/mock-content/laplace_tutorial.md",
+      "scripts/run-laplace-mock-flow.py",
+      "services/bridge-api/app/azure_clients.py",
+      "services/bridge-api/app/config.py",
+      "services/bridge-api/app/main.py",
+      "services/bridge-api/app/models.py",
+      "services/bridge-api/app/prompting.py",
+      "shared/schemas/learning-state.schema.json"
+    ],
+    "todo_hits": [],
+    "conflict_hits": [],
+    "sentinel_log_path": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\sentinel_ui.log",
+    "sentinel_log_findings": {
+      "qt_geometry_warnings": [],
+      "qpainter_warnings": []
+    }
+  },
+  "steps": [
+    {
+      "name": "smoke_check",
+      "ok": true,
+      "command": [
+        "C:\\Python313\\python.exe",
+        "scripts/smoke_check.py",
+        "--repo-root",
+        "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "{\n  \"ok\": true,\n  \"health_status\": \"ok\",\n  \"captures_before\": 113,\n  \"captures_after\": 114,\n  \"gaps_after\": 114,\n  \"returned_capture_id\": \"538b8a7d-0f50-4418-ac6f-29486d1db955\",\n  \"returned_gap_count\": 1\n}\n---BRIDGE_STDOUT---\nINFO:     127.0.0.1:58030 - \"GET /healthz HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:58034 - \"GET /api/v1/state HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:58035 - \"POST /api/v1/captures HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:58036 - \"GET /api/v1/state HTTP/1.1\" 200 OK\n\n---BRIDGE_STDERR---\nINFO:     Started server process [13996]\nINFO:     Waiting for application startup.\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)\n\n",
+      "stderr_tail": ""
+    },
+    {
+      "name": "mission_control_build",
+      "ok": true,
+      "command": [
+        "npm.cmd",
+        "run",
+        "build"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\apps\\mission-control",
+      "returncode": 0,
+      "stdout_tail": "\n> sentinel-mission-control@0.1.0 build\n> tsc --noEmit && vite build\n\n\u001b[36mvite v6.4.1 \u001b[32mbuilding for production...\u001b[36m\u001b[39m\ntransforming...\n\u001b[32m\u00e2\u0153\u201c\u001b[39m 29 modules transformed.\nrendering chunks...\ncomputing gzip size...\n\u001b[2mdist/\u001b[22m\u001b[32mindex.html                 \u001b[39m\u001b[1m\u001b[2m  0.41 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m \u00e2\u201d\u201a gzip:  0.28 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[35massets/index-C7Uu-7Nx.css  \u001b[39m\u001b[1m\u001b[2m  4.40 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m \u00e2\u201d\u201a gzip:  1.63 kB\u001b[22m\n\u001b[2mdist/\u001b[22m\u001b[36massets/index-CiiAqI56.js   \u001b[39m\u001b[1m\u001b[2m150.78 kB\u001b[22m\u001b[1m\u001b[22m\u001b[2m \u00e2\u201d\u201a gzip: 48.72 kB\u001b[22m\n\u001b[32m\u00e2\u0153\u201c built in 746ms\u001b[39m\n",
+      "stderr_tail": ""
+    },
+    {
+      "name": "collect_changed_python_files",
+      "ok": true,
+      "command": [
+        "internal",
+        "collect_changed_python_files"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "scripts/run-laplace-mock-flow.py\nservices/bridge-api/app/azure_clients.py\nservices/bridge-api/app/config.py\nservices/bridge-api/app/main.py\nservices/bridge-api/app/models.py\nservices/bridge-api/app/prompting.py",
+      "stderr_tail": ""
+    },
+    {
+      "name": "py_compile_changed_python",
+      "ok": true,
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "py_compile",
+        "scripts/run-laplace-mock-flow.py",
+        "services/bridge-api/app/azure_clients.py",
+        "services/bridge-api/app/config.py",
+        "services/bridge-api/app/main.py",
+        "services/bridge-api/app/models.py",
+        "services/bridge-api/app/prompting.py"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_collect_changed_files",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_collect_changed_files"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": ".env.example\nREADME.md\napps/mission-control/src/types.ts\ndocs/mock-content/laplace_lecture_slide.md\ndocs/mock-content/laplace_tutorial.md\nscripts/run-laplace-mock-flow.py\nservices/bridge-api/app/azure_clients.py\nservices/bridge-api/app/config.py\nservices/bridge-api/app/main.py\nservices/bridge-api/app/models.py\nservices/bridge-api/app/prompting.py\nshared/schemas/learning-state.schema.json",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_diff_check",
+      "ok": true,
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "overlay..HEAD"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_conflict_markers",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_conflict_markers"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_todo_fixme_scan",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_todo_fixme_scan"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "",
+      "stderr_tail": ""
+    },
+    {
+      "name": "code_review_runtime_warning_scan",
+      "ok": true,
+      "command": [
+        "internal",
+        "code_review_runtime_warning_scan"
+      ],
+      "cwd": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+      "returncode": 0,
+      "stdout_tail": "qt_geometry_warnings=0\nqpainter_warnings=0",
+      "stderr_tail": ""
+    }
+  ],
+  "artifact_dir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\integration-gate\\20260302-155617"
+}

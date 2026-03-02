@@ -4,6 +4,5 @@ export { SchedulePage } from "./SchedulePage";
 export { StudyPlannerPage } from "./StudyPlannerPage";
 export { DocumentHubPage } from "./DocumentHubPage";
 export { SessionHistoryPage } from "./SessionHistoryPage";
-export { AskSentinelPage } from "./AskSentinelPage";
 export { QuizPage } from "./QuizPage";
 export { PreferencesPage } from "./PreferencesPage";

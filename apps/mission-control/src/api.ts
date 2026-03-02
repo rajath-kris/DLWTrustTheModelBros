@@ -1,12 +1,14 @@
 import type {
-  ActiveModuleResponse,
-  AskResponse,
+  ActiveTopicResponse,
   BrainOverviewResponse,
   CourseDeadline,
   CourseDocument,
   GapStatus,
   LearningState,
-  ModuleListResponse,
+  TopicListResponse,
+  TopicSummary,
+  QuizPrepareRequest,
+  QuizPrepareResponse,
   QuizSubmitRequest,
   QuizSubmitResponse,
   SentinelRuntimeActionResponse,
@@ -22,6 +24,7 @@ export const emptyState: LearningState = {
   gaps: [],
   courses: [],
   topic_mastery: [],
+  topics: [],
   study_actions: [],
   deadlines: [],
   documents: [],
@@ -107,32 +110,49 @@ export async function fetchDocuments(courseId: string): Promise<CourseDocument[]
   return Array.isArray(data.documents) ? data.documents : [];
 }
 
-export async function fetchModules(): Promise<ModuleListResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/modules`);
+export async function fetchTopics(): Promise<TopicListResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/topics`);
   if (!response.ok) {
-    throw new Error(`Modules request failed: ${response.status}`);
+    throw new Error(`Topics request failed: ${response.status}`);
   }
-  return (await response.json()) as ModuleListResponse;
+  return (await response.json()) as TopicListResponse;
 }
 
-export async function fetchActiveModule(): Promise<ActiveModuleResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/modules/active`);
+export async function upsertTopic(topicId: string, topicName: string): Promise<TopicSummary> {
+  const response = await fetch(`${API_BASE}/api/v1/topics`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      topic_id: topicId.trim(),
+      topic_name: topicName.trim(),
+    }),
+  });
   if (!response.ok) {
-    throw new Error(`Active module request failed: ${response.status}`);
+    throw new Error(`Create topic failed: ${response.status}`);
   }
-  return (await response.json()) as ActiveModuleResponse;
+  return (await response.json()) as TopicSummary;
+}
+
+export async function fetchActiveTopic(): Promise<ActiveTopicResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/topics/active`);
+  if (!response.ok) {
+    throw new Error(`Active topic request failed: ${response.status}`);
+  }
+  return (await response.json()) as ActiveTopicResponse;
 }
 
 export async function uploadDocument(
   courseId: string,
-  moduleId: string,
+  topicId: string,
   file: File,
   documentName?: string,
   documentType?: string
 ): Promise<CourseDocument> {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("module_id", moduleId.trim());
+  formData.append("topic_id", topicId.trim());
   if (documentName && documentName.trim()) {
     formData.append("document_name", documentName.trim());
   }
@@ -167,6 +187,20 @@ export async function deleteDocument(courseId: string, docId: string): Promise<v
   }
 }
 
+export async function moveDocumentToTopic(courseId: string, docId: string, topicId: string): Promise<CourseDocument> {
+  const response = await fetch(`${API_BASE}/api/v1/courses/${encodeURIComponent(courseId)}/documents/${encodeURIComponent(docId)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ topic_id: topicId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Move document failed: ${response.status}`);
+  }
+  return (await response.json()) as CourseDocument;
+}
+
 export async function fetchSessions(courseId: string): Promise<SessionEvent[]> {
   const response = await fetch(`${API_BASE}/api/v1/courses/${encodeURIComponent(courseId)}/sessions`);
   if (!response.ok) {
@@ -176,13 +210,8 @@ export async function fetchSessions(courseId: string): Promise<SessionEvent[]> {
   return Array.isArray(data.sessions) ? data.sessions : [];
 }
 
-export async function askSentinel(payload: {
-  course_id: string;
-  thread_id?: string;
-  turn_index?: number;
-  message: string;
-}): Promise<AskResponse> {
-  const response = await fetch(`${API_BASE}/api/v1/ask`, {
+export async function prepareQuiz(payload: QuizPrepareRequest): Promise<QuizPrepareResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/quizzes/prepare`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -190,9 +219,9 @@ export async function askSentinel(payload: {
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    throw new Error(`Ask request failed: ${response.status}`);
+    throw new Error(`Quiz prepare failed: ${response.status}`);
   }
-  return (await response.json()) as AskResponse;
+  return (await response.json()) as QuizPrepareResponse;
 }
 
 export async function submitQuiz(payload: QuizSubmitRequest): Promise<QuizSubmitResponse> {

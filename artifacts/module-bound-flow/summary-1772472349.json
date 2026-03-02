@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:8000",
+  "thread_id": "module-bound-mock-thread",
+  "modules": {
+    "fallback_module_id": "module-fallback-grounding",
+    "laplace_module_id": "module-laplace-transform"
+  },
+  "materials": {
+    "fallback_material_id": "51c3044a-62b1-456a-b36c-1756360da910",
+    "laplace_material_id": "e8bbd433-5379-43d5-83e5-637c7ba4b1f0"
+  },
+  "matched_path": {
+    "capture_id": "87e63bc3-fb4c-403f-9d88-4ca41480bc1e",
+    "source_warning": null,
+    "source_context": {
+      "module_id": "module-fallback-grounding",
+      "module_name": "Fallback Grounding",
+      "material_id": "d0c0f26e-b0cf-41d9-8873-422e47ac743e",
+      "material_name": "OpenAI fallback grounding",
+      "match_score": 0.7,
+      "matched": true
+    }
+  },
+  "unmatched_path": {
+    "capture_id": "425c1c9b-90ae-4a09-8e7c-07a07d44efb8",
+    "source_warning": "No close match found in uploaded materials for active module 'Laplace Transform'; response is best-effort.",
+    "source_context": {
+      "module_id": "module-laplace-transform",
+      "module_name": "Laplace Transform",
+      "material_id": "ff02a197-50d8-4f9d-9fb0-156d4afe9e63",
+      "material_name": "Laplace lecture slide",
+      "match_score": 0.06999999999999999,
+      "matched": false
+    }
+  },
+  "note": "This flow is deterministic when bridge runs without OPENAI_API_KEY, because vision fallback text is stable. With live OpenAI vision, match scores can vary by image parsing."
+}

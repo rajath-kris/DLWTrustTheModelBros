@@ -23,6 +23,13 @@
 - **Topic Mastery + Next Study Actions:** Mission Control surfaces per-topic mastery and an explicit "what to study next" plan.
 - **Course Material Upload + Grounding:** Students can upload slides/course files so prompts and guidance stay grounded in course context.
 
+### 2.1 Quiz Tab (MCQ Readiness Loop)
+- **Topic-based quiz generation from course sources:** Generate MCQs from PYQs and tutorials for selected topics.
+- **Readiness + knowledge-gap measurement through quiz performance:** Quiz accuracy and error patterns directly update readiness and gap signals.
+- **Improvement path via quizzes:** If a learner wants to improve readiness score and close gaps, the system should guide them into targeted quizzes.
+- **Deadline-aware repetition:** As quiz/test deadlines approach, repeat previously wrong questions and relevant previously captured question contexts.
+- **Exam-time recommendation mode:** When actual tests are near, recommend quizzes topic-by-topic.
+
 ---
 
 ## 3. UI Goals (Sentinel + Mission Control)
@@ -55,7 +62,7 @@
 - **Learning-loop continuity:** Every captured doubt should progress through prompting, understanding check, and state update without dead ends.
 
 ### 3.4 UI Maintainability Gates (MVP)
-- **Reusable Sentinel UI primitives:** Extract repeatable overlay and selector UI pieces (action buttons, status blocks, input row, style tokens) into reusable components/modules.
+- **Reusable Sentinel UI primitives:** Extract repeatable overlay and selector UI pieces (action buttons, status blocks, input row, style tokens) into reusable components.
 - **Single source styling tokens:** Keep font, color, spacing, and animation constants centralized to reduce one-off styling drift.
 - **Feature-safe refactors:** UI structural refactors must preserve focus safety, dismissibility, and placement behavior.
 

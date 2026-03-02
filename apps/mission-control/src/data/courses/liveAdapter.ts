@@ -51,9 +51,9 @@ function mapLiveDocuments(state: LearningState, courseId: string): MockDocument[
     .map((item) => ({
       doc_id: item.doc_id,
       course_id: item.course_id,
-      module_id: item.module_id,
+      topic_id: item.topic_id,
       course_label: item.course_id.toUpperCase(),
-      module_label: item.module_id,
+      topic_label: item.topic_id,
       name: item.name,
       size: formatBytes(item.size_bytes),
       upload_date: item.uploaded_at.split("T")[0] ?? item.uploaded_at,

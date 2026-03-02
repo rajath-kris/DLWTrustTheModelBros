@@ -31,7 +31,7 @@
         }
       ],
       "course_id": "all",
-      "module_id": null
+      "topic_id": null
     },
     "readiness_axes": {
       "concept_mastery": 0.68,

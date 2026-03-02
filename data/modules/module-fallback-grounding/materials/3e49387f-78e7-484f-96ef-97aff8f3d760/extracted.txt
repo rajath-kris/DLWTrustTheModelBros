@@ -1,0 +1,1 @@
+No OpenAI API key configured. Captured study content awaiting cloud interpretation. capture unparsed

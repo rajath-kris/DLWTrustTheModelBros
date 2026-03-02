@@ -1,0 +1,38 @@
+{
+  "gaps": {
+    "Laplace transform": {
+      "attempts": 1,
+      "mastery": 0.6,
+      "last_seen": "2026-03-03T02:39:35",
+      "gap_description": "combining different terms in Laplace transform",
+      "knows": [
+        "Laplace transform of a constant",
+        "Laplace transform of a power of t",
+        "Laplace transform of a sine function"
+      ],
+      "confused_about": "combining different terms in Laplace transform",
+      "evidence": [
+        {
+          "time": "2026-03-03T02:39:35",
+          "delta": 0.1,
+          "confused_about": "combining different terms in Laplace transform"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-03T02:39:33",
+      "user_text": "I need help with this screenshot context: Calculate the Laplace transform of the given function. | Find the Laplace transform of 3 + t^5 + sin(\u03c0t). | laplace transform, mathematics, calculus, transformations",
+      "assistant_reply": "What is the Laplace transform of a constant, a power of \\( t \\), and a sine function?",
+      "draft_reply": "What is the Laplace transform of a constant, a power of \\( t \\), and a sine function?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

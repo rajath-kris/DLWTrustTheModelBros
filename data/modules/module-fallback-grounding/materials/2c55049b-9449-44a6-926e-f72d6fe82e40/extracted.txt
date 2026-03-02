@@ -1,0 +1,1 @@
+No OpenAI API key configured. Captured study content awaiting cloud interpretation. No text detected. Could not parse visual content from OpenAI Vision. capture unparsed vision-error

@@ -387,7 +387,6 @@ class SentinelController(QObject):
                     context.monitor,
                     context.region,
                     context.image_bytes,
-                    module_id=settings.active_module_id or None,
                     thread_id=thread_id,
                     turn_index=effective_turn_index,
                     previous_prompt=previous_prompt,

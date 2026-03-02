@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "captures_before": 118,
+  "captures_after": 120,
+  "thread_id": "mock-laplace-thread",
+  "capture_1": {
+    "capture_id": "5285d0db-0810-4908-a240-d83b7947cc43",
+    "turn_index": 0,
+    "topic_label": "laplace-transform",
+    "gap_count": 1,
+    "socratic_prompt": "What do you know about the basic properties of the Laplace Transform, and how might they be useful in analyzing signals and systems?"
+  },
+  "capture_2": {
+    "capture_id": "1b7d1c2e-1ec0-494e-b297-e371f4ec8307",
+    "turn_index": 1,
+    "topic_label": "Laplace Transform",
+    "gap_count": 1,
+    "socratic_prompt": "Why is it important to consider initial conditions when applying the Laplace Transform to analyze systems, and how might ignoring them affect your results?"
+  },
+  "latest_state_updated_at": "2026-03-02T09:28:08.541779Z"
+}

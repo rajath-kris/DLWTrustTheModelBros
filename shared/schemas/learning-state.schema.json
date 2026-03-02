@@ -22,15 +22,15 @@
           "socratic_prompt": { "type": "string" },
           "gaps": { "type": "array", "items": { "type": "string" } },
           "course_id": { "type": "string", "default": "all" },
-          "module_id": { "type": ["string", "null"] },
+          "topic_id": { "type": ["string", "null"] },
           "material_id": { "type": ["string", "null"] },
           "source_warning": { "type": ["string", "null"] },
           "source_context": {
             "type": ["object", "null"],
-            "required": ["module_id", "module_name", "match_score", "matched"],
+            "required": ["topic_id", "topic_name", "match_score", "matched"],
             "properties": {
-              "module_id": { "type": "string" },
-              "module_name": { "type": "string" },
+              "topic_id": { "type": "string" },
+              "topic_name": { "type": "string" },
               "material_id": { "type": ["string", "null"] },
               "material_name": { "type": ["string", "null"] },
               "match_score": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -54,7 +54,7 @@
           "basis_answer_excerpt": { "type": ["string", "null"] },
           "gap_type": { "type": ["string", "null"], "enum": ["concept", "reasoning", "misconception", null] },
           "course_id": { "type": "string", "default": "all" },
-          "module_id": { "type": ["string", "null"] },
+          "topic_id": { "type": ["string", "null"] },
           "material_id": { "type": ["string", "null"] },
           "status": { "type": "string", "enum": ["open", "reviewing", "closed"] },
           "capture_id": { "type": "string" },
@@ -88,6 +88,27 @@
           "current": { "type": "number", "minimum": 0, "maximum": 1 },
           "target": { "type": "number", "minimum": 0, "maximum": 1 },
           "open_gaps": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "default": []
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["topic_id", "course_id", "topic_id", "name", "normalized_name", "source_doc_ids", "created_at", "updated_at"],
+        "properties": {
+          "topic_id": { "type": "string" },
+          "course_id": { "type": "string" },
+          "topic_id": { "type": "string" },
+          "name": { "type": "string" },
+          "normalized_name": { "type": "string" },
+          "source_doc_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
         }
       },
       "default": []
@@ -136,11 +157,11 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["doc_id", "course_id", "module_id", "name", "size_bytes", "type", "uploaded_at", "file_url", "is_anchor"],
+        "required": ["doc_id", "course_id", "topic_id", "name", "size_bytes", "type", "uploaded_at", "file_url", "is_anchor"],
         "properties": {
           "doc_id": { "type": "string" },
           "course_id": { "type": "string" },
-          "module_id": { "type": "string" },
+          "topic_id": { "type": "string" },
           "name": { "type": "string" },
           "size_bytes": { "type": "integer", "minimum": 0 },
           "type": { "type": "string" },
@@ -192,7 +213,10 @@
           "correct_answer": { "type": "string" },
           "explanation": { "type": ["string", "null"] },
           "course_id": { "type": "string" },
-          "module_id": { "type": ["string", "null"] }
+          "topic_id": { "type": ["string", "null"] },
+          "origin_doc_id": { "type": ["string", "null"] },
+          "origin_topic_id": { "type": ["string", "null"] },
+          "generated": { "type": "boolean" }
         }
       },
       "default": []
@@ -240,7 +264,7 @@
             }
           },
           "course_id": { "type": "string" },
-          "module_id": { "type": ["string", "null"] }
+          "topic_id": { "type": ["string", "null"] }
         }
       },
       "default": []

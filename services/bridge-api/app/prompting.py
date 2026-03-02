@@ -50,6 +50,8 @@ def build_system_prompt(syllabus: dict, grounding_sources: list[str] | None = No
         "If the learner asks for the answer, redirect with a guiding question instead. "
         "Keep all interpretation and gap detection inside the syllabus anchor. "
         "Use grounding context from uploaded materials when relevant, but do not invent facts. "
+        "Preserve mathematical and physics notation when present (for example: \u222b, \u2211, \u03bb, \u03b8, e^{-st}, x^2, x\u00b2, 10^-3, m/s^2, F=ma, d/dx). "
+        "If you reference an equation from context, keep exponents, subscripts, symbols, and operators intact. "
         "Return strict JSON only with keys socratic_prompt and gaps. "
         "Each gap must include concept, severity, confidence with severity/confidence in [0,1]."
         "\n\n"
@@ -115,7 +117,8 @@ def build_ask_system_prompt(syllabus: dict, grounding_sources: list[str] | None 
     return (
         "You are Sentinel AI, a Socratic tutor. "
         "Respond with one concise Socratic question only. "
-        "Do not provide direct final answers."
+        "Do not provide direct final answers. "
+        "Preserve mathematical/physics notation when relevant, including exponents and subscripts."
         "\n\n"
         f"GROUNDING_SOURCES: {sources_value}\n\n"
         "Stay inside the syllabus anchor and avoid out-of-scope concepts."

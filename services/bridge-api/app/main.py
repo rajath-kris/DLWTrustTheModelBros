@@ -1,7 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import base64
 import json
+import math
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -13,10 +14,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .friend_agent_adapter import FriendAgentAdapter, FriendAgentResult
 from .grounding import GroundingBundle, chunk_text, extract_supported_text, select_top_chunks, tokenize
 from .models import (
-    AskRequest,
-    AskResponse,
     CaptureEvent,
     CaptureRequest,
     CaptureResponse,
@@ -24,13 +24,17 @@ from .models import (
     CourseDocument,
     CourseSummary,
     CreateDeadlineRequest,
+    DocumentRetagRequest,
     EventEnvelope,
     GapStatusUpdate,
     KnowledgeGap,
     LearningState,
     QuestionBankItem,
+    QuizPrepareRequest,
+    QuizPrepareResponse,
     QuizQuestionResult,
     QuizRecord,
+    QuizSelectionSummary,
     QuizSubmitRequest,
     QuizSubmitResponse,
     SessionEvent,
@@ -40,17 +44,19 @@ from .models import (
     StudyAction,
     TopicUpdate,
     TopicMasteryItem,
+    utc_now_iso,
 )
-from .module_models import (
-    ActiveModuleRequest,
-    ActiveModuleResponse,
+from .topic_models import (
+    ActiveTopicRequest,
+    ActiveTopicResponse,
     MaterialSummary,
-    ModuleListResponse,
-    ModuleSummary,
-    ModuleUpsertRequest,
+    TopicListResponse,
+    TopicSummary,
+    TopicUpsertRequest,
 )
-from .module_store import ModuleStore
+from .topic_store import TopicStore
 from .openai_clients import OpenAISocraticClient, OpenAIVisionClient
+from .quiz_seeding import QuizSeeder
 from .readiness import calculate_readiness
 from .sentinel_runtime import SentinelRuntimeManager
 from .sse import SSEBroker, sse_generator
@@ -79,21 +85,32 @@ store = StateStore(settings.state_file)
 broker = SSEBroker()
 vision_client = OpenAIVisionClient(settings)
 socratic_client = OpenAISocraticClient(settings)
-module_store = ModuleStore(settings.modules_dir, vision_client)
+quiz_seeder = QuizSeeder(settings)
+friend_agent = FriendAgentAdapter(settings)
+topic_store = TopicStore(settings.topics_dir, vision_client)
 runtime_manager = SentinelRuntimeManager(settings)
 
 MATCH_THRESHOLD = 0.22
 WEAK_MATCH_THRESHOLD = 0.14
 MAX_STUDY_ACTIONS = 5
-MODULE_GROUNDING_LIMIT = 3
+TOPIC_GROUNDING_LIMIT = 2
 COURSE_DOC_GROUNDING_LIMIT = 2
 GROUNDING_MAX_CONTEXT_CHARS = 6200
-NO_ACTIVE_MODULE_WARNING = "No active module selected; response may not be grounded in uploaded materials."
-NO_MATCH_WARNING_TEMPLATE = (
-    "No close match found in uploaded materials for active module '{module_name}'; response is best-effort."
+NO_ACTIVE_TOPIC_WARNING = (
+    "No topic could be inferred from this capture/topic; using course documents and best-effort grounding."
 )
-FALLBACK_MODULE_ID = "module-general"
-FALLBACK_MODULE_NAME = "General Materials"
+NO_MATCH_WARNING_TEMPLATE = (
+    "No close match found in topic materials for inferred topic '{topic_name}'; using broader document grounding."
+)
+FALLBACK_TOPIC_ID = "topic-general"
+FALLBACK_TOPIC_NAME = "General Materials"
+LEGACY_FALLBACK_TOPIC_IDS = {"module-general"}
+INFERENCE_EXCLUDED_TOPIC_IDS = {
+    "topic-fallback-grounding",
+    "module-fallback-grounding",
+    FALLBACK_TOPIC_ID,
+    *LEGACY_FALLBACK_TOPIC_IDS,
+}
 
 
 def _load_syllabus() -> dict:
@@ -110,7 +127,7 @@ def _normalize_course_id(raw: str | None) -> str:
     return cleaned or "all"
 
 
-def _normalize_module_id(raw: str | None) -> str:
+def _normalize_topic_id(raw: str | None) -> str:
     text = (raw or "").strip().lower()
     cleaned = re.sub(r"[^a-z0-9_-]", "-", text)
     return cleaned.strip("-")
@@ -179,6 +196,13 @@ def _normalize_topic(raw: str | None) -> str:
     return compact or "General"
 
 
+def _is_fallback_topic_id(topic_id: str | None) -> bool:
+    normalized = _normalize_topic_id(topic_id)
+    if not normalized:
+        return False
+    return normalized in {FALLBACK_TOPIC_ID, *LEGACY_FALLBACK_TOPIC_IDS}
+
+
 def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
     return max(minimum, min(maximum, value))
 
@@ -189,12 +213,12 @@ def _question_visible_for_course(item: QuestionBankItem, course_id: str) -> bool
     return normalized == "all" or item_course in {"all", normalized}
 
 
-def _question_visible_for_module(item: QuestionBankItem, module_id: str | None) -> bool:
-    requested = _normalize_module_id(module_id)
+def _question_visible_for_topic(item: QuestionBankItem, topic_id: str | None) -> bool:
+    requested = _normalize_topic_id(topic_id)
     if not requested:
         return True
-    item_module = _normalize_module_id(item.module_id)
-    return item_module in {"", requested}
+    item_topic = _normalize_topic_id(item.topic_id)
+    return item_topic in {"", requested}
 
 
 def _find_topic_mastery_row(
@@ -252,21 +276,62 @@ def _topic_label_from_gaps(gaps: list[KnowledgeGap]) -> str | None:
     return concept
 
 
-def _resolve_module(module_id: str | None) -> ModuleSummary | None:
-    requested_module_id = (module_id or "").strip()
-    if requested_module_id:
-        requested_module = module_store.get_module(requested_module_id)
-        if requested_module is not None:
-            return requested_module
-    return module_store.get_active_module()
+def _resolve_topic(topic_id: str | None) -> TopicSummary | None:
+    requested_topic_id = (topic_id or "").strip()
+    if requested_topic_id:
+        requested_topic = topic_store.get_topic(requested_topic_id)
+        if requested_topic is not None:
+            return requested_topic
+    return topic_store.get_active_topic()
 
 
-def _build_source_context(module: ModuleSummary, extraction_text: str, extraction_tags: list[str]) -> SourceContext:
-    match = module_store.match_capture(module.module_id, extraction_text, extraction_tags)
+def _resolve_requested_topic(topic_id: str | None) -> TopicSummary | None:
+    requested_topic_id = (topic_id or "").strip()
+    if not requested_topic_id:
+        return None
+    return topic_store.get_topic(requested_topic_id)
+
+
+def _infer_best_topic_for_signal(
+    *,
+    signal_text: str,
+    signal_tags: list[str] | None = None,
+    minimum_score: float = 0.0,
+) -> tuple[TopicSummary | None, float, int]:
+    compact_text = " ".join((signal_text or "").split())
+    tags = [item for item in (signal_tags or []) if " ".join(item.split())]
+    if not compact_text and not tags:
+        return None, 0.0, 0
+
+    candidates = topic_store.list_topics()
+    best_topic: TopicSummary | None = None
+    best_score = -1.0
+    candidate_count = 0
+    for topic in candidates:
+        if topic.topic_id in INFERENCE_EXCLUDED_TOPIC_IDS:
+            continue
+        match = topic_store.match_capture(topic.topic_id, compact_text, tags)
+        if match is None:
+            continue
+        candidate_count += 1
+        score = _clamp(float(match.match_score))
+        if score > best_score:
+            best_score = score
+            best_topic = topic
+
+    if best_topic is None:
+        return None, 0.0, candidate_count
+    if best_score < minimum_score:
+        return None, _clamp(best_score), candidate_count
+    return best_topic, _clamp(best_score), candidate_count
+
+
+def _build_source_context(topic: TopicSummary, extraction_text: str, extraction_tags: list[str]) -> SourceContext:
+    match = topic_store.match_capture(topic.topic_id, extraction_text, extraction_tags)
     if match is None:
         return SourceContext(
-            module_id=module.module_id,
-            module_name=module.module_name,
+            topic_id=topic.topic_id,
+            topic_name=topic.topic_name,
             material_id=None,
             material_name=None,
             match_score=0.0,
@@ -275,8 +340,8 @@ def _build_source_context(module: ModuleSummary, extraction_text: str, extractio
     score = max(0.0, min(1.0, float(match.match_score)))
     matched = score >= MATCH_THRESHOLD
     return SourceContext(
-        module_id=module.module_id,
-        module_name=module.module_name,
+        topic_id=topic.topic_id,
+        topic_name=topic.topic_name,
         material_id=match.material_id,
         material_name=match.material_name,
         match_score=score,
@@ -284,17 +349,17 @@ def _build_source_context(module: ModuleSummary, extraction_text: str, extractio
     )
 
 
-def _source_warning_for(module: ModuleSummary | None, source_context: SourceContext | None) -> str | None:
-    if module is None:
-        return NO_ACTIVE_MODULE_WARNING
+def _source_warning_for(topic: TopicSummary | None, source_context: SourceContext | None) -> str | None:
+    if topic is None:
+        return NO_ACTIVE_TOPIC_WARNING
     if source_context is None:
-        return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
+        return NO_MATCH_WARNING_TEMPLATE.format(topic_name=topic.topic_name)
     score = max(0.0, min(1.0, source_context.match_score))
     if score >= MATCH_THRESHOLD:
         return None
     if score >= WEAK_MATCH_THRESHOLD:
-        return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
-    return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
+        return NO_MATCH_WARNING_TEMPLATE.format(topic_name=topic.topic_name)
+    return NO_MATCH_WARNING_TEMPLATE.format(topic_name=topic.topic_name)
 
 
 def _log_bridge_event(
@@ -343,26 +408,26 @@ def _score_chunk(query_tokens: set[str], chunk: str) -> int:
     return len(query_tokens & set(tokenize(chunk)))
 
 
-def _collect_module_grounding(module_id: str | None, query_text: str, limit: int = MODULE_GROUNDING_LIMIT) -> GroundingBundle:
-    requested_module_id = (module_id or "").strip()
-    if not requested_module_id:
+def _collect_topic_grounding(topic_id: str | None, query_text: str, limit: int = TOPIC_GROUNDING_LIMIT) -> GroundingBundle:
+    requested_topic_id = (topic_id or "").strip()
+    if not requested_topic_id:
         return GroundingBundle(context_text="", citations=[], warnings=[])
 
-    module = module_store.get_module(requested_module_id)
-    if module is None:
+    topic = topic_store.get_topic(requested_topic_id)
+    if topic is None:
         return GroundingBundle(
             context_text="",
             citations=[],
-            warnings=[f"Grounding skipped: module '{requested_module_id}' was not found."],
+            warnings=[f"Grounding skipped: topic '{requested_topic_id}' was not found."],
         )
 
-    materials = module_store.list_materials(module.module_id)
+    materials = topic_store.list_materials(topic.topic_id)
     query_tokens = set(tokenize(query_text))
     candidates: list[tuple[int, str, str]] = []
     warnings: list[str] = []
 
     for material in materials:
-        extracted_path = settings.modules_dir / material.extracted_path
+        extracted_path = settings.topics_dir / material.extracted_path
         if not extracted_path.exists():
             warnings.append(
                 f"Grounding skipped material '{material.material_name}': extracted text file missing."
@@ -381,12 +446,20 @@ def _collect_module_grounding(module_id: str | None, query_text: str, limit: int
 
         material_chunks = chunk_text(extracted_text)
         top_chunks = select_top_chunks(query_text, material_chunks, limit=1)
-        citation = f"module:{module.module_name}/{material.material_name}"
+        if not top_chunks:
+            continue
+        citation = f"topic:{topic.topic_name}/{material.material_name}"
         for chunk in top_chunks:
-            candidates.append((_score_chunk(query_tokens, chunk), chunk, citation))
+            score = _score_chunk(query_tokens, chunk)
+            if score <= 0:
+                continue
+            candidates.append((score, chunk, citation))
 
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    selected = candidates[: max(1, int(limit))]
+    selected = sorted(candidates, key=lambda item: item[0], reverse=True)[: max(1, int(limit))]
+    if not selected and materials:
+        warnings.append(
+            f"No relevant topic material snippets matched capture context for topic '{topic.topic_name}'."
+        )
     context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation in selected if chunk.strip()]
     citations = _dedupe_text_items([citation for _, _, citation in selected])
     return GroundingBundle(
@@ -411,14 +484,12 @@ def _course_document_path_from_url(file_url: str) -> Path | None:
 def _collect_course_doc_grounding(
     state: LearningState,
     course_id: str,
-    module_id: str | None,
+    topic_id: str | None,
     query_text: str,
     limit: int = COURSE_DOC_GROUNDING_LIMIT,
 ) -> GroundingBundle:
     normalized = _normalize_course_id(course_id)
-    target_module_id = _normalize_module_id(module_id)
-    if not target_module_id:
-        return GroundingBundle(context_text="", citations=[], warnings=[])
+    target_topic_id = _normalize_topic_id(topic_id)
 
     course_scoped_docs = [
         doc
@@ -426,20 +497,23 @@ def _collect_course_doc_grounding(
         if normalized == "all"
         or _normalize_course_id(doc.course_id) in {normalized, "all"}
     ]
-    exact_module_docs = [
-        doc for doc in course_scoped_docs if _normalize_module_id(doc.module_id) == target_module_id
-    ]
-    fallback_module_docs = [
-        doc for doc in course_scoped_docs if _normalize_module_id(doc.module_id) == FALLBACK_MODULE_ID
-    ]
-    use_fallback = len(exact_module_docs) == 0 and len(fallback_module_docs) > 0
-    eligible_docs = fallback_module_docs if use_fallback else exact_module_docs
 
     warnings: list[str] = []
-    if use_fallback:
-        warnings.append(
-            f"Grounding used fallback course documents from '{FALLBACK_MODULE_ID}' because no documents matched module '{target_module_id}'."
-        )
+    if target_topic_id:
+        exact_topic_docs = [
+            doc for doc in course_scoped_docs if _normalize_topic_id(doc.topic_id) == target_topic_id
+        ]
+        fallback_topic_docs = [
+            doc for doc in course_scoped_docs if _is_fallback_topic_id(doc.topic_id)
+        ]
+        use_fallback = len(exact_topic_docs) == 0 and len(fallback_topic_docs) > 0
+        eligible_docs = fallback_topic_docs if use_fallback else exact_topic_docs
+        if use_fallback:
+            warnings.append(
+                f"Grounding used fallback course documents from '{FALLBACK_TOPIC_ID}' because no documents matched topic '{target_topic_id}'."
+            )
+    else:
+        eligible_docs = course_scoped_docs
 
     anchored = sorted(
         [doc for doc in eligible_docs if doc.is_anchor],
@@ -482,12 +556,18 @@ def _collect_course_doc_grounding(
             continue
 
         selected_chunks = select_top_chunks(query_text, chunk_text(extracted_text), limit=1)
+        if not selected_chunks:
+            continue
         citation = f"course-doc:{document.name}"
         for chunk in selected_chunks:
-            candidates.append((_score_chunk(query_tokens, chunk), chunk, citation))
+            score = _score_chunk(query_tokens, chunk)
+            if score <= 0:
+                continue
+            candidates.append((score, chunk, citation))
 
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    selected = candidates[: max(1, int(limit))]
+    selected = sorted(candidates, key=lambda item: item[0], reverse=True)[: max(1, int(limit))]
+    if not selected and ordered_docs:
+        warnings.append("No relevant course document snippets matched capture context.")
     context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation in selected if chunk.strip()]
     citations = _dedupe_text_items([citation for _, _, citation in selected])
     return GroundingBundle(
@@ -500,39 +580,162 @@ def _collect_course_doc_grounding(
 def _build_grounding_bundle(
     *,
     state: LearningState,
-    module_id: str | None,
+    topic_id: str | None,
     course_id: str,
     query_text: str,
 ) -> GroundingBundle:
-    module_bundle = _collect_module_grounding(
-        module_id=module_id,
+    topic_bundle = _collect_topic_grounding(
+        topic_id=topic_id,
         query_text=query_text,
-        limit=MODULE_GROUNDING_LIMIT,
+        limit=TOPIC_GROUNDING_LIMIT,
     )
     course_bundle = _collect_course_doc_grounding(
         state=state,
         course_id=course_id,
-        module_id=module_id,
+        topic_id=topic_id,
         query_text=query_text,
         limit=COURSE_DOC_GROUNDING_LIMIT,
     )
 
     combined_context = "\n\n".join(
         part
-        for part in [module_bundle.context_text.strip(), course_bundle.context_text.strip()]
+        for part in [topic_bundle.context_text.strip(), course_bundle.context_text.strip()]
         if part
     )
     if len(combined_context) > GROUNDING_MAX_CONTEXT_CHARS:
         combined_context = combined_context[: GROUNDING_MAX_CONTEXT_CHARS - 3].rstrip()
         combined_context = f"{combined_context}..."
 
-    combined_citations = _dedupe_text_items([*module_bundle.citations, *course_bundle.citations])
-    combined_warnings = _dedupe_text_items([*module_bundle.warnings, *course_bundle.warnings])
+    combined_citations = _dedupe_text_items([*topic_bundle.citations, *course_bundle.citations])
+    combined_warnings = _dedupe_text_items([*topic_bundle.warnings, *course_bundle.warnings])
     return GroundingBundle(
         context_text=combined_context,
         citations=combined_citations,
         warnings=combined_warnings,
     )
+
+
+def _is_pdf_document(document: CourseDocument, file_path: Path | None) -> bool:
+    if file_path is not None and file_path.suffix.lower() == ".pdf":
+        return True
+    if document.type.lower() == "pdf":
+        return True
+    return document.name.lower().endswith(".pdf")
+
+
+def _select_friend_notes_path(
+    *,
+    state: LearningState,
+    course_id: str,
+    topic_id: str | None,
+) -> str | None:
+    if settings.friend_agent_notes_path:
+        configured_path = Path(settings.friend_agent_notes_path).expanduser()
+        if configured_path.exists():
+            return str(configured_path.resolve())
+
+    normalized_course = _normalize_course_id(course_id)
+    normalized_topic = _normalize_topic_id(topic_id)
+
+    eligible_docs: list[CourseDocument] = []
+    for document in state.documents:
+        if normalized_course != "all" and _normalize_course_id(document.course_id) not in {normalized_course, "all"}:
+            continue
+        if normalized_topic and _normalize_topic_id(document.topic_id) != normalized_topic and not _is_fallback_topic_id(
+            document.topic_id
+        ):
+            continue
+        eligible_docs.append(document)
+
+    anchored = sorted(
+        [doc for doc in eligible_docs if doc.is_anchor],
+        key=lambda item: item.uploaded_at,
+        reverse=True,
+    )
+    regular = sorted(
+        [doc for doc in eligible_docs if not doc.is_anchor],
+        key=lambda item: item.uploaded_at,
+        reverse=True,
+    )
+
+    for document in [*anchored, *regular]:
+        path = _course_document_path_from_url(document.file_url)
+        if path is None or not path.exists():
+            continue
+        if _is_pdf_document(document, path):
+            return str(path)
+    return None
+
+
+def _build_friend_capture_user_text(payload: CaptureRequest, extraction: VisionExtraction) -> str:
+    if (payload.user_input_text or "").strip():
+        return payload.user_input_text.strip()
+    summary = extraction.summary.strip()
+    raw_text = extraction.raw_text.strip()
+    tags = ", ".join(extraction.tags[:5])
+    parts = [part for part in [summary, raw_text, tags] if part]
+    if parts:
+        return f"I need help with this screenshot context: {' | '.join(parts)}"
+    return "I need help understanding this screenshot."
+
+
+def _friend_result_to_gap_payloads(
+    *,
+    result: FriendAgentResult,
+    extraction: VisionExtraction,
+    syllabus: dict,
+) -> list[dict[str, object]]:
+    payloads: list[dict[str, object]] = []
+    seen_concepts: set[str] = set()
+    dashboard_gaps = result.dashboard_state.get("gaps")
+    if isinstance(dashboard_gaps, dict):
+        for topic, raw_entry in dashboard_gaps.items():
+            if not isinstance(raw_entry, dict):
+                continue
+            topic_name = " ".join(str(topic).split()).strip() or "General"
+            mastery = _clamp(float(raw_entry.get("mastery", 0.5)))
+            attempts = max(1, int(raw_entry.get("attempts", 1)))
+            confused_about = _optional_text(raw_entry.get("confused_about"), max_chars=200)
+            concept = confused_about or topic_name
+            concept_key = _normalize_concept(concept)
+            if concept_key in seen_concepts:
+                continue
+            seen_concepts.add(concept_key)
+            severity = _clamp(1.0 - mastery)
+            confidence = _clamp(0.55 + min(attempts, 8) * 0.05)
+            deadline_score = _deadline_score_for_concept(concept, syllabus)
+            payloads.append(
+                {
+                    "concept": concept,
+                    "severity": severity,
+                    "confidence": confidence,
+                    "basis_question": f"Friend agent focus: {topic_name}",
+                    "basis_answer_excerpt": result.reply[:320],
+                    "gap_type": "concept",
+                    "deadline_score": deadline_score,
+                    "priority_score": _clamp((severity * 0.7) + (deadline_score * 0.3)),
+                }
+            )
+            if len(payloads) >= 3:
+                break
+
+    if payloads:
+        return payloads
+
+    seed_concept = extraction.tags[0].replace("_", " ").title() if extraction.tags else "Concept interpretation"
+    deadline_score = _deadline_score_for_concept(seed_concept, syllabus)
+    return [
+        {
+            "concept": seed_concept,
+            "severity": 0.58,
+            "confidence": 0.62,
+            "basis_question": "Friend agent fallback",
+            "basis_answer_excerpt": result.reply[:320],
+            "gap_type": "reasoning",
+            "deadline_score": deadline_score,
+            "priority_score": _clamp((0.58 * 0.7) + (deadline_score * 0.3)),
+        }
+    ]
 
 
 def _merge_warning_messages(base_warning: str | None, extra_warnings: list[str]) -> str | None:
@@ -560,6 +763,452 @@ def _nearest_deadline_days(deadlines: list[CourseDeadline], course_id: str) -> i
         if best is None or days < best:
             best = days
     return best
+
+
+def _nearest_deadline_days_for_scope(deadlines: list[CourseDeadline], course_id: str) -> int | None:
+    normalized_course = _normalize_course_id(course_id)
+    if normalized_course != "all":
+        return _nearest_deadline_days(deadlines, normalized_course)
+
+    now = datetime.now(timezone.utc)
+    best: int | None = None
+    for deadline in deadlines:
+        try:
+            due = datetime.fromisoformat(deadline.due_date.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        days = int((due - now).total_seconds() // 86400)
+        if best is None or days < best:
+            best = days
+    return best
+
+
+def _token_overlap_score(left: str, right: str) -> float:
+    left_tokens = set(tokenize(left))
+    right_tokens = set(tokenize(right))
+    if not left_tokens or not right_tokens:
+        return 0.0
+    overlap = len(left_tokens & right_tokens)
+    divisor = max(1, min(len(left_tokens), len(right_tokens)))
+    return _clamp(overlap / divisor)
+
+
+def _topic_matches_filter(question_topic: str, requested_topic: str) -> bool:
+    normalized_requested = _normalize_topic(requested_topic).lower()
+    if normalized_requested == "all topics":
+        return True
+    return _normalize_topic(question_topic).lower() == normalized_requested
+
+
+def _seed_document_topics_and_questions(
+    state: LearningState,
+    document: CourseDocument,
+    file_path: Path,
+    *,
+    allow_llm: bool = True,
+) -> tuple[int, int, list[str]]:
+    result = quiz_seeder.seed_document(
+        state=state,
+        document=document,
+        file_path=file_path,
+        replace_existing_doc_questions=True,
+        allow_llm=allow_llm,
+    )
+    return result.topics_added, result.questions_added, result.warnings
+
+
+def _remove_document_seed_artifacts(state: LearningState, *, doc_id: str) -> tuple[int, int]:
+    removed_questions = len(
+        [item for item in state.question_bank if item.generated and item.origin_doc_id == doc_id]
+    )
+    state.question_bank = [
+        item for item in state.question_bank if not (item.generated and item.origin_doc_id == doc_id)
+    ]
+
+    removed_topics = 0
+    kept_topics = []
+    for topic in state.topics:
+        if doc_id in topic.source_doc_ids:
+            topic.source_doc_ids = [value for value in topic.source_doc_ids if value != doc_id]
+            topic.updated_at = utc_now_iso()
+        if topic.source_doc_ids:
+            kept_topics.append(topic)
+        else:
+            removed_topics += 1
+    state.topics = kept_topics
+    return removed_topics, removed_questions
+
+
+def _document_has_seed_artifacts(state: LearningState, doc_id: str) -> bool:
+    has_topic = any(doc_id in topic.source_doc_ids for topic in state.topics)
+    has_question = any(item.generated and item.origin_doc_id == doc_id for item in state.question_bank)
+    return has_topic and has_question
+
+
+def _backfill_document_topic_seeds() -> None:
+    state = store.read()
+    changed = False
+    seeded_count = 0
+    warning_count = 0
+    for document in state.documents:
+        if _document_has_seed_artifacts(state, document.doc_id):
+            continue
+        doc_path = _course_document_path_from_url(document.file_url)
+        if doc_path is None or not doc_path.exists():
+            _log_bridge_event(
+                event="topic_seed_skipped",
+                endpoint_path="/startup",
+                doc_id=document.doc_id,
+                topic_id=document.topic_id,
+                reason="file_missing_or_unresolvable",
+            )
+            warning_count += 1
+            continue
+        topics_added, questions_added, warnings = _seed_document_topics_and_questions(
+            state,
+            document,
+            doc_path,
+            allow_llm=False,
+        )
+        if topics_added > 0 or questions_added > 0:
+            changed = True
+            seeded_count += 1
+            _log_bridge_event(
+                event="topic_seed_generated",
+                endpoint_path="/startup",
+                doc_id=document.doc_id,
+                topic_id=document.topic_id,
+                topics_added=topics_added,
+                questions_added=questions_added,
+            )
+        for warning in warnings:
+            warning_count += 1
+            _log_bridge_event(
+                event="topic_seed_skipped",
+                endpoint_path="/startup",
+                doc_id=document.doc_id,
+                topic_id=document.topic_id,
+                reason=warning,
+            )
+
+    if not changed:
+        return
+
+    state = _save_state(state)
+    _log_bridge_event(
+        event="topic_seed_backfill_completed",
+        endpoint_path="/startup",
+        seeded_documents=seeded_count,
+        warning_count=warning_count,
+    )
+
+
+def _build_recent_quiz_miss_scores(
+    state: LearningState,
+    *,
+    course_id: str,
+    topic_id: str | None,
+) -> dict[str, float]:
+    normalized_course = _normalize_course_id(course_id)
+    normalized_topic = _normalize_topic_id(topic_id)
+    miss_scores: dict[str, float] = {}
+    recent_quizzes = sorted(state.quizzes, key=lambda item: item.timestamp_utc, reverse=True)[:10]
+    for index, quiz in enumerate(recent_quizzes):
+        if normalized_course != "all" and _normalize_course_id(quiz.course_id) not in {normalized_course, "all"}:
+            continue
+        if normalized_topic and _normalize_topic_id(quiz.topic_id) not in {"", normalized_topic}:
+            continue
+        decay = 0.82**index
+        for result in quiz.results:
+            if result.is_correct:
+                continue
+            miss_scores[result.question_id] = miss_scores.get(result.question_id, 0.0) + decay
+    return miss_scores
+
+
+def _build_recent_question_seen_counts(
+    state: LearningState,
+    *,
+    course_id: str,
+    topic_id: str | None,
+) -> dict[str, int]:
+    normalized_course = _normalize_course_id(course_id)
+    normalized_topic = _normalize_topic_id(topic_id)
+    seen_counts: dict[str, int] = {}
+    recent_quizzes = sorted(state.quizzes, key=lambda item: item.timestamp_utc, reverse=True)[:10]
+    for quiz in recent_quizzes:
+        if normalized_course != "all" and _normalize_course_id(quiz.course_id) not in {normalized_course, "all"}:
+            continue
+        if normalized_topic and _normalize_topic_id(quiz.topic_id) not in {"", normalized_topic}:
+            continue
+        for result in quiz.results:
+            seen_counts[result.question_id] = seen_counts.get(result.question_id, 0) + 1
+    return seen_counts
+
+
+def _build_quiz_candidates(
+    *,
+    state: LearningState,
+    course_id: str,
+    topic_id: str | None,
+    topic: str,
+    selected_sources: set[str],
+    syllabus: dict,
+) -> list[dict[str, object]]:
+    normalized_course = _normalize_course_id(course_id)
+    normalized_topic = _normalize_topic_id(topic_id)
+    open_gaps = [
+        gap
+        for gap in state.gaps
+        if gap.status != "closed"
+        and (normalized_course == "all" or _normalize_course_id(gap.course_id) in {"all", normalized_course})
+        and (not normalized_topic or _normalize_topic_id(gap.topic_id) in {"", normalized_topic})
+    ]
+    miss_scores = _build_recent_quiz_miss_scores(
+        state,
+        course_id=normalized_course,
+        topic_id=normalized_topic or None,
+    )
+    seen_counts = _build_recent_question_seen_counts(
+        state,
+        course_id=normalized_course,
+        topic_id=normalized_topic or None,
+    )
+
+    candidates: list[dict[str, object]] = []
+    for item in state.question_bank:
+        if not _question_visible_for_course(item, normalized_course):
+            continue
+        if not _question_visible_for_topic(item, normalized_topic or None):
+            continue
+        if item.source not in selected_sources:
+            continue
+        if not _topic_matches_filter(item.topic, topic):
+            continue
+
+        concept_signal = f"{item.topic} {item.concept}".strip()
+        best_gap_match = 0.0
+        for gap in open_gaps:
+            score = _token_overlap_score(concept_signal, gap.concept)
+            if score > best_gap_match:
+                best_gap_match = score
+
+        gap_score = min(0.45, best_gap_match * 0.45)
+        wrong_repeat_score = min(0.30, miss_scores.get(item.question_id, 0.0) * 0.30)
+        deadline_component = min(0.20, _deadline_score_for_concept(item.concept or item.topic, syllabus) * 0.20)
+
+        seen = seen_counts.get(item.question_id, 0)
+        freshness_penalty = 0.0
+        if seen >= 3:
+            freshness_penalty = -0.15
+        elif seen == 2:
+            freshness_penalty = -0.10
+        elif seen == 1:
+            freshness_penalty = -0.05
+        if deadline_component >= 0.15 and freshness_penalty < -0.03:
+            freshness_penalty = -0.03
+
+        base_score = gap_score + wrong_repeat_score + deadline_component + freshness_penalty
+        candidates.append(
+            {
+                "question": item,
+                "concept_key": _normalize_concept(item.concept or item.topic),
+                "gap_score": gap_score,
+                "wrong_repeat_score": wrong_repeat_score,
+                "deadline_component": deadline_component,
+                "base_score": base_score,
+            }
+        )
+    return candidates
+
+
+def _prepare_quiz_questions(
+    *,
+    state: LearningState,
+    course_id: str,
+    topic_id: str | None,
+    topic: str,
+    selected_sources: set[str],
+    question_count: int,
+    syllabus: dict,
+) -> tuple[list[QuestionBankItem], QuizSelectionSummary]:
+    candidates = _build_quiz_candidates(
+        state=state,
+        course_id=course_id,
+        topic_id=topic_id,
+        topic=topic,
+        selected_sources=selected_sources,
+        syllabus=syllabus,
+    )
+    if not candidates:
+        return [], QuizSelectionSummary()
+
+    nearest_deadline_days = _nearest_deadline_days_for_scope(state.deadlines, course_id)
+    deadline_mode = nearest_deadline_days is not None and nearest_deadline_days <= 14
+
+    desired_count = max(1, min(25, int(question_count)))
+    gap_target = min(
+        len([entry for entry in candidates if float(entry["gap_score"]) > 0.0]),
+        int(math.ceil(desired_count * 0.4)),
+    )
+    wrong_target = 0
+    if deadline_mode:
+        wrong_target = min(
+            len([entry for entry in candidates if float(entry["wrong_repeat_score"]) > 0.0]),
+            int(math.ceil(desired_count * 0.2)),
+        )
+
+    selected: list[QuestionBankItem] = []
+    selected_ids: set[str] = set()
+    concept_counts: dict[str, int] = {}
+    gap_selected = 0
+    wrong_selected = 0
+    coverage_selected = 0
+    non_gap_available = any(float(entry["gap_score"]) == 0.0 for entry in candidates)
+
+    def try_add(entry: dict[str, object], *, track: str, relax_concept_cap: bool = False) -> bool:
+        nonlocal gap_selected, wrong_selected, coverage_selected
+        question = entry["question"]
+        assert isinstance(question, QuestionBankItem)
+        if question.question_id in selected_ids:
+            return False
+        concept_key = str(entry["concept_key"])
+        concept_count = concept_counts.get(concept_key, 0)
+        if not relax_concept_cap and concept_count >= 2:
+            return False
+
+        selected.append(question)
+        selected_ids.add(question.question_id)
+        concept_counts[concept_key] = concept_count + 1
+        if track == "gap":
+            gap_selected += 1
+        elif track == "wrong":
+            wrong_selected += 1
+        else:
+            coverage_selected += 1
+        return True
+
+    ranked_gap = sorted(
+        [entry for entry in candidates if float(entry["gap_score"]) > 0.0],
+        key=lambda item: float(item["base_score"]),
+        reverse=True,
+    )
+    ranked_wrong = sorted(
+        [entry for entry in candidates if float(entry["wrong_repeat_score"]) > 0.0],
+        key=lambda item: float(item["base_score"]),
+        reverse=True,
+    )
+
+    for entry in ranked_gap:
+        if len(selected) >= desired_count or gap_selected >= gap_target:
+            break
+        try_add(entry, track="gap")
+
+    for entry in ranked_wrong:
+        if len(selected) >= desired_count or wrong_selected >= wrong_target:
+            break
+        try_add(entry, track="wrong")
+
+    def has_non_gap_selected() -> bool:
+        selected_ids_local = {item.question_id for item in selected}
+        for entry in candidates:
+            question = entry["question"]
+            assert isinstance(question, QuestionBankItem)
+            if question.question_id not in selected_ids_local:
+                continue
+            if float(entry["gap_score"]) == 0.0:
+                return True
+        return False
+
+    remaining = [entry for entry in candidates if isinstance(entry.get("question"), QuestionBankItem)]
+    while len(selected) < desired_count and remaining:
+        best_entry: dict[str, object] | None = None
+        best_score = -10_000.0
+        for entry in remaining:
+            question = entry["question"]
+            assert isinstance(question, QuestionBankItem)
+            if question.question_id in selected_ids:
+                continue
+            concept_key = str(entry["concept_key"])
+            if concept_counts.get(concept_key, 0) >= 2:
+                continue
+            diversity_bonus = 0.10 if concept_counts.get(concept_key, 0) == 0 else 0.0
+            non_gap_balance_bonus = 0.0
+            if non_gap_available and not has_non_gap_selected() and float(entry["gap_score"]) == 0.0:
+                non_gap_balance_bonus = 0.25
+            candidate_score = float(entry["base_score"]) + diversity_bonus
+            candidate_score += non_gap_balance_bonus
+            if candidate_score > best_score:
+                best_score = candidate_score
+                best_entry = entry
+        if best_entry is None:
+            break
+        try_add(best_entry, track="coverage")
+        remaining = [entry for entry in remaining if entry["question"] != best_entry["question"]]
+
+    if len(selected) < desired_count:
+        relaxed_ranked = sorted(candidates, key=lambda item: float(item["base_score"]), reverse=True)
+        for entry in relaxed_ranked:
+            if len(selected) >= desired_count:
+                break
+            try_add(entry, track="coverage", relax_concept_cap=True)
+
+    if non_gap_available and not has_non_gap_selected():
+        best_non_gap = None
+        best_non_gap_score = -10_000.0
+        for entry in candidates:
+            question = entry["question"]
+            assert isinstance(question, QuestionBankItem)
+            if question.question_id in selected_ids:
+                continue
+            if float(entry["gap_score"]) != 0.0:
+                continue
+            score = float(entry["base_score"])
+            if score > best_non_gap_score:
+                best_non_gap_score = score
+                best_non_gap = entry
+
+        if best_non_gap is not None:
+            if len(selected) < desired_count:
+                try_add(best_non_gap, track="coverage", relax_concept_cap=True)
+            else:
+                replace_index = -1
+                replace_score = 10_000.0
+                for idx, item in enumerate(selected):
+                    candidate_entry = next((entry for entry in candidates if entry["question"] == item), None)
+                    if candidate_entry is None:
+                        continue
+                    if float(candidate_entry["gap_score"]) == 0.0:
+                        continue
+                    candidate_score = float(candidate_entry["base_score"])
+                    if candidate_score < replace_score:
+                        replace_index = idx
+                        replace_score = candidate_score
+                if replace_index >= 0:
+                    replaced_question = selected[replace_index]
+                    selected_ids.remove(replaced_question.question_id)
+                    replacement_question = best_non_gap["question"]
+                    assert isinstance(replacement_question, QuestionBankItem)
+                    selected[replace_index] = replacement_question
+                    selected_ids.add(replacement_question.question_id)
+                    coverage_selected += 1
+
+    deadline_boosted_count = 0
+    for entry in candidates:
+        question = entry["question"]
+        assert isinstance(question, QuestionBankItem)
+        if question.question_id not in selected_ids:
+            continue
+        if float(entry["deadline_component"]) >= 0.10:
+            deadline_boosted_count += 1
+
+    summary = QuizSelectionSummary(
+        gap_matched_count=gap_selected,
+        wrong_repeat_count=wrong_selected,
+        deadline_boosted_count=deadline_boosted_count,
+        coverage_count=coverage_selected,
+    )
+    return selected, summary
 
 
 def _recompute_derived(state: LearningState) -> LearningState:
@@ -671,7 +1320,7 @@ def _save_state(state: LearningState) -> LearningState:
     return derived
 
 
-def _migrate_document_module_tags() -> None:
+def _migrate_document_topic_tags() -> None:
     state_path = settings.state_file
     if not state_path.exists():
         return
@@ -680,7 +1329,7 @@ def _migrate_document_module_tags() -> None:
         payload = json.loads(state_path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         _log_bridge_event(
-            event="documents_module_migration_failed",
+            event="documents_topic_migration_failed",
             endpoint_path="/startup",
             reason=f"State file read failure ({type(exc).__name__}).",
         )
@@ -694,31 +1343,36 @@ def _migrate_document_module_tags() -> None:
     for document in documents_raw:
         if not isinstance(document, dict):
             continue
-        if _normalize_module_id(document.get("module_id")):
+        if _normalize_topic_id(document.get("topic_id")):
             continue
         missing_count += 1
 
     if missing_count == 0:
         return
 
-    active_module = module_store.get_active_module()
-    if active_module is not None:
-        fallback_module_id = active_module.module_id
-        fallback_mode = "active-module"
+    active_topic = topic_store.get_active_topic()
+    if active_topic is not None:
+        fallback_topic_id = active_topic.topic_id
+        fallback_mode = "active-topic"
     else:
-        fallback_module = module_store.get_module(FALLBACK_MODULE_ID)
-        if fallback_module is None:
-            fallback_module = module_store.upsert_module(FALLBACK_MODULE_ID, FALLBACK_MODULE_NAME)
-        fallback_module_id = fallback_module.module_id
-        fallback_mode = "module-general"
+        fallback_topic = topic_store.get_topic(FALLBACK_TOPIC_ID)
+        if fallback_topic is None:
+            for legacy_topic_id in LEGACY_FALLBACK_TOPIC_IDS:
+                fallback_topic = topic_store.get_topic(legacy_topic_id)
+                if fallback_topic is not None:
+                    break
+        if fallback_topic is None:
+            fallback_topic = topic_store.upsert_topic(FALLBACK_TOPIC_ID, FALLBACK_TOPIC_NAME)
+        fallback_topic_id = fallback_topic.topic_id
+        fallback_mode = "topic-general"
 
     updated_count = 0
     for document in documents_raw:
         if not isinstance(document, dict):
             continue
-        if _normalize_module_id(document.get("module_id")):
+        if _normalize_topic_id(document.get("topic_id")):
             continue
-        document["module_id"] = fallback_module_id
+        document["topic_id"] = fallback_topic_id
         updated_count += 1
 
     if updated_count == 0:
@@ -728,24 +1382,46 @@ def _migrate_document_module_tags() -> None:
         state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     except Exception as exc:  # noqa: BLE001
         _log_bridge_event(
-            event="documents_module_migration_failed",
+            event="documents_topic_migration_failed",
             endpoint_path="/startup",
             reason=f"State file write failure ({type(exc).__name__}).",
             migrated_count=updated_count,
-            fallback_module_id=fallback_module_id,
+            fallback_topic_id=fallback_topic_id,
         )
         return
 
     _log_bridge_event(
-        event="documents_module_migrated",
+        event="documents_topic_migrated",
         endpoint_path="/startup",
         migrated_count=updated_count,
-        fallback_module_id=fallback_module_id,
+        fallback_topic_id=fallback_topic_id,
         fallback_mode=fallback_mode,
     )
 
 
-_migrate_document_module_tags()
+_migrate_document_topic_tags()
+_backfill_document_topic_seeds()
+_log_bridge_event(
+    event="ask_endpoint_removed",
+    endpoint_path="/startup",
+    reason="POST /api/v1/ask removed from public API surface.",
+)
+
+if friend_agent.configured:
+    if friend_agent.enabled:
+        _log_bridge_event(
+            event="friend_agent_enabled",
+            endpoint_path="/startup",
+            reason="Friend agent backend is active.",
+            script_path=friend_agent.script_path,
+        )
+    else:
+        _log_bridge_event(
+            event="friend_agent_unavailable",
+            endpoint_path="/startup",
+            reason=friend_agent.load_error or "Failed to initialize friend agent.",
+            script_path=friend_agent.script_path,
+        )
 
 
 def _filter_state_for_course(state: LearningState, course_id: str) -> LearningState:
@@ -758,6 +1434,7 @@ def _filter_state_for_course(state: LearningState, course_id: str) -> LearningSt
             "captures": [item for item in state.captures if _normalize_course_id(item.course_id) == normalized],
             "gaps": [item for item in state.gaps if _normalize_course_id(item.course_id) == normalized],
             "topic_mastery": [item for item in state.topic_mastery if _normalize_course_id(item.course_id) == normalized],
+            "topics": [item for item in state.topics if _normalize_course_id(item.course_id) == normalized],
             "study_actions": [item for item in state.study_actions if _normalize_course_id(item.course_id) == normalized],
             "deadlines": [item for item in state.deadlines if _normalize_course_id(item.course_id) == normalized],
             "documents": [item for item in state.documents if _normalize_course_id(item.course_id) == normalized],
@@ -833,37 +1510,37 @@ async def stream_events() -> StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@app.post("/api/v1/modules", response_model=ModuleSummary)
-def upsert_module(request: ModuleUpsertRequest) -> ModuleSummary:
-    module_id = request.module_id.strip()
-    module_name = request.module_name.strip()
-    if not module_id:
-        raise HTTPException(status_code=400, detail="module_id must not be empty.")
-    if not module_name:
-        raise HTTPException(status_code=400, detail="module_name must not be empty.")
-    return module_store.upsert_module(module_id, module_name)
+@app.post("/api/v1/topics", response_model=TopicSummary)
+def upsert_topic(request: TopicUpsertRequest) -> TopicSummary:
+    topic_id = request.topic_id.strip()
+    topic_name = request.topic_name.strip()
+    if not topic_id:
+        raise HTTPException(status_code=400, detail="topic_id must not be empty.")
+    if not topic_name:
+        raise HTTPException(status_code=400, detail="topic_name must not be empty.")
+    return topic_store.upsert_topic(topic_id, topic_name)
 
 
-@app.get("/api/v1/modules", response_model=ModuleListResponse)
-def list_modules() -> ModuleListResponse:
-    modules = module_store.list_modules()
-    active_module = module_store.get_active_module()
-    return ModuleListResponse(
-        modules=modules,
-        active_module_id=active_module.module_id if active_module else None,
+@app.get("/api/v1/topics", response_model=TopicListResponse)
+def list_topics() -> TopicListResponse:
+    topics = topic_store.list_topics()
+    active_topic = topic_store.get_active_topic()
+    return TopicListResponse(
+        topics=topics,
+        active_topic_id=active_topic.topic_id if active_topic else None,
     )
 
 
-@app.post("/api/v1/modules/{module_id}/materials", response_model=MaterialSummary)
-async def upload_module_material(
-    module_id: str,
+@app.post("/api/v1/topics/{topic_id}/materials", response_model=MaterialSummary)
+async def upload_topic_material(
+    topic_id: str,
     file: UploadFile = File(...),
     material_name: str = Form(...),
     material_type: str | None = Form(default=None),
 ) -> MaterialSummary:
-    module = module_store.get_module(module_id)
-    if module is None:
-        raise HTTPException(status_code=404, detail=f"Module not found: {module_id}")
+    topic = topic_store.get_topic(topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {topic_id}")
 
     file_bytes = await file.read(settings.material_upload_max_bytes + 1)
     if len(file_bytes) > settings.material_upload_max_bytes:
@@ -873,8 +1550,8 @@ async def upload_module_material(
         )
 
     try:
-        return module_store.add_material(
-            module_id=module.module_id,
+        return topic_store.add_material(
+            topic_id=topic.topic_id,
             material_name=material_name,
             material_type=material_type,
             original_filename=file.filename or "upload.bin",
@@ -884,25 +1561,25 @@ async def upload_module_material(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/api/v1/modules/active", response_model=ActiveModuleResponse)
-def set_active_module(request: ActiveModuleRequest) -> ActiveModuleResponse:
-    module = module_store.set_active_module(request.module_id)
-    if module is None:
-        raise HTTPException(status_code=404, detail=f"Module not found: {request.module_id}")
-    return ActiveModuleResponse(
-        active_module_id=module.module_id,
-        active_module_name=module.module_name,
+@app.post("/api/v1/topics/active", response_model=ActiveTopicResponse)
+def set_active_topic(request: ActiveTopicRequest) -> ActiveTopicResponse:
+    topic = topic_store.set_active_topic(request.topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {request.topic_id}")
+    return ActiveTopicResponse(
+        active_topic_id=topic.topic_id,
+        active_topic_name=topic.topic_name,
     )
 
 
-@app.get("/api/v1/modules/active", response_model=ActiveModuleResponse)
-def get_active_module() -> ActiveModuleResponse:
-    module = module_store.get_active_module()
-    if module is None:
-        return ActiveModuleResponse(active_module_id=None, active_module_name=None)
-    return ActiveModuleResponse(
-        active_module_id=module.module_id,
-        active_module_name=module.module_name,
+@app.get("/api/v1/topics/active", response_model=ActiveTopicResponse)
+def get_active_topic() -> ActiveTopicResponse:
+    topic = topic_store.get_active_topic()
+    if topic is None:
+        return ActiveTopicResponse(active_topic_id=None, active_topic_name=None)
+    return ActiveTopicResponse(
+        active_topic_id=topic.topic_id,
+        active_topic_name=topic.topic_name,
     )
 
 
@@ -923,7 +1600,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     capture_path = Path(settings.captures_dir) / filename
     capture_path.write_bytes(image_bytes)
 
-    course_id = _normalize_course_id(payload.course_id or payload.module_id)
+    course_id = _normalize_course_id(payload.course_id)
     existing_state = store.read()
 
     syllabus = _load_syllabus()
@@ -931,12 +1608,52 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     capture_text = " ".join(
         part for part in [extraction.raw_text.strip(), extraction.summary.strip()] if part
     ).strip()
-    resolved_module = _resolve_module(payload.module_id or course_id)
-    source_context = (
-        _build_source_context(resolved_module, capture_text, extraction.tags)
-        if resolved_module is not None
-        else None
+    requested_topic_id = _normalize_topic_id(payload.topic_id)
+    requested_topic = _resolve_requested_topic(payload.topic_id)
+    topic_signal_text = " ".join(
+        part
+        for part in [
+            extraction.raw_text,
+            extraction.summary,
+            payload.user_input_text or "",
+            payload.previous_prompt or "",
+        ]
+        if part and str(part).strip()
     )
+    inferred_topic, inferred_score, topic_candidate_count = _infer_best_topic_for_signal(
+        signal_text=topic_signal_text,
+        signal_tags=extraction.tags,
+        minimum_score=WEAK_MATCH_THRESHOLD,
+    )
+    context_topic = requested_topic
+    source_resolution_mode = "explicit"
+    source_resolution_score = 0.0
+    if context_topic is None:
+        source_resolution_mode = "unresolved"
+        if inferred_topic is not None:
+            context_topic = inferred_topic
+            source_resolution_mode = "inferred"
+            source_resolution_score = inferred_score
+    source_context = (
+        _build_source_context(context_topic, capture_text, extraction.tags)
+        if context_topic is not None
+        else SourceContext(
+            topic_id="",
+            topic_name="Unresolved",
+            material_id=None,
+            material_name=None,
+            match_score=0.0,
+            matched=False,
+        )
+    )
+    if context_topic is not None and source_resolution_mode == "explicit":
+        source_resolution_score = _clamp(source_context.match_score)
+
+    grounding_topic = None
+    if requested_topic is not None:
+        grounding_topic = requested_topic
+    elif inferred_topic is not None and inferred_score >= WEAK_MATCH_THRESHOLD:
+        grounding_topic = inferred_topic
     grounding_query_text = " ".join(
         part
         for part in [
@@ -950,7 +1667,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     )
     grounding_bundle = _build_grounding_bundle(
         state=existing_state,
-        module_id=resolved_module.module_id if resolved_module is not None else None,
+        topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
         course_id=course_id,
         query_text=grounding_query_text,
     )
@@ -961,34 +1678,104 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             capture_id=capture_id,
             reason=warning,
             course_id=course_id,
-            module_id=resolved_module.module_id if resolved_module is not None else None,
+            topic_id=context_topic.topic_id if context_topic is not None else None,
         )
 
-    source_warning = _merge_warning_messages(
-        _source_warning_for(resolved_module, source_context),
-        grounding_bundle.warnings,
-    )
-    socratic = socratic_client.generate(
-        payload,
-        extraction,
-        syllabus,
-        grounding_context=grounding_bundle.context_text or None,
-        grounding_sources=grounding_bundle.citations or None,
-    )
+    topic_warning = _source_warning_for(context_topic, source_context)
+    if context_topic is None and grounding_bundle.citations:
+        topic_warning = None
+    if requested_topic_id and requested_topic is None:
+        topic_warning = _merge_warning_messages(
+            topic_warning,
+            f"Requested topic '{requested_topic_id}' was not found; using inferred/broader grounding.",
+        )
+    source_warning = _merge_warning_messages(topic_warning, grounding_bundle.warnings)
+    agent_backend_used = "bridge"
+    socratic_prompt: str
+    raw_gap_payloads: list[dict[str, object]]
 
-    gap_module_id = source_context.module_id if source_context is not None else None
-    gap_material_id = source_context.material_id if source_context is not None else None
+    if friend_agent.enabled:
+        try:
+            friend_notes_path = _select_friend_notes_path(
+                state=existing_state,
+                course_id=course_id,
+                topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
+            )
+            friend_result = friend_agent.chat(
+                thread_id=thread_id,
+                user_text=_build_friend_capture_user_text(payload, extraction),
+                notes_path=friend_notes_path,
+                image_bytes=image_bytes,
+            )
+            socratic_prompt = friend_result.reply
+            raw_gap_payloads = _friend_result_to_gap_payloads(
+                result=friend_result,
+                extraction=extraction,
+                syllabus=syllabus,
+            )
+            agent_backend_used = "friend"
+        except Exception as exc:  # noqa: BLE001
+            _log_bridge_event(
+                event="friend_agent_fallback",
+                endpoint_path="/api/v1/captures",
+                capture_id=capture_id,
+                reason=f"{type(exc).__name__}: {exc}",
+                course_id=course_id,
+                topic_id=context_topic.topic_id if context_topic is not None else None,
+            )
+            socratic = socratic_client.generate(
+                payload,
+                extraction,
+                syllabus,
+                grounding_context=grounding_bundle.context_text or None,
+                grounding_sources=grounding_bundle.citations or None,
+            )
+            if socratic_client.last_backend_warning:
+                _log_bridge_event(
+                    event="bridge_agent_fallback",
+                    endpoint_path="/api/v1/captures",
+                    capture_id=capture_id,
+                    reason=socratic_client.last_backend_warning,
+                    agent_backend="bridge",
+                    course_id=course_id,
+                    topic_id=context_topic.topic_id if context_topic is not None else None,
+                )
+            socratic_prompt = socratic.socratic_prompt
+            raw_gap_payloads = socratic.gaps
+    else:
+        socratic = socratic_client.generate(
+            payload,
+            extraction,
+            syllabus,
+            grounding_context=grounding_bundle.context_text or None,
+            grounding_sources=grounding_bundle.citations or None,
+        )
+        if socratic_client.last_backend_warning:
+            _log_bridge_event(
+                event="bridge_agent_fallback",
+                endpoint_path="/api/v1/captures",
+                capture_id=capture_id,
+                reason=socratic_client.last_backend_warning,
+                agent_backend="bridge",
+                course_id=course_id,
+                topic_id=context_topic.topic_id if context_topic is not None else None,
+            )
+        socratic_prompt = socratic.socratic_prompt
+        raw_gap_payloads = socratic.gaps
+
+    gap_topic_id = source_context.topic_id if source_context is not None and source_context.matched else None
+    gap_material_id = source_context.material_id if source_context is not None and source_context.matched else None
 
     new_gaps: list[KnowledgeGap] = []
-    for raw_gap in socratic.gaps:
+    for raw_gap in raw_gap_payloads:
         concept = str(raw_gap.get("concept", "Unknown Concept")).strip() or "Unknown Concept"
-        severity = max(0.0, min(1.0, float(raw_gap.get("severity", 0.5))))
-        confidence = max(0.0, min(1.0, float(raw_gap.get("confidence", 0.6))))
+        severity = max(0.0, min(1.0, float(raw_gap.get("severity", 0.5))))  # type: ignore[arg-type]
+        confidence = max(0.0, min(1.0, float(raw_gap.get("confidence", 0.6))))  # type: ignore[arg-type]
         basis_question = _optional_text(raw_gap.get("basis_question"), max_chars=320)
         basis_answer_excerpt = _optional_text(raw_gap.get("basis_answer_excerpt"), max_chars=320)
         gap_type = _normalize_gap_type(raw_gap.get("gap_type"))
-        deadline_score = _deadline_score_for_concept(concept, syllabus)
-        priority_score = max(0.0, min(1.0, (severity * 0.7) + (deadline_score * 0.3)))
+        deadline_score = _clamp(float(raw_gap.get("deadline_score", _deadline_score_for_concept(concept, syllabus))))  # type: ignore[arg-type]
+        priority_score = _clamp(float(raw_gap.get("priority_score", (severity * 0.7) + (deadline_score * 0.3))))  # type: ignore[arg-type]
 
         new_gaps.append(
             KnowledgeGap(
@@ -999,7 +1786,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
                 basis_answer_excerpt=basis_answer_excerpt,
                 gap_type=gap_type,
                 course_id=course_id,
-                module_id=gap_module_id,
+                topic_id=gap_topic_id,
                 material_id=gap_material_id,
                 capture_id=capture_id,
                 evidence_url=f"http://{settings.bridge_host}:{settings.bridge_port}/captures/{filename}",
@@ -1013,10 +1800,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         timestamp_utc=payload.timestamp_utc,
         app_name=payload.app_name,
         window_title=payload.window_title,
-        socratic_prompt=socratic.socratic_prompt,
+        socratic_prompt=socratic_prompt,
         gaps=[item.gap_id for item in new_gaps],
         course_id=course_id,
-        module_id=gap_module_id,
+        topic_id=gap_topic_id,
         material_id=gap_material_id,
         source_warning=source_warning,
         source_context=source_context,
@@ -1026,7 +1813,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     readiness = calculate_readiness(merged_gaps)
     state = store.append_capture(event, new_gaps, readiness)
 
-    session_summary = " ".join(socratic.socratic_prompt.split())[:220] or "Socratic turn"
+    session_summary = " ".join(socratic_prompt.split())[:220] or "Socratic turn"
     topic_name = _topic_label_from_gaps(new_gaps) or "General"
     state.sessions.append(
         SessionEvent(
@@ -1047,9 +1834,15 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         endpoint_path="/api/v1/captures",
         capture_id=capture_id,
         course_id=course_id,
-        module_id=gap_module_id,
+        topic_id=gap_topic_id,
+        agent_backend=agent_backend_used,
+        source_resolution_mode=source_resolution_mode,
+        source_resolution_score=round(source_resolution_score, 4),
+        topic_candidate_count=topic_candidate_count,
+        context_topic_id=context_topic.topic_id if context_topic is not None else None,
+        grounding_topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
         grounding_citation_count=len(grounding_bundle.citations),
-        module_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "module:"),
+        topic_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "topic:"),
         course_doc_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "course-doc:"),
         grounding_warning_count=len(grounding_bundle.warnings),
     )
@@ -1058,13 +1851,65 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         capture_id=capture_id,
         thread_id=thread_id,
         turn_index=response_turn_index,
-        socratic_prompt=socratic.socratic_prompt,
+        socratic_prompt=socratic_prompt,
         gaps=new_gaps,
         readiness_axes=state.readiness_axes,
         topic_label=topic_name,
         course_id=course_id,
         source_warning=source_warning,
         source_context=source_context,
+    )
+
+
+@app.post("/api/v1/quizzes/prepare", response_model=QuizPrepareResponse)
+async def prepare_quiz(request: QuizPrepareRequest) -> QuizPrepareResponse:
+    state = _recompute_derived(store.read())
+    if not state.question_bank:
+        raise HTTPException(status_code=400, detail="Question bank is empty.")
+
+    normalized_course_id = _normalize_course_id(request.course_id)
+    normalized_topic = _normalize_topic(request.topic)
+    selected_sources = set(request.sources) if request.sources else {"pyq", "tutorial", "sentinel"}
+    selected_topic = _resolve_topic(request.topic_id)
+    selected_topic_id = (
+        selected_topic.topic_id if selected_topic is not None else _normalize_topic_id(request.topic_id) or None
+    )
+
+    syllabus = _load_syllabus()
+    selected_questions, summary = _prepare_quiz_questions(
+        state=state,
+        course_id=normalized_course_id,
+        topic_id=selected_topic_id,
+        topic=normalized_topic,
+        selected_sources=selected_sources,
+        question_count=request.question_count,
+        syllabus=syllabus,
+    )
+    if not selected_questions:
+        raise HTTPException(
+            status_code=400,
+            detail="No questions matched the requested course/topic/source filters.",
+        )
+
+    session_id = str(uuid4())
+    _log_bridge_event(
+        event="quiz_prepared",
+        endpoint_path="/api/v1/quizzes/prepare",
+        course_id=normalized_course_id,
+        topic_id=selected_topic_id,
+        topic=normalized_topic,
+        question_count=len(selected_questions),
+        gap_matched_count=summary.gap_matched_count,
+        wrong_repeat_count=summary.wrong_repeat_count,
+        deadline_boosted_count=summary.deadline_boosted_count,
+        coverage_count=summary.coverage_count,
+    )
+
+    return QuizPrepareResponse(
+        session_id=session_id,
+        topic=normalized_topic,
+        questions=selected_questions,
+        selection_summary=summary,
     )
 
 
@@ -1080,8 +1925,8 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
     normalized_topic = _normalize_topic(request.topic)
     topic_is_all = normalized_topic.lower() == "all topics"
     selected_sources = set(request.sources) if request.sources else {"pyq", "tutorial", "sentinel"}
-    selected_module = _resolve_module(request.module_id)
-    selected_module_id = selected_module.module_id if selected_module is not None else _normalize_module_id(request.module_id) or None
+    selected_topic = _resolve_topic(request.topic_id)
+    selected_topic_id = selected_topic.topic_id if selected_topic is not None else _normalize_topic_id(request.topic_id) or None
 
     question_by_id = {item.question_id: item for item in state.question_bank}
     question_results: list[QuizQuestionResult] = []
@@ -1092,8 +1937,8 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
             raise HTTPException(status_code=400, detail=f"Unknown question_id: {answer.question_id}")
         if not _question_visible_for_course(item, normalized_course_id):
             raise HTTPException(status_code=400, detail=f"Question course mismatch for {answer.question_id}.")
-        if not _question_visible_for_module(item, selected_module_id):
-            raise HTTPException(status_code=400, detail=f"Question module mismatch for {answer.question_id}.")
+        if not _question_visible_for_topic(item, selected_topic_id):
+            raise HTTPException(status_code=400, detail=f"Question topic mismatch for {answer.question_id}.")
         if item.source not in selected_sources:
             raise HTTPException(status_code=400, detail=f"Question source mismatch for {answer.question_id}.")
         if not topic_is_all and _normalize_topic(item.topic).lower() != normalized_topic.lower():
@@ -1129,7 +1974,7 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
         score=score,
         results=question_results,
         course_id=normalized_course_id,
-        module_id=selected_module_id,
+        topic_id=selected_topic_id,
     )
 
     before_mastery = state.readiness_axes.concept_mastery
@@ -1176,7 +2021,7 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
             basis_answer_excerpt=(result.user_answer[:320] or None),
             gap_type="concept",
             course_id=normalized_course_id,
-            module_id=selected_module_id,
+            topic_id=selected_topic_id,
             material_id=None,
             capture_id=f"quiz-{quiz.quiz_id}",
             evidence_url=f"quiz://{result.question_id}",
@@ -1195,7 +2040,8 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
         event="quiz_submitted",
         endpoint_path="/api/v1/quizzes/submit",
         course_id=normalized_course_id,
-        module_id=selected_module_id,
+        topic_id=selected_topic_id,
+        session_id=request.session_id,
         quiz_id=quiz.quiz_id,
         total_questions=total_questions,
         correct_answers=correct_answers,
@@ -1265,31 +2111,31 @@ def list_course_documents(course_id: str) -> dict:
 async def upload_course_document(
     course_id: str,
     file: UploadFile = File(...),
-    module_id: str = Form(...),
+    topic_id: str = Form(...),
     document_name: str | None = Form(default=None),
     document_type: str | None = Form(default=None),
 ) -> CourseDocument:
     normalized = _normalize_course_id(course_id)
-    normalized_module_id = _normalize_module_id(module_id)
-    if not normalized_module_id:
+    normalized_topic_id = _normalize_topic_id(topic_id)
+    if not normalized_topic_id:
         _log_bridge_event(
             event="document_upload_validation_failed",
             endpoint_path="/api/v1/courses/{course_id}/documents/upload",
             course_id=normalized,
-            reason="module_id must not be empty.",
+            reason="topic_id must not be empty.",
         )
-        raise HTTPException(status_code=400, detail="module_id must not be empty.")
+        raise HTTPException(status_code=400, detail="topic_id must not be empty.")
 
-    module = module_store.get_module(normalized_module_id)
-    if module is None:
+    topic = topic_store.get_topic(normalized_topic_id)
+    if topic is None:
         _log_bridge_event(
             event="document_upload_validation_failed",
             endpoint_path="/api/v1/courses/{course_id}/documents/upload",
             course_id=normalized,
-            module_id=normalized_module_id,
-            reason=f"module_id '{normalized_module_id}' was not found.",
+            topic_id=normalized_topic_id,
+            reason=f"topic_id '{normalized_topic_id}' was not found.",
         )
-        raise HTTPException(status_code=404, detail=f"Module not found: {normalized_module_id}")
+        raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
 
     raw_bytes = await file.read(settings.material_upload_max_bytes + 1)
     if len(raw_bytes) > settings.material_upload_max_bytes:
@@ -1312,7 +2158,7 @@ async def upload_course_document(
     document = CourseDocument(
         doc_id=doc_id,
         course_id=normalized,
-        module_id=module.module_id,
+        topic_id=topic.topic_id,
         name=display_name,
         size_bytes=len(raw_bytes),
         type=doc_type,
@@ -1322,9 +2168,141 @@ async def upload_course_document(
 
     state = store.read()
     state.documents.append(document)
+
+    topics_added = 0
+    questions_added = 0
+    try:
+        topics_added, questions_added, seed_warnings = _seed_document_topics_and_questions(
+            state,
+            document,
+            target,
+        )
+        if topics_added > 0 or questions_added > 0:
+            _log_bridge_event(
+                event="topic_seed_generated",
+                endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+                course_id=normalized,
+                topic_id=document.topic_id,
+                doc_id=document.doc_id,
+                topics_added=topics_added,
+                questions_added=questions_added,
+            )
+        for warning in seed_warnings:
+            _log_bridge_event(
+                event="topic_seed_skipped",
+                endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+                course_id=normalized,
+                topic_id=document.topic_id,
+                doc_id=document.doc_id,
+                reason=warning,
+            )
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="topic_seed_skipped",
+            endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+            course_id=normalized,
+            topic_id=document.topic_id,
+            doc_id=document.doc_id,
+            reason=f"llm_error:{type(exc).__name__}",
+        )
+
     state = _save_state(state)
     await _publish_state(state)
     return document
+
+
+@app.patch("/api/v1/courses/{course_id}/documents/{doc_id}", response_model=CourseDocument)
+async def retag_course_document(course_id: str, doc_id: str, request: DocumentRetagRequest) -> CourseDocument:
+    normalized = _normalize_course_id(course_id)
+    normalized_topic_id = _normalize_topic_id(request.topic_id)
+    if not normalized_topic_id:
+        raise HTTPException(status_code=400, detail="topic_id must not be empty.")
+
+    topic = topic_store.get_topic(normalized_topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
+
+    state = store.read()
+    target = next(
+        (
+            item
+            for item in state.documents
+            if _normalize_course_id(item.course_id) == normalized and item.doc_id == doc_id
+        ),
+        None,
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Document not found: {doc_id}")
+
+    previous_topic_id = target.topic_id
+    if _normalize_topic_id(previous_topic_id) == topic.topic_id:
+        return target
+
+    target.topic_id = topic.topic_id
+    removed_topics, removed_questions = _remove_document_seed_artifacts(state, doc_id=doc_id)
+    doc_path = _course_document_path_from_url(target.file_url)
+    topics_added = 0
+    questions_added = 0
+    if doc_path is not None and doc_path.exists():
+        try:
+            topics_added, questions_added, seed_warnings = _seed_document_topics_and_questions(
+                state,
+                target,
+                doc_path,
+            )
+            if topics_added > 0 or questions_added > 0:
+                _log_bridge_event(
+                    event="topic_seed_generated",
+                    endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+                    course_id=normalized,
+                    topic_id=target.topic_id,
+                    doc_id=target.doc_id,
+                    topics_added=topics_added,
+                    questions_added=questions_added,
+                )
+            for warning in seed_warnings:
+                _log_bridge_event(
+                    event="topic_seed_skipped",
+                    endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+                    course_id=normalized,
+                    topic_id=target.topic_id,
+                    doc_id=target.doc_id,
+                    reason=warning,
+                )
+        except Exception as exc:  # noqa: BLE001
+            _log_bridge_event(
+                event="topic_seed_skipped",
+                endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+                course_id=normalized,
+                topic_id=target.topic_id,
+                doc_id=target.doc_id,
+                reason=f"llm_error:{type(exc).__name__}",
+            )
+    else:
+        _log_bridge_event(
+            event="topic_seed_skipped",
+            endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+            course_id=normalized,
+            topic_id=target.topic_id,
+            doc_id=target.doc_id,
+            reason="file_missing_for_reseed",
+        )
+
+    state = _save_state(state)
+    await _publish_state(state)
+    _log_bridge_event(
+        event="document_retagged",
+        endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+        course_id=normalized,
+        doc_id=doc_id,
+        old_topic_id=previous_topic_id,
+        new_topic_id=target.topic_id,
+        removed_topics=removed_topics,
+        removed_questions=removed_questions,
+        topics_added=topics_added,
+        questions_added=questions_added,
+    )
+    return target
 
 
 @app.post("/api/v1/courses/{course_id}/documents/{doc_id}/anchor")
@@ -1367,6 +2345,7 @@ async def delete_course_document(course_id: str, doc_id: str) -> dict:
         for item in state.documents
         if not (_normalize_course_id(item.course_id) == normalized and item.doc_id == doc_id)
     ]
+    removed_topics, removed_questions = _remove_document_seed_artifacts(state, doc_id=doc_id)
 
     if target.file_url.startswith(f"http://{settings.bridge_host}:{settings.bridge_port}/course-documents/"):
         relative = target.file_url.split("/course-documents/", 1)[1]
@@ -1376,6 +2355,15 @@ async def delete_course_document(course_id: str, doc_id: str) -> dict:
 
     state = _save_state(state)
     await _publish_state(state)
+    _log_bridge_event(
+        event="topic_seed_cleanup",
+        endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+        course_id=normalized,
+        topic_id=target.topic_id,
+        doc_id=doc_id,
+        removed_topics=removed_topics,
+        removed_questions=removed_questions,
+    )
     return {"ok": True, "course_id": normalized, "doc_id": doc_id}
 
 
@@ -1391,77 +2379,8 @@ def list_course_sessions(course_id: str) -> dict:
     return {"course_id": normalized, "sessions": [item.model_dump(mode="json") for item in sessions_sorted]}
 
 
-@app.post("/api/v1/ask", response_model=AskResponse)
-async def ask_sentinel(request: AskRequest) -> AskResponse:
-    normalized = _normalize_course_id(request.course_id)
-    thread_id = _sanitize_thread_id((request.thread_id or "").strip() or str(uuid4()))
-    next_turn = max(0, int(request.turn_index)) + 1
-    state = store.read()
-    syllabus = _load_syllabus()
-    active_module = _resolve_module(None)
-    grounding_bundle = _build_grounding_bundle(
-        state=state,
-        module_id=active_module.module_id if active_module is not None else None,
-        course_id=normalized,
-        query_text=request.message,
-    )
-    for warning in grounding_bundle.warnings:
-        _log_bridge_event(
-            event="grounding_warning",
-            endpoint_path="/api/v1/ask",
-            reason=warning,
-            course_id=normalized,
-            module_id=active_module.module_id if active_module is not None else None,
-        )
-
-    prompt = socratic_client.ask(
-        message=request.message,
-        thread_id=thread_id,
-        turn_index=next_turn,
-        course_id=normalized,
-        grounding_context=grounding_bundle.context_text or None,
-        grounding_sources=grounding_bundle.citations or None,
-        syllabus=syllabus,
-    )
-
-    citations = grounding_bundle.citations[:3]
-
-    state.sessions.append(
-        SessionEvent(
-            course_id=normalized,
-            thread_id=thread_id,
-            turn_index=next_turn,
-            summary=" ".join(request.message.split())[:220],
-            topic="General",
-            gap_ids=[],
-            capture_id=None,
-        )
-    )
-
-    state = _save_state(state)
-    await _publish_state(state)
-    _log_bridge_event(
-        event="ask_processed",
-        endpoint_path="/api/v1/ask",
-        course_id=normalized,
-        module_id=active_module.module_id if active_module is not None else None,
-        thread_id=thread_id,
-        turn_index=next_turn,
-        grounding_citation_count=len(grounding_bundle.citations),
-        module_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "module:"),
-        course_doc_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "course-doc:"),
-        grounding_warning_count=len(grounding_bundle.warnings),
-    )
-
-    return AskResponse(
-        thread_id=thread_id,
-        turn_index=next_turn,
-        socratic_prompt=prompt,
-        citations=citations,
-    )
-
-
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("app.main:app", host=settings.bridge_host, port=8000, reload=True)
+

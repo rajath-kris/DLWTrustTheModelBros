@@ -73,10 +73,15 @@ def _to_float(raw_value: object, default: float) -> float:
 class _OpenAIChatClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._last_failure_reason: str | None = None
 
     @property
     def configured(self) -> bool:
         return bool(self._settings.openai_api_key and self._settings.openai_base_url and self._settings.openai_model)
+
+    @property
+    def last_failure_reason(self) -> str | None:
+        return self._last_failure_reason
 
     def complete(
         self,
@@ -87,7 +92,9 @@ class _OpenAIChatClient:
         temperature: float = 0.3,
         max_tokens: int = 400,
     ) -> str | None:
+        self._last_failure_reason = None
         if not self.configured:
+            self._last_failure_reason = "not_configured"
             return None
 
         user_content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
@@ -125,6 +132,7 @@ class _OpenAIChatClient:
                 )
                 if response.status_code in _RETRIABLE_STATUS_CODES:
                     if is_last_attempt:
+                        self._last_failure_reason = f"http_{response.status_code}"
                         return None
                     time.sleep(retry_delay_seconds)
                     retry_delay_seconds = min(_MAX_RETRY_DELAY_SECONDS, retry_delay_seconds * 1.8)
@@ -133,16 +141,20 @@ class _OpenAIChatClient:
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]
                 if isinstance(content, str):
+                    self._last_failure_reason = None
                     return content
                 if isinstance(content, list):
+                    self._last_failure_reason = None
                     return "\n".join(
                         part.get("text", "")
                         for part in content
                         if isinstance(part, dict) and part.get("type") == "text"
                     )
+                self._last_failure_reason = "invalid_response_content"
                 return None
             except (requests.Timeout, requests.ConnectionError):
                 if is_last_attempt:
+                    self._last_failure_reason = "timeout_or_connection_error"
                     return None
                 time.sleep(retry_delay_seconds)
                 retry_delay_seconds = min(_MAX_RETRY_DELAY_SECONDS, retry_delay_seconds * 1.8)
@@ -152,9 +164,12 @@ class _OpenAIChatClient:
                     time.sleep(retry_delay_seconds)
                     retry_delay_seconds = min(_MAX_RETRY_DELAY_SECONDS, retry_delay_seconds * 1.8)
                     continue
+                self._last_failure_reason = f"http_{status_code}" if status_code is not None else "http_error"
                 return None
             except Exception:
+                self._last_failure_reason = "unexpected_client_error"
                 return None
+        self._last_failure_reason = "retry_exhausted"
         return None
 
 
@@ -174,7 +189,9 @@ class OpenAIVisionClient:
             "Extract study context from a screenshot. "
             "Return strict JSON only: "
             "{\"raw_text\":\"...\",\"summary\":\"...\",\"tags\":[\"...\"]}. "
-            "raw_text should contain OCR-like text when visible. "
+            "raw_text should contain OCR-like text when visible, preserving equation symbols and operators exactly. "
+            "Keep notation like integrals, summations, greek letters, superscripts/subscripts, scientific notation, vectors, and fractions in plain text form. "
+            "Preserve exponent forms such as x^2, x², 10^-3, and e^{-st} without rewriting their meaning. "
             "summary should be one concise sentence. "
             "tags should be 2-8 short topic tags. "
             "If text is not readable, set raw_text to \"No text detected.\"."
@@ -220,6 +237,7 @@ class OpenAIVisionClient:
 class OpenAISocraticClient:
     def __init__(self, settings: Settings) -> None:
         self._chat_client = _OpenAIChatClient(settings)
+        self.last_backend_warning: str | None = None
 
     def generate(
         self,
@@ -229,6 +247,7 @@ class OpenAISocraticClient:
         grounding_context: str | None = None,
         grounding_sources: list[str] | None = None,
     ) -> SocraticOutput:
+        self.last_backend_warning = None
         fallback = self._fallback_output(capture, extraction)
         content = self._chat_client.complete(
             system_prompt=build_system_prompt(syllabus, grounding_sources=grounding_sources),
@@ -246,8 +265,11 @@ class OpenAISocraticClient:
             max_tokens=420,
         )
         if content is None:
+            self.last_backend_warning = self._chat_client.last_failure_reason or "llm_unavailable"
             return fallback
-        return self._parse_socratic_output(content, fallback)
+        parsed, parse_warning = self._parse_socratic_output(content, fallback)
+        self.last_backend_warning = parse_warning
+        return parsed
 
     def ask(
         self,
@@ -285,15 +307,15 @@ class OpenAISocraticClient:
         single_line = _normalize_text(content, max_chars=500)
         return single_line or fallback
 
-    def _parse_socratic_output(self, content: str, fallback: SocraticOutput) -> SocraticOutput:
+    def _parse_socratic_output(self, content: str, fallback: SocraticOutput) -> tuple[SocraticOutput, str | None]:
         blob = _extract_json_blob(content)
         if not blob:
-            return fallback
+            return fallback, "llm_json_parse_failure"
 
         prompt = _normalize_text(blob.get("socratic_prompt"), max_chars=500) or fallback.socratic_prompt
         raw_gaps = blob.get("gaps", [])
         if not isinstance(raw_gaps, list):
-            return SocraticOutput(socratic_prompt=prompt, gaps=fallback.gaps)
+            return SocraticOutput(socratic_prompt=prompt, gaps=fallback.gaps), "llm_gap_payload_invalid"
 
         cleaned_gaps: list[dict[str, Any]] = []
         for gap in raw_gaps:
@@ -319,7 +341,9 @@ class OpenAISocraticClient:
             if gap_type is not None:
                 cleaned["gap_type"] = gap_type
             cleaned_gaps.append(cleaned)
-        return SocraticOutput(socratic_prompt=prompt, gaps=cleaned_gaps or fallback.gaps)
+        if cleaned_gaps:
+            return SocraticOutput(socratic_prompt=prompt, gaps=cleaned_gaps), None
+        return SocraticOutput(socratic_prompt=prompt, gaps=fallback.gaps), "llm_gap_payload_empty"
 
     def _fallback_output(self, capture: CaptureRequest, extraction: VisionExtraction) -> SocraticOutput:
         seed_concept = "Concept interpretation"

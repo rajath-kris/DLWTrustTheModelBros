@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "captures_before": 124,
+  "captures_after": 126,
+  "thread_id": "mock-laplace-thread",
+  "capture_1": {
+    "capture_id": "222135e5-c2ea-468b-883d-98326a65a173",
+    "turn_index": 0,
+    "topic_label": "laplace-transform",
+    "gap_count": 1,
+    "socratic_prompt": "What is your current understanding of the Laplace Transform and how it is used in analyzing signals and systems?"
+  },
+  "capture_2": {
+    "capture_id": "03e84937-8bb1-4860-8600-4df730be9f7e",
+    "turn_index": 1,
+    "topic_label": "Laplace Transform",
+    "gap_count": 1,
+    "socratic_prompt": "How do initial conditions affect the Laplace Transform, and why are they important in solving differential equations?"
+  },
+  "latest_state_updated_at": "2026-03-02T09:35:06.212228Z"
+}

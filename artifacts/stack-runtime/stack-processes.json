@@ -1,0 +1,35 @@
+{
+  "created_utc": "2026-03-02T21:19:25.107468Z",
+  "repo_root": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026",
+  "run_dir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922",
+  "mode": "restart",
+  "processes": [
+    {
+      "name": "bridge",
+      "pid": 29948,
+      "stdout": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922\\bridge.log",
+      "stderr": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922\\bridge.err.log",
+      "command": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\services\\bridge-api\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload",
+      "workdir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\services\\bridge-api",
+      "started_utc": "2026-03-02T21:19:22.475569Z"
+    },
+    {
+      "name": "mission-control",
+      "pid": 22764,
+      "stdout": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922\\mission-control.log",
+      "stderr": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922\\mission-control.err.log",
+      "command": "cmd.exe /c npm run dev",
+      "workdir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\apps\\mission-control",
+      "started_utc": "2026-03-02T21:19:24.056430Z"
+    },
+    {
+      "name": "sentinel",
+      "pid": 25036,
+      "stdout": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922\\sentinel.log",
+      "stderr": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-051922\\sentinel.err.log",
+      "command": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\apps\\sentinel-desktop\\.venv\\Scripts\\python.exe -m sentinel.main",
+      "workdir": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\apps\\sentinel-desktop",
+      "started_utc": "2026-03-02T21:19:25.107423Z"
+    }
+  ]
+}

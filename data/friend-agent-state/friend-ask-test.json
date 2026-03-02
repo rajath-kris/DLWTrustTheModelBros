@@ -1,0 +1,34 @@
+{
+  "gaps": {
+    "foreign key constraints": {
+      "attempts": 1,
+      "mastery": 0.4,
+      "last_seen": "2026-03-03T02:36:02",
+      "gap_description": "understanding foreign key constraints",
+      "knows": [],
+      "confused_about": "understanding foreign key constraints",
+      "evidence": [
+        {
+          "time": "2026-03-03T02:36:02",
+          "delta": -0.1,
+          "confused_about": "understanding foreign key constraints"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-03T02:36:00",
+      "user_text": "I am stuck in understanding foreign key constraints",
+      "assistant_reply": "This doesn't seem to be in your uploaded notes. Do you want to check?",
+      "draft_reply": "This doesn't seem to be in your uploaded notes. Do you want to check?",
+      "had_screenshot": false,
+      "topic_at_turn": null,
+      "reply_mode": "socratic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

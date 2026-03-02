@@ -88,7 +88,6 @@ const NAV_ITEMS = [
   { id: "planner", path: "/planner", label: "Study Planner", icon: ICONS.book },
   { id: "documents", path: "/documents", label: "Document Hub", icon: ICONS.folder },
   { id: "history", path: "/history", label: "Session History", icon: ICONS.clock },
-  { id: "ask", path: "/ask", label: "Ask Sentinel", icon: ICONS.chat },
   { id: "preferences", path: "/preferences", label: "Preferences", icon: ICONS.gear },
 ];
 
@@ -205,11 +204,6 @@ export function AppSidebar() {
           <li><NavItem path="/documents" label="Document Hub" icon={ICONS.folder} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/documents")} /></li>
           <li><NavItem path="/history" label="Session History" icon={ICONS.clock} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/history")} /></li>
         </ul>
-
-        <ul className="sidebar-nav-list">
-          <li><NavItem path="/ask" label="Ask Sentinel" icon={ICONS.chat} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/ask")} /></li>
-        </ul>
-
         <ul className="sidebar-nav-list">
           <li><NavItem path="/preferences" label="Preferences" icon={ICONS.gear} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/preferences")} /></li>
         </ul>

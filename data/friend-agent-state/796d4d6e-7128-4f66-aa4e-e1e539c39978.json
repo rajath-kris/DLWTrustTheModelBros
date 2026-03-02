@@ -1,0 +1,36 @@
+{
+  "gaps": {
+    "screenshot interpretation": {
+      "attempts": 1,
+      "mastery": 0.6,
+      "last_seen": "2026-03-03T02:38:24",
+      "gap_description": "context of unreadable text",
+      "knows": [
+        "basic image analysis"
+      ],
+      "confused_about": "context of unreadable text",
+      "evidence": [
+        {
+          "time": "2026-03-03T02:38:24",
+          "delta": 0.1,
+          "confused_about": "context of unreadable text"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-03T02:38:22",
+      "user_text": "I need help with this screenshot context: The image contains no readable text. | No text detected. | capture, unparsed",
+      "assistant_reply": "What specific information or context are you trying to understand from the screenshot?",
+      "draft_reply": "What specific information or context are you trying to understand from the screenshot?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

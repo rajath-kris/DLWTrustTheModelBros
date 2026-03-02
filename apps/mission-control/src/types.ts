@@ -17,6 +17,7 @@ export interface CaptureEvent {
   socratic_prompt: string;
   gaps: string[];
   course_id?: string;
+  topic_id?: string | null;
 }
 
 export interface KnowledgeGap {
@@ -33,6 +34,7 @@ export interface KnowledgeGap {
   deadline_score: number;
   priority_score: number;
   course_id?: string;
+  topic_id?: string | null;
 }
 
 export interface CourseSummary {
@@ -47,6 +49,16 @@ export interface TopicMasteryItem {
   current: number;
   target: number;
   open_gaps: number;
+}
+
+export interface TopicCatalogItem {
+  topic_id: string;
+  course_id: string;
+  name: string;
+  normalized_name: string;
+  source_doc_ids: string[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface StudyAction {
@@ -72,7 +84,7 @@ export interface CourseDeadline {
 export interface CourseDocument {
   doc_id: string;
   course_id: string;
-  module_id: string;
+  topic_id: string;
   name: string;
   size_bytes: number;
   type: string;
@@ -81,22 +93,22 @@ export interface CourseDocument {
   is_anchor: boolean;
 }
 
-export interface ModuleSummary {
-  module_id: string;
-  module_name: string;
+export interface TopicSummary {
+  topic_id: string;
+  topic_name: string;
   material_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface ModuleListResponse {
-  modules: ModuleSummary[];
-  active_module_id: string | null;
+export interface TopicListResponse {
+  topics: TopicSummary[];
+  active_topic_id: string | null;
 }
 
-export interface ActiveModuleResponse {
-  active_module_id: string | null;
-  active_module_name: string | null;
+export interface ActiveTopicResponse {
+  active_topic_id: string | null;
+  active_topic_name: string | null;
 }
 
 export interface SessionEvent {
@@ -121,7 +133,10 @@ export interface QuestionBankItem {
   correct_answer: string;
   explanation?: string | null;
   course_id: string;
-  module_id?: string | null;
+  topic_id?: string | null;
+  origin_doc_id?: string | null;
+  origin_topic_id?: string | null;
+  generated?: boolean;
 }
 
 export interface QuizQuestionResult {
@@ -144,7 +159,7 @@ export interface QuizRecord {
   score: number;
   results: QuizQuestionResult[];
   course_id: string;
-  module_id?: string | null;
+  topic_id?: string | null;
 }
 
 export interface TopicUpdate {
@@ -162,7 +177,8 @@ export interface QuizSubmitRequest {
     user_answer: string;
   }>;
   course_id?: string;
-  module_id?: string;
+  topic_id?: string;
+  session_id?: string;
 }
 
 export interface QuizSubmitResponse {
@@ -172,12 +188,35 @@ export interface QuizSubmitResponse {
   new_gap_ids: string[];
 }
 
+export interface QuizPrepareRequest {
+  topic: string;
+  sources: QuizSourceType[];
+  question_count: number;
+  course_id?: string;
+  topic_id?: string;
+}
+
+export interface QuizSelectionSummary {
+  gap_matched_count: number;
+  wrong_repeat_count: number;
+  deadline_boosted_count: number;
+  coverage_count: number;
+}
+
+export interface QuizPrepareResponse {
+  session_id: string;
+  topic: string;
+  questions: QuestionBankItem[];
+  selection_summary: QuizSelectionSummary;
+}
+
 export interface LearningState {
   updated_at: string;
   captures: CaptureEvent[];
   gaps: KnowledgeGap[];
   courses: CourseSummary[];
   topic_mastery: TopicMasteryItem[];
+  topics: TopicCatalogItem[];
   study_actions: StudyAction[];
   deadlines: CourseDeadline[];
   documents: CourseDocument[];
@@ -199,13 +238,6 @@ export interface ServerEventEnvelope {
     gap_id?: string;
     status?: GapStatus;
   };
-}
-
-export interface AskResponse {
-  thread_id: string;
-  turn_index: number;
-  socratic_prompt: string;
-  citations: string[];
 }
 
 export interface SentinelRuntimeStatus {
