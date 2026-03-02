@@ -25,6 +25,11 @@ class Settings:
     azure_openai_deployment: str = os.getenv("AZURE_OPENAI_DEPLOYMENT", "").strip()
     azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
 
+    sentinel_llm_provider: str = os.getenv("SENTINEL_LLM_PROVIDER", "openai").strip().lower()
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "").strip()
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o").strip()
+
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "12.0"))
 
     @property
