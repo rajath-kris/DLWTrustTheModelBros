@@ -1,0 +1,6 @@
+{
+  "managed_pids": [],
+  "last_action": "start",
+  "last_action_at": "2026-03-02T18:52:13.144122Z",
+  "last_error": "Sentinel runtime python not found: /Users/mitul/Documents/GitHub/DLWTrustTheModelBros/apps/sentinel-desktop/.venv/Scripts/python.exe"
+}
