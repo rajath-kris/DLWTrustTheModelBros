@@ -44,6 +44,7 @@ class CaptureRequest(BaseModel):
     turn_index: int = Field(default=0, ge=0)
     previous_prompt: str | None = None
     user_input_text: str | None = None
+    module_id: str | None = None
 
 
 class VisionExtraction(BaseModel):
@@ -60,6 +61,8 @@ class KnowledgeGap(BaseModel):
     basis_question: str | None = None
     basis_answer_excerpt: str | None = None
     gap_type: GapType | None = None
+    module_id: str | None = None
+    material_id: str | None = None
     status: GapStatus = "open"
     capture_id: str
     evidence_url: str
@@ -82,6 +85,19 @@ class CaptureEvent(BaseModel):
     window_title: str
     socratic_prompt: str
     gaps: list[str]
+    module_id: str | None = None
+    material_id: str | None = None
+    source_warning: str | None = None
+    source_context: SourceContext | None = None
+
+
+class SourceContext(BaseModel):
+    module_id: str
+    module_name: str
+    material_id: str | None = None
+    material_name: str | None = None
+    match_score: float = Field(ge=0.0, le=1.0)
+    matched: bool
 
 
 class LearningState(BaseModel):
@@ -105,6 +121,8 @@ class CaptureResponse(BaseModel):
     gaps: list[KnowledgeGap]
     readiness_axes: ReadinessAxes
     topic_label: str | None = None
+    source_warning: str | None = None
+    source_context: SourceContext | None = None
 
 
 class GapStatusUpdate(BaseModel):

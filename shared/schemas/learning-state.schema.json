@@ -17,7 +17,22 @@
           "app_name": { "type": "string" },
           "window_title": { "type": "string" },
           "socratic_prompt": { "type": "string" },
-          "gaps": { "type": "array", "items": { "type": "string" } }
+          "gaps": { "type": "array", "items": { "type": "string" } },
+          "module_id": { "type": ["string", "null"] },
+          "material_id": { "type": ["string", "null"] },
+          "source_warning": { "type": ["string", "null"] },
+          "source_context": {
+            "type": ["object", "null"],
+            "required": ["module_id", "module_name", "match_score", "matched"],
+            "properties": {
+              "module_id": { "type": "string" },
+              "module_name": { "type": "string" },
+              "material_id": { "type": ["string", "null"] },
+              "material_name": { "type": ["string", "null"] },
+              "match_score": { "type": "number", "minimum": 0, "maximum": 1 },
+              "matched": { "type": "boolean" }
+            }
+          }
         }
       }
     },
@@ -34,6 +49,8 @@
           "basis_question": { "type": ["string", "null"] },
           "basis_answer_excerpt": { "type": ["string", "null"] },
           "gap_type": { "type": ["string", "null"], "enum": ["concept", "reasoning", "misconception", null] },
+          "module_id": { "type": ["string", "null"] },
+          "material_id": { "type": ["string", "null"] },
           "status": { "type": "string", "enum": ["open", "reviewing", "closed"] },
           "capture_id": { "type": "string" },
           "evidence_url": { "type": "string" },

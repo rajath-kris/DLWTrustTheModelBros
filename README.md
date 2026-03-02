@@ -53,13 +53,19 @@ Recommended branch split:
 - `GET /api/v1/events/stream`
 - `POST /api/v1/captures`
 - `POST /api/v1/gaps/{gap_id}/status`
+- `POST /api/v1/modules`
+- `GET /api/v1/modules`
+- `POST /api/v1/modules/{module_id}/materials`
+- `POST /api/v1/modules/active`
+- `GET /api/v1/modules/active`
 
 ## Environment
 
 Copy `.env.example` to `.env` (done by `bootstrap.ps1` if missing).
 
-- With Azure keys: live Vision/OpenAI pipeline.
-- Without Azure keys: local fallback prompt/gap path still works end-to-end.
+- With `OPENAI_API_KEY`: live OpenAI Vision + Socratic pipeline.
+- Without `OPENAI_API_KEY`: local fallback prompt/gap path still works end-to-end.
+- Optional `SENTINEL_ACTIVE_MODULE_ID`: desktop capture payload includes this module context.
 
 ## Smoke Check
 
@@ -85,6 +91,26 @@ Fixtures:
 - `docs/mock-content/laplace_tutorial.md`
 
 The script posts both captures to `POST /api/v1/captures`, reuses thread context across turns, and writes a summary artifact under `artifacts/mock-laplace/`.
+
+## Module-Bound Screenshot Flow (Warn + Continue)
+
+Bridge supports module/material uploads and active-module grounding without Mission Control UI changes:
+
+1. Create module metadata with `POST /api/v1/modules`.
+2. Upload module materials with `POST /api/v1/modules/{module_id}/materials` (`.pdf`, `.txt`, `.md`, `.png`, `.jpg`, `.jpeg`).
+3. Set active module with `POST /api/v1/modules/active`.
+4. Submit captures to `POST /api/v1/captures`.
+5. Capture response includes optional `source_context` and `source_warning`.
+   - No active module warning: response continues with Socratic output.
+   - Unmatched active module warning: response continues with Socratic output.
+
+Deterministic helper:
+
+```powershell
+python .\\scripts\\run-module-bound-mock-flow.py
+```
+
+This writes an artifact under `artifacts/module-bound-flow/` showing one matched and one unmatched path.
 
 ## Overlay Isolated Journey (One Command)
 

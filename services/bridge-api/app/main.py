@@ -7,13 +7,14 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .azure_clients import AzureSocraticClient, AzureVisionClient
 from .config import settings
+from .module_models import ActiveModuleRequest, ActiveModuleResponse, MaterialSummary, ModuleListResponse, ModuleSummary, ModuleUpsertRequest
+from .module_store import ModuleStore
 from .models import (
     CaptureEvent,
     CaptureRequest,
@@ -21,7 +22,9 @@ from .models import (
     EventEnvelope,
     GapStatusUpdate,
     KnowledgeGap,
+    SourceContext,
 )
+from .openai_clients import OpenAISocraticClient, OpenAIVisionClient
 from .readiness import calculate_readiness
 from .sse import SSEBroker, sse_generator
 from .state_store import StateStore
@@ -41,8 +44,16 @@ app.mount("/captures", StaticFiles(directory=str(settings.captures_dir)), name="
 
 store = StateStore(settings.state_file)
 broker = SSEBroker()
-vision_client = AzureVisionClient(settings)
-socratic_client = AzureSocraticClient(settings)
+vision_client = OpenAIVisionClient(settings)
+socratic_client = OpenAISocraticClient(settings)
+module_store = ModuleStore(settings.modules_dir, vision_client)
+
+MATCH_THRESHOLD = 0.22
+WEAK_MATCH_THRESHOLD = 0.14
+NO_ACTIVE_MODULE_WARNING = "No active module selected; response may not be grounded in uploaded materials."
+NO_MATCH_WARNING_TEMPLATE = (
+    "No close match found in uploaded materials for active module '{module_name}'; response is best-effort."
+)
 
 
 def _load_syllabus() -> dict:
@@ -129,6 +140,51 @@ def _normalize_gap_type(raw_value: object) -> str | None:
     return None
 
 
+def _resolve_module(module_id: str | None) -> ModuleSummary | None:
+    requested_module_id = (module_id or "").strip()
+    if requested_module_id:
+        requested_module = module_store.get_module(requested_module_id)
+        if requested_module is not None:
+            return requested_module
+    return module_store.get_active_module()
+
+
+def _build_source_context(module: ModuleSummary, extraction_text: str, extraction_tags: list[str]) -> SourceContext:
+    match = module_store.match_capture(module.module_id, extraction_text, extraction_tags)
+    if match is None:
+        return SourceContext(
+            module_id=module.module_id,
+            module_name=module.module_name,
+            material_id=None,
+            material_name=None,
+            match_score=0.0,
+            matched=False,
+        )
+    score = max(0.0, min(1.0, float(match.match_score)))
+    matched = score >= MATCH_THRESHOLD
+    return SourceContext(
+        module_id=module.module_id,
+        module_name=module.module_name,
+        material_id=match.material_id,
+        material_name=match.material_name,
+        match_score=score,
+        matched=matched,
+    )
+
+
+def _source_warning_for(module: ModuleSummary | None, source_context: SourceContext | None) -> str | None:
+    if module is None:
+        return NO_ACTIVE_MODULE_WARNING
+    if source_context is None:
+        return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
+    score = max(0.0, min(1.0, source_context.match_score))
+    if score >= MATCH_THRESHOLD:
+        return None
+    if score >= WEAK_MATCH_THRESHOLD:
+        return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
+    return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok", "timestamp_utc": datetime.now(timezone.utc).isoformat()}
@@ -153,6 +209,79 @@ async def stream_events() -> StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.post("/api/v1/modules", response_model=ModuleSummary)
+def upsert_module(request: ModuleUpsertRequest) -> ModuleSummary:
+    module_id = request.module_id.strip()
+    module_name = request.module_name.strip()
+    if not module_id:
+        raise HTTPException(status_code=400, detail="module_id must not be empty.")
+    if not module_name:
+        raise HTTPException(status_code=400, detail="module_name must not be empty.")
+    return module_store.upsert_module(module_id, module_name)
+
+
+@app.get("/api/v1/modules", response_model=ModuleListResponse)
+def list_modules() -> ModuleListResponse:
+    modules = module_store.list_modules()
+    active_module = module_store.get_active_module()
+    return ModuleListResponse(
+        modules=modules,
+        active_module_id=active_module.module_id if active_module else None,
+    )
+
+
+@app.post("/api/v1/modules/{module_id}/materials", response_model=MaterialSummary)
+async def upload_module_material(
+    module_id: str,
+    file: UploadFile = File(...),
+    material_name: str = Form(...),
+    material_type: str | None = Form(default=None),
+) -> MaterialSummary:
+    module = module_store.get_module(module_id)
+    if module is None:
+        raise HTTPException(status_code=404, detail=f"Module not found: {module_id}")
+
+    file_bytes = await file.read(settings.material_upload_max_bytes + 1)
+    if len(file_bytes) > settings.material_upload_max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded file exceeds maximum size of {settings.material_upload_max_bytes} bytes.",
+        )
+
+    try:
+        return module_store.add_material(
+            module_id=module.module_id,
+            material_name=material_name,
+            material_type=material_type,
+            original_filename=file.filename or "upload.bin",
+            file_bytes=file_bytes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/v1/modules/active", response_model=ActiveModuleResponse)
+def set_active_module(request: ActiveModuleRequest) -> ActiveModuleResponse:
+    module = module_store.set_active_module(request.module_id)
+    if module is None:
+        raise HTTPException(status_code=404, detail=f"Module not found: {request.module_id}")
+    return ActiveModuleResponse(
+        active_module_id=module.module_id,
+        active_module_name=module.module_name,
+    )
+
+
+@app.get("/api/v1/modules/active", response_model=ActiveModuleResponse)
+def get_active_module() -> ActiveModuleResponse:
+    module = module_store.get_active_module()
+    if module is None:
+        return ActiveModuleResponse(active_module_id=None, active_module_name=None)
+    return ActiveModuleResponse(
+        active_module_id=module.module_id,
+        active_module_name=module.module_name,
+    )
+
+
 @app.post("/api/v1/captures", response_model=CaptureResponse)
 async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     try:
@@ -171,7 +300,19 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
 
     syllabus = _load_syllabus()
     extraction = vision_client.extract(image_bytes)
+    capture_text = " ".join(
+        part for part in [extraction.raw_text.strip(), extraction.summary.strip()] if part
+    ).strip()
+    resolved_module = _resolve_module(payload.module_id)
+    source_context = (
+        _build_source_context(resolved_module, capture_text, extraction.tags)
+        if resolved_module is not None
+        else None
+    )
+    source_warning = _source_warning_for(resolved_module, source_context)
     socratic = socratic_client.generate(payload, extraction, syllabus)
+    gap_module_id = source_context.module_id if source_context is not None else None
+    gap_material_id = source_context.material_id if source_context is not None else None
 
     new_gaps: list[KnowledgeGap] = []
     for raw_gap in socratic.gaps:
@@ -192,6 +333,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
                 basis_question=basis_question,
                 basis_answer_excerpt=basis_answer_excerpt,
                 gap_type=gap_type,
+                module_id=gap_module_id,
+                material_id=gap_material_id,
                 capture_id=capture_id,
                 evidence_url=f"http://{settings.bridge_host}:{settings.bridge_port}/captures/{filename}",
                 deadline_score=deadline_score,
@@ -206,6 +349,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         window_title=payload.window_title,
         socratic_prompt=socratic.socratic_prompt,
         gaps=[item.gap_id for item in new_gaps],
+        module_id=gap_module_id,
+        material_id=gap_material_id,
+        source_warning=source_warning,
+        source_context=source_context,
     )
 
     existing_state = store.read()
@@ -227,6 +374,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         gaps=new_gaps,
         readiness_axes=readiness,
         topic_label=_topic_label_from_gaps(new_gaps),
+        source_warning=source_warning,
+        source_context=source_context,
     )
 
 

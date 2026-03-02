@@ -21,6 +21,7 @@ class BridgeClient:
         monitor: MonitorSnapshot,
         region: CaptureRegion,
         image_bytes: bytes,
+        module_id: str | None = None,
         thread_id: str | None = None,
         turn_index: int = 0,
         previous_prompt: str | None = None,
@@ -49,6 +50,8 @@ class BridgeClient:
         }
         if thread_id is not None and thread_id.strip():
             payload["thread_id"] = thread_id.strip()
+        if module_id is not None and module_id.strip():
+            payload["module_id"] = module_id.strip()
         payload["turn_index"] = max(0, int(turn_index))
         if previous_prompt is not None and previous_prompt.strip():
             payload["previous_prompt"] = previous_prompt.strip()

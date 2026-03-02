@@ -17,20 +17,12 @@ class Settings:
     bridge_port: int = int(os.getenv("BRIDGE_PORT", "8000"))
     dashboard_origin: str = os.getenv("DASHBOARD_ORIGIN", "http://localhost:5173")
 
-    azure_vision_endpoint: str = os.getenv("AZURE_VISION_ENDPOINT", "").strip()
-    azure_vision_key: str = os.getenv("AZURE_VISION_KEY", "").strip()
-
-    azure_openai_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip()
-    azure_openai_key: str = os.getenv("AZURE_OPENAI_KEY", "").strip()
-    azure_openai_deployment: str = os.getenv("AZURE_OPENAI_DEPLOYMENT", "").strip()
-    azure_openai_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
-
-    sentinel_llm_provider: str = os.getenv("SENTINEL_LLM_PROVIDER", "openai").strip().lower()
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "").strip()
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o").strip()
 
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "12.0"))
+    material_upload_max_bytes: int = int(os.getenv("BRIDGE_MATERIAL_UPLOAD_MAX_BYTES", "15728640"))
 
     @property
     def dashboard_origins(self) -> list[str]:
@@ -47,6 +39,10 @@ class Settings:
     @property
     def state_file(self) -> Path:
         return PROJECT_ROOT / "data" / "state.json"
+
+    @property
+    def modules_dir(self) -> Path:
+        return PROJECT_ROOT / "data" / "modules"
 
     @property
     def syllabus_file(self) -> Path:

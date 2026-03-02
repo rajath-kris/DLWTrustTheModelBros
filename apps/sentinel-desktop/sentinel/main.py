@@ -45,11 +45,13 @@ class AnalysisResult:
     status: str
     region: CaptureRegion
     prompt: str = ""
+    prompt_raw: str = ""
     capture_id: str = ""
     thread_id: str = ""
     turn_index: int = 0
     source_mode: str = ""
     topic_label: str = ""
+    source_warning: str = ""
     error_message: str = ""
     error_hint: str = ""
     error_category: str = ""
@@ -373,14 +375,17 @@ class SentinelController(QObject):
                     context.monitor,
                     context.region,
                     context.image_bytes,
+                    module_id=settings.active_module_id or None,
                     thread_id=thread_id,
                     turn_index=effective_turn_index,
                     previous_prompt=previous_prompt,
                     user_input_text=user_input,
                 )
-                prompt = str(
+                prompt_raw = str(
                     result.get("socratic_prompt", "What concept feels least clear in this capture?")
                 ).strip() or "What concept feels least clear in this capture?"
+                source_warning = str(result.get("source_warning", "")).strip()
+                prompt = self._compose_prompt_text(prompt_raw, source_warning)
                 capture_id = str(result.get("capture_id", "")).strip()
                 topic_label = self._derive_topic_label(
                     str(result.get("topic_label", "")).strip(),
@@ -397,11 +402,13 @@ class SentinelController(QObject):
                         status="success",
                         region=context.region,
                         prompt=prompt,
+                        prompt_raw=prompt_raw,
                         capture_id=capture_id,
                         thread_id=resolved_thread_id,
                         turn_index=resolved_turn_index,
                         source_mode=source_mode,
                         topic_label=topic_label,
+                        source_warning=source_warning,
                     )
                 )
             except requests.Timeout:
@@ -524,7 +531,13 @@ class SentinelController(QObject):
             self._active_thread_id = result.thread_id.strip() or self._active_thread_id or result.capture_id or str(uuid4())
             self._active_turn_index = max(0, int(result.turn_index))
             self._active_topic_label = (result.topic_label or "").strip() or self._active_topic_label
-            self._last_prompt_text = result.prompt.strip()
+            self._last_prompt_text = (result.prompt_raw or result.prompt).strip()
+            if result.source_warning.strip():
+                self._log_event(
+                    "source_warning_received",
+                    request_id=result.request_id,
+                    warning=result.source_warning.strip(),
+                )
             turn_request_was_submitted = self._pending_user_input_text is not None
             self._pending_user_input_text = None
             self._start_thinking_hold(
@@ -747,6 +760,13 @@ class SentinelController(QObject):
                 best_rank = rank
                 best_concept = concept
         return best_concept or None
+
+    def _compose_prompt_text(self, prompt: str, source_warning: str) -> str:
+        clean_prompt = " ".join(prompt.split()) or "What concept feels least clear in this capture?"
+        warning = " ".join(source_warning.split())
+        if not warning:
+            return clean_prompt
+        return f"Source note: {warning}\n\n{clean_prompt}"
 
     def _preview_text(self, text: str, max_len: int = 64) -> str:
         collapsed = " ".join(text.split())

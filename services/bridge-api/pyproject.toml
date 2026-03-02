@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "sentinel-bridge-api"
 version = "0.1.0"
 description = "FastAPI bridge for Sentinel AI learning loop"
@@ -9,7 +9,9 @@ dependencies = [
   "uvicorn[standard]==0.34.0",
   "pydantic==2.10.4",
   "requests==2.32.3",
-  "python-dotenv==1.0.1"
+  "python-dotenv==1.0.1",
+  "pypdf==5.3.1",
+  "python-multipart==0.0.20"
 ]
 
 [tool.uvicorn]
