@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 
 GapStatus = Literal["open", "reviewing", "closed"]
+GapType = Literal["concept", "reasoning", "misconception"]
 PlatformName = Literal["windows", "macos"]
 
 
@@ -56,6 +57,9 @@ class KnowledgeGap(BaseModel):
     concept: str
     severity: float = Field(ge=0.0, le=1.0)
     confidence: float = Field(ge=0.0, le=1.0)
+    basis_question: str | None = None
+    basis_answer_excerpt: str | None = None
+    gap_type: GapType | None = None
     status: GapStatus = "open"
     capture_id: str
     evidence_url: str

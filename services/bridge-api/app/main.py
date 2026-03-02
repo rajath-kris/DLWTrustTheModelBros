@@ -110,6 +110,25 @@ def _sanitize_thread_id(raw_value: str) -> str:
     return (cleaned[:80] or str(uuid4())).strip("-") or str(uuid4())
 
 
+def _optional_text(value: object, max_chars: int = 280) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).strip().split())
+    if not text:
+        return None
+    return text[:max_chars]
+
+
+def _normalize_gap_type(raw_value: object) -> str | None:
+    value = _optional_text(raw_value, max_chars=32)
+    if value is None:
+        return None
+    normalized = value.lower()
+    if normalized in {"concept", "reasoning", "misconception"}:
+        return normalized
+    return None
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok", "timestamp_utc": datetime.now(timezone.utc).isoformat()}
@@ -159,6 +178,9 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         concept = str(raw_gap.get("concept", "Unknown Concept")).strip() or "Unknown Concept"
         severity = max(0.0, min(1.0, float(raw_gap.get("severity", 0.5))))
         confidence = max(0.0, min(1.0, float(raw_gap.get("confidence", 0.6))))
+        basis_question = _optional_text(raw_gap.get("basis_question"), max_chars=320)
+        basis_answer_excerpt = _optional_text(raw_gap.get("basis_answer_excerpt"), max_chars=320)
+        gap_type = _normalize_gap_type(raw_gap.get("gap_type"))
         deadline_score = _deadline_score_for_concept(concept, syllabus)
         priority_score = max(0.0, min(1.0, (severity * 0.7) + (deadline_score * 0.3)))
 
@@ -167,6 +189,9 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
                 concept=concept,
                 severity=severity,
                 confidence=confidence,
+                basis_question=basis_question,
+                basis_answer_excerpt=basis_answer_excerpt,
+                gap_type=gap_type,
                 capture_id=capture_id,
                 evidence_url=f"http://{settings.bridge_host}:{settings.bridge_port}/captures/{filename}",
                 deadline_score=deadline_score,

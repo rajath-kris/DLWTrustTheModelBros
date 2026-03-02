@@ -22,6 +22,9 @@ export interface KnowledgeGap {
   concept: string;
   severity: number;
   confidence: number;
+  basis_question?: string | null;
+  basis_answer_excerpt?: string | null;
+  gap_type?: "concept" | "reasoning" | "misconception" | null;
   status: GapStatus;
   capture_id: string;
   evidence_url: string;
