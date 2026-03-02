@@ -162,6 +162,8 @@ class GroundingBundle:
     context_text: str
     citations: list[str]
     warnings: list[str]
+    primary_source_url: str | None = None
+    primary_source_label: str | None = None
 
 
 def tokenize(text: str) -> list[str]:

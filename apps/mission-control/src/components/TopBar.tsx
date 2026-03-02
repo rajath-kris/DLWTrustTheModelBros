@@ -1,6 +1,7 @@
 import { format } from "date-fns";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  API_BASE,
   fetchSentinelRuntimeStatus,
   startSentinelRuntime,
   stopSentinelRuntime,
@@ -10,6 +11,21 @@ import type { SentinelRuntimeStatus } from "../types";
 const SEMESTER_WEEK = import.meta.env.VITE_SEMESTER_WEEK ?? "8";
 const RUNTIME_STATUS_INTERVAL_MS = 5_000;
 type RuntimeMutation = "starting" | "stopping" | null;
+const RUNTIME_STOP_URL = `${API_BASE}/api/v1/sentinel/runtime/stop`;
+
+function requestRuntimeStopOnUnload(): void {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      navigator.sendBeacon(RUNTIME_STOP_URL, "");
+      return;
+    }
+  } catch {
+    // Fall through to fetch fallback.
+  }
+  void fetch(RUNTIME_STOP_URL, { method: "POST", keepalive: true }).catch(() => {
+    // Best effort only during page unload.
+  });
+}
 
 export function TopBar({
   onExportReport,
@@ -23,6 +39,7 @@ export function TopBar({
   const [mutating, setMutating] = useState<RuntimeMutation>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [bridgeOffline, setBridgeOffline] = useState(false);
+  const runtimeRunningRef = useRef(false);
 
   const refreshRuntimeStatus = useCallback(async () => {
     try {
@@ -75,6 +92,29 @@ export function TopBar({
     const id = setInterval(refreshRuntimeStatus, RUNTIME_STATUS_INTERVAL_MS);
     return () => clearInterval(id);
   }, [refreshRuntimeStatus]);
+
+  useEffect(() => {
+    runtimeRunningRef.current = runtimeStatus?.running ?? false;
+  }, [runtimeStatus]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      if (runtimeRunningRef.current) {
+        requestRuntimeStopOnUnload();
+      }
+    };
+    const onBeforeUnload = () => {
+      if (runtimeRunningRef.current) {
+        requestRuntimeStopOnUnload();
+      }
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, []);
 
   const isRuntimeRunning = runtimeStatus?.running ?? false;
   const runtimeButtonDisabled =

@@ -57,8 +57,17 @@ def score_capture_against_material(
     capture_tag_tokens = set(normalize_tokens(" ".join(capture_tags)))
     material_tags = set(material_tag_tokens)
 
-    text_overlap = len(capture_tokens & material_tokens) / max(1, len(capture_tokens))
-    tag_overlap = len(capture_tag_tokens & material_tags) / max(1, len(capture_tag_tokens))
+    text_overlap_count = len(capture_tokens & material_tokens)
+    tag_overlap_count = len(capture_tag_tokens & material_tags)
+
+    # Single-token hits are noisy and frequently map unrelated captures.
+    if text_overlap_count == 0 and tag_overlap_count == 0:
+        return 0.0
+    if text_overlap_count < 2 and tag_overlap_count < 1:
+        return 0.0
+
+    text_overlap = text_overlap_count / max(1, len(capture_tokens))
+    tag_overlap = tag_overlap_count / max(1, len(capture_tag_tokens))
     score = (text_overlap * 0.7) + (tag_overlap * 0.3)
     return max(0.0, min(1.0, score))
 

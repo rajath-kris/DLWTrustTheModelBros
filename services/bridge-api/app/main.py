@@ -74,11 +74,17 @@ app.add_middleware(
 
 settings.captures_dir.mkdir(parents=True, exist_ok=True)
 settings.documents_dir.mkdir(parents=True, exist_ok=True)
+settings.topics_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/captures", StaticFiles(directory=str(settings.captures_dir)), name="captures")
 app.mount(
     "/course-documents",
     StaticFiles(directory=str(settings.documents_dir)),
     name="course-documents",
+)
+app.mount(
+    "/topic-materials",
+    StaticFiles(directory=str(settings.topics_dir)),
+    name="topic-materials",
 )
 
 store = StateStore(settings.state_file)
@@ -92,6 +98,9 @@ runtime_manager = SentinelRuntimeManager(settings)
 
 MATCH_THRESHOLD = 0.22
 WEAK_MATCH_THRESHOLD = 0.14
+TOPIC_INFERENCE_MIN_SCORE = MATCH_THRESHOLD
+TOPIC_INFERENCE_MIN_MARGIN = 0.0
+TOPIC_INFERENCE_STRONG_SCORE = 0.45
 MAX_STUDY_ACTIONS = 5
 TOPIC_GROUNDING_LIMIT = 2
 COURSE_DOC_GROUNDING_LIMIT = 2
@@ -111,6 +120,10 @@ INFERENCE_EXCLUDED_TOPIC_IDS = {
     FALLBACK_TOPIC_ID,
     *LEGACY_FALLBACK_TOPIC_IDS,
 }
+NO_SOURCE_CAPTURE_PROMPT = (
+    "I couldn't find a matching source for this capture. "
+    "Please capture content from your uploaded topics so I can ground the guidance."
+)
 
 
 def _load_syllabus() -> dict:
@@ -297,15 +310,16 @@ def _infer_best_topic_for_signal(
     signal_text: str,
     signal_tags: list[str] | None = None,
     minimum_score: float = 0.0,
-) -> tuple[TopicSummary | None, float, int]:
+    minimum_margin: float = 0.0,
+    strong_score_override: float = 1.0,
+) -> tuple[TopicSummary | None, float, int, float]:
     compact_text = " ".join((signal_text or "").split())
     tags = [item for item in (signal_tags or []) if " ".join(item.split())]
     if not compact_text and not tags:
-        return None, 0.0, 0
+        return None, 0.0, 0, 0.0
 
     candidates = topic_store.list_topics()
-    best_topic: TopicSummary | None = None
-    best_score = -1.0
+    scored_candidates: list[tuple[float, TopicSummary]] = []
     candidate_count = 0
     for topic in candidates:
         if topic.topic_id in INFERENCE_EXCLUDED_TOPIC_IDS:
@@ -315,15 +329,22 @@ def _infer_best_topic_for_signal(
             continue
         candidate_count += 1
         score = _clamp(float(match.match_score))
-        if score > best_score:
-            best_score = score
-            best_topic = topic
+        scored_candidates.append((score, topic))
 
-    if best_topic is None:
-        return None, 0.0, candidate_count
+    if not scored_candidates:
+        return None, 0.0, candidate_count, 0.0
+
+    scored_candidates.sort(key=lambda item: item[0], reverse=True)
+    best_score, best_topic = scored_candidates[0]
+    runner_up_score = scored_candidates[1][0] if len(scored_candidates) > 1 else 0.0
     if best_score < minimum_score:
-        return None, _clamp(best_score), candidate_count
-    return best_topic, _clamp(best_score), candidate_count
+        return None, _clamp(best_score), candidate_count, _clamp(runner_up_score)
+
+    if len(scored_candidates) > 1 and minimum_margin > 0.0 and best_score < strong_score_override:
+        if (best_score - runner_up_score) < minimum_margin:
+            return None, _clamp(best_score), candidate_count, _clamp(runner_up_score)
+
+    return best_topic, _clamp(best_score), candidate_count, _clamp(runner_up_score)
 
 
 def _build_source_context(topic: TopicSummary, extraction_text: str, extraction_tags: list[str]) -> SourceContext:
@@ -423,7 +444,7 @@ def _collect_topic_grounding(topic_id: str | None, query_text: str, limit: int =
 
     materials = topic_store.list_materials(topic.topic_id)
     query_tokens = set(tokenize(query_text))
-    candidates: list[tuple[int, str, str]] = []
+    candidates: list[tuple[int, str, str, str | None, str | None]] = []
     warnings: list[str] = []
 
     for material in materials:
@@ -449,23 +470,32 @@ def _collect_topic_grounding(topic_id: str | None, query_text: str, limit: int =
         if not top_chunks:
             continue
         citation = f"topic:{topic.topic_name}/{material.material_name}"
+        source_url = _topic_material_url(material.source_path)
+        source_label = material.material_name
         for chunk in top_chunks:
             score = _score_chunk(query_tokens, chunk)
             if score <= 0:
                 continue
-            candidates.append((score, chunk, citation))
+            candidates.append((score, chunk, citation, source_url, source_label))
 
     selected = sorted(candidates, key=lambda item: item[0], reverse=True)[: max(1, int(limit))]
     if not selected and materials:
         warnings.append(
             f"No relevant topic material snippets matched capture context for topic '{topic.topic_name}'."
         )
-    context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation in selected if chunk.strip()]
-    citations = _dedupe_text_items([citation for _, _, citation in selected])
+    context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation, _, _ in selected if chunk.strip()]
+    citations = _dedupe_text_items([citation for _, _, citation, _, _ in selected])
+    primary_source_url = next((source_url for _, _, _, source_url, _ in selected if source_url), None)
+    primary_source_label = next(
+        (source_label for _, _, _, source_url, source_label in selected if source_url and source_label),
+        None,
+    )
     return GroundingBundle(
         context_text="\n\n---\n\n".join(context_parts),
         citations=citations,
         warnings=_dedupe_text_items(warnings),
+        primary_source_url=primary_source_url,
+        primary_source_label=primary_source_label,
     )
 
 
@@ -479,6 +509,19 @@ def _course_document_path_from_url(file_url: str) -> Path | None:
     if base not in candidate.parents and candidate != base:
         return None
     return candidate
+
+
+def _topic_material_url(source_path: str | None) -> str | None:
+    raw_path = (source_path or "").strip().replace("\\", "/")
+    if not raw_path:
+        return None
+    path_obj = Path(raw_path)
+    if path_obj.is_absolute() or ".." in path_obj.parts:
+        return None
+    normalized = path_obj.as_posix().lstrip("/")
+    if not normalized:
+        return None
+    return f"http://{settings.bridge_host}:{settings.bridge_port}/topic-materials/{normalized}"
 
 
 def _collect_course_doc_grounding(
@@ -528,7 +571,7 @@ def _collect_course_doc_grounding(
     ordered_docs = [*anchored, *non_anchored]
 
     query_tokens = set(tokenize(query_text))
-    candidates: list[tuple[int, str, str]] = []
+    candidates: list[tuple[int, str, str, str | None, str | None]] = []
 
     for document in ordered_docs:
         doc_path = _course_document_path_from_url(document.file_url)
@@ -563,17 +606,24 @@ def _collect_course_doc_grounding(
             score = _score_chunk(query_tokens, chunk)
             if score <= 0:
                 continue
-            candidates.append((score, chunk, citation))
+            candidates.append((score, chunk, citation, document.file_url, document.name))
 
     selected = sorted(candidates, key=lambda item: item[0], reverse=True)[: max(1, int(limit))]
     if not selected and ordered_docs:
         warnings.append("No relevant course document snippets matched capture context.")
-    context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation in selected if chunk.strip()]
-    citations = _dedupe_text_items([citation for _, _, citation in selected])
+    context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation, _, _ in selected if chunk.strip()]
+    citations = _dedupe_text_items([citation for _, _, citation, _, _ in selected])
+    primary_source_url = next((source_url for _, _, _, source_url, _ in selected if source_url), None)
+    primary_source_label = next(
+        (source_label for _, _, _, source_url, source_label in selected if source_url and source_label),
+        None,
+    )
     return GroundingBundle(
         context_text="\n\n---\n\n".join(context_parts),
         citations=citations,
         warnings=_dedupe_text_items(warnings),
+        primary_source_url=primary_source_url,
+        primary_source_label=primary_source_label,
     )
 
 
@@ -608,10 +658,14 @@ def _build_grounding_bundle(
 
     combined_citations = _dedupe_text_items([*topic_bundle.citations, *course_bundle.citations])
     combined_warnings = _dedupe_text_items([*topic_bundle.warnings, *course_bundle.warnings])
+    combined_primary_source_url = topic_bundle.primary_source_url or course_bundle.primary_source_url
+    combined_primary_source_label = topic_bundle.primary_source_label or course_bundle.primary_source_label
     return GroundingBundle(
         context_text=combined_context,
         citations=combined_citations,
         warnings=combined_warnings,
+        primary_source_url=combined_primary_source_url,
+        primary_source_label=combined_primary_source_label,
     )
 
 
@@ -677,6 +731,37 @@ def _build_friend_capture_user_text(payload: CaptureRequest, extraction: VisionE
     if parts:
         return f"I need help with this screenshot context: {' | '.join(parts)}"
     return "I need help understanding this screenshot."
+
+
+def _build_topic_signal_text(payload: CaptureRequest, extraction: VisionExtraction) -> str:
+    user_text = " ".join((payload.user_input_text or "").split()).strip()
+    if user_text:
+        return user_text
+    return " ".join(
+        part
+        for part in [
+            extraction.raw_text,
+            extraction.summary,
+            payload.previous_prompt or "",
+        ]
+        if part and str(part).strip()
+    ).strip()
+
+
+def _build_grounding_query_text(payload: CaptureRequest, extraction: VisionExtraction) -> str:
+    user_text = " ".join((payload.user_input_text or "").split()).strip()
+    if user_text:
+        return user_text
+    return " ".join(
+        part
+        for part in [
+            extraction.raw_text,
+            extraction.summary,
+            " ".join(extraction.tags),
+            payload.previous_prompt or "",
+        ]
+        if part and str(part).strip()
+    ).strip()
 
 
 def _friend_result_to_gap_payloads(
@@ -1610,20 +1695,14 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     ).strip()
     requested_topic_id = _normalize_topic_id(payload.topic_id)
     requested_topic = _resolve_requested_topic(payload.topic_id)
-    topic_signal_text = " ".join(
-        part
-        for part in [
-            extraction.raw_text,
-            extraction.summary,
-            payload.user_input_text or "",
-            payload.previous_prompt or "",
-        ]
-        if part and str(part).strip()
-    )
-    inferred_topic, inferred_score, topic_candidate_count = _infer_best_topic_for_signal(
+    topic_signal_text = _build_topic_signal_text(payload, extraction)
+    grounding_query_text = _build_grounding_query_text(payload, extraction)
+    inferred_topic, inferred_score, topic_candidate_count, inferred_runner_up_score = _infer_best_topic_for_signal(
         signal_text=topic_signal_text,
         signal_tags=extraction.tags,
-        minimum_score=WEAK_MATCH_THRESHOLD,
+        minimum_score=TOPIC_INFERENCE_MIN_SCORE,
+        minimum_margin=TOPIC_INFERENCE_MIN_MARGIN,
+        strong_score_override=TOPIC_INFERENCE_STRONG_SCORE,
     )
     context_topic = requested_topic
     source_resolution_mode = "explicit"
@@ -1635,7 +1714,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             source_resolution_mode = "inferred"
             source_resolution_score = inferred_score
     source_context = (
-        _build_source_context(context_topic, capture_text, extraction.tags)
+        _build_source_context(context_topic, grounding_query_text, extraction.tags)
         if context_topic is not None
         else SourceContext(
             topic_id="",
@@ -1648,29 +1727,22 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     )
     if context_topic is not None and source_resolution_mode == "explicit":
         source_resolution_score = _clamp(source_context.match_score)
+    topic_grounded = context_topic is not None and source_context.matched
 
     grounding_topic = None
-    if requested_topic is not None:
+    if requested_topic is not None and topic_grounded:
         grounding_topic = requested_topic
-    elif inferred_topic is not None and inferred_score >= WEAK_MATCH_THRESHOLD:
+    elif inferred_topic is not None and topic_grounded and inferred_score >= TOPIC_INFERENCE_MIN_SCORE:
         grounding_topic = inferred_topic
-    grounding_query_text = " ".join(
-        part
-        for part in [
-            extraction.raw_text,
-            extraction.summary,
-            " ".join(extraction.tags),
-            payload.user_input_text or "",
-            payload.previous_prompt or "",
-        ]
-        if part and str(part).strip()
-    )
-    grounding_bundle = _build_grounding_bundle(
-        state=existing_state,
-        topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
-        course_id=course_id,
-        query_text=grounding_query_text,
-    )
+    if grounding_topic is None:
+        grounding_bundle = GroundingBundle(context_text="", citations=[], warnings=[])
+    else:
+        grounding_bundle = _build_grounding_bundle(
+            state=existing_state,
+            topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
+            course_id=course_id,
+            query_text=grounding_query_text,
+        )
     for warning in grounding_bundle.warnings:
         _log_bridge_event(
             event="grounding_warning",
@@ -1682,8 +1754,6 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         )
 
     topic_warning = _source_warning_for(context_topic, source_context)
-    if context_topic is None and grounding_bundle.citations:
-        topic_warning = None
     if requested_topic_id and requested_topic is None:
         topic_warning = _merge_warning_messages(
             topic_warning,
@@ -1694,35 +1764,64 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     socratic_prompt: str
     raw_gap_payloads: list[dict[str, object]]
 
-    if friend_agent.enabled:
-        try:
-            friend_notes_path = _select_friend_notes_path(
-                state=existing_state,
-                course_id=course_id,
-                topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
-            )
-            friend_result = friend_agent.chat(
-                thread_id=thread_id,
-                user_text=_build_friend_capture_user_text(payload, extraction),
-                notes_path=friend_notes_path,
-                image_bytes=image_bytes,
-            )
-            socratic_prompt = friend_result.reply
-            raw_gap_payloads = _friend_result_to_gap_payloads(
-                result=friend_result,
-                extraction=extraction,
-                syllabus=syllabus,
-            )
-            agent_backend_used = "friend"
-        except Exception as exc:  # noqa: BLE001
-            _log_bridge_event(
-                event="friend_agent_fallback",
-                endpoint_path="/api/v1/captures",
-                capture_id=capture_id,
-                reason=f"{type(exc).__name__}: {exc}",
-                course_id=course_id,
-                topic_id=context_topic.topic_id if context_topic is not None else None,
-            )
+    if not topic_grounded or not grounding_bundle.citations:
+        source_warning = _merge_warning_messages(
+            source_warning,
+            ["Capture did not match uploaded topic material."],
+        )
+        socratic_prompt = NO_SOURCE_CAPTURE_PROMPT
+        raw_gap_payloads = []
+        agent_backend_used = "bridge-no-source"
+    else:
+        if friend_agent.enabled:
+            try:
+                friend_notes_path = _select_friend_notes_path(
+                    state=existing_state,
+                    course_id=course_id,
+                    topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
+                )
+                friend_result = friend_agent.chat(
+                    thread_id=thread_id,
+                    user_text=_build_friend_capture_user_text(payload, extraction),
+                    notes_path=friend_notes_path,
+                    image_bytes=image_bytes,
+                )
+                socratic_prompt = friend_result.reply
+                raw_gap_payloads = _friend_result_to_gap_payloads(
+                    result=friend_result,
+                    extraction=extraction,
+                    syllabus=syllabus,
+                )
+                agent_backend_used = "friend"
+            except Exception as exc:  # noqa: BLE001
+                _log_bridge_event(
+                    event="friend_agent_fallback",
+                    endpoint_path="/api/v1/captures",
+                    capture_id=capture_id,
+                    reason=f"{type(exc).__name__}: {exc}",
+                    course_id=course_id,
+                    topic_id=context_topic.topic_id if context_topic is not None else None,
+                )
+                socratic = socratic_client.generate(
+                    payload,
+                    extraction,
+                    syllabus,
+                    grounding_context=grounding_bundle.context_text or None,
+                    grounding_sources=grounding_bundle.citations or None,
+                )
+                if socratic_client.last_backend_warning:
+                    _log_bridge_event(
+                        event="bridge_agent_fallback",
+                        endpoint_path="/api/v1/captures",
+                        capture_id=capture_id,
+                        reason=socratic_client.last_backend_warning,
+                        agent_backend="bridge",
+                        course_id=course_id,
+                        topic_id=context_topic.topic_id if context_topic is not None else None,
+                    )
+                socratic_prompt = socratic.socratic_prompt
+                raw_gap_payloads = socratic.gaps
+        else:
             socratic = socratic_client.generate(
                 payload,
                 extraction,
@@ -1742,26 +1841,6 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
                 )
             socratic_prompt = socratic.socratic_prompt
             raw_gap_payloads = socratic.gaps
-    else:
-        socratic = socratic_client.generate(
-            payload,
-            extraction,
-            syllabus,
-            grounding_context=grounding_bundle.context_text or None,
-            grounding_sources=grounding_bundle.citations or None,
-        )
-        if socratic_client.last_backend_warning:
-            _log_bridge_event(
-                event="bridge_agent_fallback",
-                endpoint_path="/api/v1/captures",
-                capture_id=capture_id,
-                reason=socratic_client.last_backend_warning,
-                agent_backend="bridge",
-                course_id=course_id,
-                topic_id=context_topic.topic_id if context_topic is not None else None,
-            )
-        socratic_prompt = socratic.socratic_prompt
-        raw_gap_payloads = socratic.gaps
 
     gap_topic_id = source_context.topic_id if source_context is not None and source_context.matched else None
     gap_material_id = source_context.material_id if source_context is not None and source_context.matched else None
@@ -1839,8 +1918,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         source_resolution_mode=source_resolution_mode,
         source_resolution_score=round(source_resolution_score, 4),
         topic_candidate_count=topic_candidate_count,
+        topic_runner_up_score=round(inferred_runner_up_score, 4),
         context_topic_id=context_topic.topic_id if context_topic is not None else None,
         grounding_topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
+        topic_grounded=topic_grounded,
         grounding_citation_count=len(grounding_bundle.citations),
         topic_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "topic:"),
         course_doc_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "course-doc:"),
@@ -1858,6 +1939,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         course_id=course_id,
         source_warning=source_warning,
         source_context=source_context,
+        source_material_url=grounding_bundle.primary_source_url,
+        source_material_label=grounding_bundle.primary_source_label,
     )
 
 

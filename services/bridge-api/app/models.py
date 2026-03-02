@@ -325,6 +325,8 @@ class CaptureResponse(BaseModel):
     course_id: str | None = None
     source_warning: str | None = None
     source_context: SourceContext | None = None
+    source_material_url: str | None = None
+    source_material_label: str | None = None
 
 
 class GapStatusUpdate(BaseModel):

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath, QPalette, QPixmap
+from PyQt6.QtCore import QEasingCurve, QPoint, QRect, QPropertyAnimation, QTimer, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDesktopServices, QGuiApplication, QPainter, QPainterPath, QPalette, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -62,6 +62,8 @@ class InteractionPage:
     prompt_text: str
     show_capture_preview: bool
     user_response_text: str
+    source_material_url: str
+    source_material_label: str
 
 
 class OverlayBubble(QWidget):
@@ -133,6 +135,7 @@ class OverlayBubble(QWidget):
         self._prompt_locked_height: int | None = None
         self._composer_input_height = 24
         self._composer_panel_height = 34
+        self._last_unavailable_source_key: tuple[str, int] | None = None
 
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
@@ -192,11 +195,31 @@ class OverlayBubble(QWidget):
 
         self._message_content = QFrame(self._card)
         self._message_content.setObjectName("MessageContent")
+
+        self._source_button_row = QFrame(self._message_content)
+        self._source_button_row.setObjectName("SourceButtonRow")
+        self._source_button_row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        self._source_button = QPushButton("Open Material", self._source_button_row)
+        self._source_button.setObjectName("SourcePill")
+        self._source_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._source_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._source_button.setVisible(False)
+        self._source_button.clicked.connect(self._on_source_button_clicked)
+
+        source_row_layout = QHBoxLayout()
+        source_row_layout.setContentsMargins(0, 0, 0, 0)
+        source_row_layout.setSpacing(0)
+        source_row_layout.addStretch(1)
+        source_row_layout.addWidget(self._source_button, stretch=0, alignment=Qt.AlignmentFlag.AlignRight)
+        self._source_button_row.setLayout(source_row_layout)
+
         message_content_layout = QVBoxLayout()
         message_content_layout.setContentsMargins(0, 0, 0, 0)
-        message_content_layout.setSpacing(6)
+        message_content_layout.setSpacing(5)
         message_content_layout.addWidget(self._capture_preview_label)
         message_content_layout.addWidget(self._message_label)
+        message_content_layout.addWidget(self._source_button_row)
         self._message_content.setLayout(message_content_layout)
 
         self._message_row = QFrame(self._card)
@@ -366,6 +389,9 @@ class OverlayBubble(QWidget):
         self._visible_page_indices.clear()
         self._interaction_capture_pixmap = None
         self._prompt_locked_height = None
+        self._last_unavailable_source_key = None
+        self._source_button.setVisible(False)
+        self._source_button_row.setVisible(False)
         self._reset_capture_preview()
         self._refresh_page_dots()
 
@@ -509,6 +535,8 @@ class OverlayBubble(QWidget):
         ttl_ms: int = 20000,
         retry_enabled: bool = True,
         topic_label: str | None = None,
+        source_material_url: str | None = None,
+        source_material_label: str | None = None,
     ) -> None:
         previous_state = self._state
         self._launcher_temporarily_hidden = False
@@ -526,6 +554,8 @@ class OverlayBubble(QWidget):
         page_idx = self._upsert_interaction_page(
             prompt_text=normalized_prompt,
             turn_index=self._turn_index,
+            source_material_url=source_material_url,
+            source_material_label=source_material_label,
         )
         self._selected_page_index = page_idx
         self._refresh_page_dots(selected_source="auto")
@@ -654,10 +684,15 @@ class OverlayBubble(QWidget):
         else:
             self._reset_capture_preview()
             self._page_rail.hide()
+            self._source_button.setVisible(False)
+            self._source_button.setEnabled(False)
+            self._source_button_row.setVisible(False)
 
     def _set_error_mode_visible(self, visible: bool) -> None:
         self._composer.setVisible(False)
         self._prompt_divider.setVisible(False)
+        self._source_button.setVisible(False)
+        self._source_button_row.setVisible(False)
         self._submit_button.setVisible(False)
         self._retry_button.setVisible(visible)
         self._retry_button.setEnabled(visible and self._retry_button.isEnabled())
@@ -740,10 +775,18 @@ class OverlayBubble(QWidget):
         origin = self._launcher_origin()
         return QRect(origin.x(), origin.y(), self._launcher_size, self._launcher_size)
 
-    def _upsert_interaction_page(self, prompt_text: str, turn_index: int) -> int:
+    def _upsert_interaction_page(
+        self,
+        prompt_text: str,
+        turn_index: int,
+        source_material_url: str | None = None,
+        source_material_label: str | None = None,
+    ) -> int:
         normalized_prompt = " ".join(prompt_text.split()) or "What concept feels least clear in this capture?"
         page_turn = max(0, int(turn_index))
         show_capture_preview = page_turn == 0
+        normalized_source_url = " ".join((source_material_url or "").split())
+        normalized_source_label = " ".join((source_material_label or "").split())
         existing_index: int | None = None
         for idx, page in enumerate(self._interaction_pages):
             if page.turn_index == page_turn:
@@ -756,6 +799,8 @@ class OverlayBubble(QWidget):
                 prompt_text=normalized_prompt,
                 show_capture_preview=show_capture_preview,
                 user_response_text="",
+                source_material_url=normalized_source_url,
+                source_material_label=normalized_source_label,
             )
             self._interaction_pages.append(page)
             self._interaction_pages.sort(key=lambda item: item.turn_index)
@@ -772,6 +817,8 @@ class OverlayBubble(QWidget):
             page = self._interaction_pages[existing_index]
             page.prompt_text = normalized_prompt
             page.show_capture_preview = show_capture_preview
+            page.source_material_url = normalized_source_url
+            page.source_material_label = normalized_source_label
             resolved_index = existing_index
 
         return resolved_index
@@ -803,6 +850,9 @@ class OverlayBubble(QWidget):
             return
         if not self._interaction_pages:
             self._message_label.setText("")
+            self._source_button.setVisible(False)
+            self._source_button_row.setVisible(False)
+            self._source_button.setEnabled(False)
             return
         selected = self._selected_page_index
         if selected < 0 or selected >= len(self._interaction_pages):
@@ -832,6 +882,32 @@ class OverlayBubble(QWidget):
             lines.extend(["", f"You: {page.user_response_text}"])
         self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self._message_label.setText("\n".join(lines))
+        self._apply_source_button_for_page(page)
+
+    def _apply_source_button_for_page(self, page: InteractionPage) -> None:
+        url = " ".join((page.source_material_url or "").split())
+        label = " ".join((page.source_material_label or "").split())
+        if url:
+            self._source_button_row.setVisible(True)
+            self._source_button.setVisible(True)
+            self._source_button.setEnabled(True)
+            self._source_button.setText("Open Material")
+            tooltip = f"Open {label}" if label else "Open grounded source material"
+            self._source_button.setToolTip(tooltip)
+            return
+
+        self._source_button_row.setVisible(False)
+        self._source_button.setVisible(False)
+        self._source_button.setEnabled(False)
+        page_key = (self._thread_id, page.turn_index)
+        if self._last_unavailable_source_key != page_key:
+            self._last_unavailable_source_key = page_key
+            self._emit(
+                "overlay_source_unavailable",
+                state=self._state.value,
+                thread_id=self._thread_id,
+                turn_index=page.turn_index,
+            )
 
     def _visible_page_window(self) -> list[int]:
         total = len(self._interaction_pages)
@@ -904,6 +980,31 @@ class OverlayBubble(QWidget):
         self._render_selected_prompt_page()
         self._reflow_prompt_card_geometry()
         self._sync_prompt_input_availability()
+
+    def _on_source_button_clicked(self) -> None:
+        if self._state != OverlayState.PROMPT:
+            return
+        if self._selected_page_index < 0 or self._selected_page_index >= len(self._interaction_pages):
+            return
+        page = self._interaction_pages[self._selected_page_index]
+        source_url = " ".join((page.source_material_url or "").split())
+        if not source_url:
+            self._emit(
+                "overlay_source_unavailable",
+                state=self._state.value,
+                thread_id=self._thread_id,
+                turn_index=page.turn_index,
+            )
+            return
+        opened = QDesktopServices.openUrl(QUrl(source_url))
+        self._emit(
+            "overlay_source_clicked",
+            state=self._state.value,
+            thread_id=self._thread_id,
+            turn_index=page.turn_index,
+            source_url_preview=self._preview_text(source_url, max_len=120),
+            open_ok=opened,
+        )
 
     @staticmethod
     def _truncate_for_page(text: str, limit: int) -> str:
@@ -1682,6 +1783,33 @@ class OverlayBubble(QWidget):
                 max-height: 1px;
             }
 
+            QFrame#SourceButtonRow {
+                background: transparent;
+                border: none;
+            }
+
+            QPushButton#SourcePill {
+                background: rgba(37, 72, 99, 226);
+                color: rgba(236, 245, 255, 246);
+                border: 1px solid rgba(142, 189, 227, 152);
+                border-radius: 999px;
+                padding: 2px 9px;
+                font-family: __FONT_STACK__;
+                font-size: 10px;
+                font-weight: 620;
+                min-height: 20px;
+                max-height: 20px;
+            }
+
+            QPushButton#SourcePill:hover {
+                background: rgba(47, 86, 116, 236);
+                border-color: rgba(172, 211, 240, 182);
+            }
+
+            QPushButton#SourcePill:pressed {
+                background: rgba(29, 61, 84, 238);
+            }
+
             QFrame#ComposerPanel {
                 background: rgba(0, 0, 0, 214);
                 border: 1px solid rgba(220, 231, 244, 74);
@@ -1768,7 +1896,8 @@ class OverlayBubble(QWidget):
             }
 
             QPushButton#SubmitButton:disabled,
-            QPushButton#RetryButton:disabled {
+            QPushButton#RetryButton:disabled,
+            QPushButton#SourcePill:disabled {
                 color: rgba(176, 188, 202, 140);
                 background-color: rgba(246, 249, 253, 14);
                 border-color: rgba(246, 249, 253, 18);

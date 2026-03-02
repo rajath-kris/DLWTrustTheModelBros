@@ -52,6 +52,8 @@ class AnalysisResult:
     source_mode: str = ""
     topic_label: str = ""
     source_warning: str = ""
+    source_material_url: str = ""
+    source_material_label: str = ""
     error_message: str = ""
     error_hint: str = ""
     error_category: str = ""
@@ -396,7 +398,8 @@ class SentinelController(QObject):
                     result.get("socratic_prompt", "What concept feels least clear in this capture?")
                 ).strip() or "What concept feels least clear in this capture?"
                 source_warning = str(result.get("source_warning", "")).strip()
-                prompt = self._compose_prompt_text(prompt_raw, source_warning)
+                source_material_url = str(result.get("source_material_url", "")).strip()
+                source_material_label = str(result.get("source_material_label", "")).strip()
                 capture_id = str(result.get("capture_id", "")).strip()
                 topic_label = self._derive_topic_label(
                     str(result.get("topic_label", "")).strip(),
@@ -412,7 +415,7 @@ class SentinelController(QObject):
                         request_id=request_id,
                         status="success",
                         region=context.region,
-                        prompt=prompt,
+                        prompt=prompt_raw,
                         prompt_raw=prompt_raw,
                         capture_id=capture_id,
                         thread_id=resolved_thread_id,
@@ -420,6 +423,8 @@ class SentinelController(QObject):
                         source_mode=source_mode,
                         topic_label=topic_label,
                         source_warning=source_warning,
+                        source_material_url=source_material_url,
+                        source_material_label=source_material_label,
                     )
                 )
             except requests.Timeout:
@@ -663,6 +668,8 @@ class SentinelController(QObject):
             ttl_ms=settings.overlay_prompt_ttl_ms,
             retry_enabled=self._last_capture_context is not None,
             topic_label=self._active_topic_label,
+            source_material_url=result.source_material_url,
+            source_material_label=result.source_material_label,
         )
         self._log_event(
             "request_success",
@@ -770,13 +777,6 @@ class SentinelController(QObject):
                 best_rank = rank
                 best_concept = concept
         return best_concept or None
-
-    def _compose_prompt_text(self, prompt: str, source_warning: str) -> str:
-        clean_prompt = " ".join(prompt.split()) or "What concept feels least clear in this capture?"
-        warning = " ".join(source_warning.split())
-        if not warning:
-            return clean_prompt
-        return f"Source note: {warning}\n\n{clean_prompt}"
 
     def _preview_text(self, text: str, max_len: int = 64) -> str:
         collapsed = " ".join(text.split())

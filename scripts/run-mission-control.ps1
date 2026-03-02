@@ -1,5 +1,6 @@
 param(
-    [switch]$Install
+    [switch]$Install,
+    [string]$BridgeBaseUrl = 'http://127.0.0.1:8000'
 )
 
 Set-StrictMode -Version Latest
@@ -17,5 +18,13 @@ try {
     & $npmExe run dev
 }
 finally {
+    try {
+        $stopUrl = "$($BridgeBaseUrl.TrimEnd('/'))/api/v1/sentinel/runtime/stop"
+        Invoke-RestMethod -Uri $stopUrl -Method Post -TimeoutSec 2 | Out-Null
+        Write-Host "[run-mission-control] Requested Sentinel runtime stop on Mission Control shutdown."
+    }
+    catch {
+        # Best effort cleanup only.
+    }
     Pop-Location
 }
