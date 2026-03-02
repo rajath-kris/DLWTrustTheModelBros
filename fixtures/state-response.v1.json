@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-03-02T00:00:00Z",
+  "captures": [
+    {
+      "capture_id": "fixture-cap-1",
+      "timestamp_utc": "2026-03-01T09:00:00Z",
+      "app_name": "Notion",
+      "window_title": "CS2040 Notes",
+      "socratic_prompt": "What invariant is violated here?",
+      "gaps": ["gap-a"]
+    }
+  ],
+  "gaps": [
+    {
+      "gap_id": "gap-a",
+      "concept": "Tree Traversals",
+      "severity": 0.7,
+      "confidence": 0.82,
+      "status": "open",
+      "capture_id": "fixture-cap-1",
+      "evidence_url": "http://127.0.0.1:8000/captures/fixture-cap-1.png",
+      "deadline_score": 0.55,
+      "priority_score": 0.65
+    }
+  ],
+  "topics": [
+    {
+      "topic_id": "trees",
+      "name": "Binary Trees & Traversal",
+      "mastery_score": 0.62
+    }
+  ],
+  "question_bank": [
+    {
+      "id": "q-tree-postorder",
+      "topic": "Binary Trees & Traversal",
+      "type": "MCQ",
+      "question_text": "Which traversal visits the root node last?",
+      "options": ["In-order", "Pre-order", "Post-order", "Level-order"],
+      "correct_answer": "Post-order",
+      "source": "PYQ_2025_Q3",
+      "source_type": "pyq",
+      "captured_from_sentinel": false,
+      "concept": "Tree Traversals"
+    }
+  ],
+  "quizzes": [
+    {
+      "id": "quiz-1",
+      "topic": "Binary Trees & Traversal",
+      "date_taken": "2026-03-01T14:00:00Z",
+      "sources": ["pyq"],
+      "score": {
+        "correct": 1,
+        "total": 1
+      },
+      "questions": [
+        {
+          "question_id": "q-tree-postorder",
+          "question_text": "Which traversal visits the root node last?",
+          "options": ["In-order", "Pre-order", "Post-order", "Level-order"],
+          "correct_answer": "Post-order",
+          "user_answer": "Post-order",
+          "is_correct": true,
+          "source": "PYQ_2025_Q3",
+          "concept": "Tree Traversals"
+        }
+      ],
+      "mastery_delta": 0.04,
+      "generated_gap_ids": []
+    }
+  ],
+  "readiness_axes": {
+    "concept_mastery": 0.64,
+    "deadline_pressure": 0.55,
+    "retention_risk": 0.38,
+    "problem_transfer": 0.52,
+    "consistency": 0.84
+  }
+}

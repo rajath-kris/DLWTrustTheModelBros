@@ -158,7 +158,7 @@ class MockBridgeHandler(BaseHTTPRequestHandler):
             return
 
         if scenario == "http_500":
-            self._json_response(500, {"detail": "Mock bridge forced HTTP 500"})
+            self._json_response(500, {"detail": "Mock bridge forced HTTP 500", "code": "MOCK_HTTP_500"})
             return
 
         if scenario == "timeout":
@@ -172,16 +172,17 @@ class MockBridgeHandler(BaseHTTPRequestHandler):
 
         if scenario == "flaky":
             if flaky_fail_now:
-                self._json_response(500, {"detail": "Mock bridge flaky failure"})
+                self._json_response(500, {"detail": "Mock bridge flaky failure", "code": "MOCK_FLAKY_FAILURE"})
                 return
             time.sleep(random.uniform(0.2, 0.5))
             self._json_response(200, self._success_payload(capture_id, scenario, request_number))
             return
 
-        self._json_response(500, {"detail": "Unhandled scenario"})
+        self._json_response(500, {"detail": "Unhandled scenario", "code": "MOCK_UNHANDLED_SCENARIO"})
 
     def _success_payload(self, capture_id: str, scenario: str, request_number: int) -> dict[str, Any]:
         return {
+            "schema_version": 1,
             "capture_id": capture_id,
             "socratic_prompt": (
                 f"[{scenario}] What first principle explains this step? "

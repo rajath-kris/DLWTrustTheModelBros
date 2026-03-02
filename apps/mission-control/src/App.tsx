@@ -1,5 +1,6 @@
 import { Outlet, Route, Routes } from "react-router-dom";
 import { CourseProvider } from "./context/CourseContext";
+import { StateProvider } from "./context/StateContext";
 import { AppSidebar } from "./components/AppSidebar";
 import {
   MissionControlPage,
@@ -10,6 +11,7 @@ import {
   SessionHistoryPage,
   AskSentinelPage,
   PreferencesPage,
+  QuizTabPage,
 } from "./pages";
 
 function Layout() {
@@ -28,18 +30,21 @@ function Layout() {
 export default function App() {
   return (
     <CourseProvider>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<MissionControlPage />} />
-          <Route path="gaps" element={<KnowledgeGapsPage />} />
-          <Route path="schedule" element={<SchedulePage />} />
-          <Route path="planner" element={<StudyPlannerPage />} />
-          <Route path="documents" element={<DocumentHubPage />} />
-          <Route path="history" element={<SessionHistoryPage />} />
-          <Route path="ask" element={<AskSentinelPage />} />
-          <Route path="preferences" element={<PreferencesPage />} />
-        </Route>
-      </Routes>
+      <StateProvider>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<MissionControlPage />} />
+            <Route path="gaps" element={<KnowledgeGapsPage />} />
+            <Route path="schedule" element={<SchedulePage />} />
+            <Route path="planner" element={<StudyPlannerPage />} />
+            <Route path="quiz" element={<QuizTabPage />} />
+            <Route path="documents" element={<DocumentHubPage />} />
+            <Route path="history" element={<SessionHistoryPage />} />
+            <Route path="ask" element={<AskSentinelPage />} />
+            <Route path="preferences" element={<PreferencesPage />} />
+          </Route>
+        </Routes>
+      </StateProvider>
     </CourseProvider>
   );
 }

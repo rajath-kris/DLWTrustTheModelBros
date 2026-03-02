@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 GapStatus = Literal["open", "reviewing", "closed"]
 PlatformName = Literal["windows", "macos"]
+SCHEMA_VERSION = 1
 
 
 def utc_now_iso() -> str:
@@ -67,6 +68,52 @@ class ReadinessAxes(BaseModel):
     consistency: float = Field(ge=0.0, le=1.0)
 
 
+class TopicMastery(BaseModel):
+    topic_id: str
+    name: str
+    mastery_score: float = Field(ge=0.0, le=1.0)
+
+
+class QuestionBankItem(BaseModel):
+    id: str
+    topic: str
+    type: Literal["MCQ"] = "MCQ"
+    question_text: str
+    options: list[str] = Field(default_factory=list, min_length=2)
+    correct_answer: str
+    source: str
+    source_type: Literal["pyq", "tutorial", "sentinel"] = "tutorial"
+    captured_from_sentinel: bool = False
+    concept: str = ""
+
+
+class QuizQuestionResult(BaseModel):
+    question_id: str
+    question_text: str
+    options: list[str] = Field(default_factory=list, min_length=2)
+    correct_answer: str
+    user_answer: str
+    is_correct: bool
+    source: str
+    concept: str = ""
+
+
+class QuizScore(BaseModel):
+    correct: int = Field(ge=0)
+    total: int = Field(ge=1)
+
+
+class QuizRecord(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    topic: str
+    date_taken: str = Field(default_factory=utc_now_iso)
+    sources: list[Literal["pyq", "tutorial", "sentinel"]] = Field(default_factory=list)
+    score: QuizScore
+    questions: list[QuizQuestionResult] = Field(default_factory=list)
+    mastery_delta: float = 0.0
+    generated_gap_ids: list[str] = Field(default_factory=list)
+
+
 class CaptureEvent(BaseModel):
     capture_id: str
     timestamp_utc: str
@@ -77,9 +124,13 @@ class CaptureEvent(BaseModel):
 
 
 class LearningState(BaseModel):
+    schema_version: int = Field(default=SCHEMA_VERSION, ge=1)
     updated_at: str = Field(default_factory=utc_now_iso)
     captures: list[CaptureEvent] = Field(default_factory=list)
     gaps: list[KnowledgeGap] = Field(default_factory=list)
+    topics: list[TopicMastery] = Field(default_factory=list)
+    question_bank: list[QuestionBankItem] = Field(default_factory=list)
+    quizzes: list[QuizRecord] = Field(default_factory=list)
     readiness_axes: ReadinessAxes = Field(default_factory=lambda: ReadinessAxes(
         concept_mastery=0.0,
         deadline_pressure=0.0,
@@ -90,6 +141,7 @@ class LearningState(BaseModel):
 
 
 class CaptureResponse(BaseModel):
+    schema_version: int = Field(default=SCHEMA_VERSION, ge=1)
     capture_id: str
     socratic_prompt: str
     gaps: list[KnowledgeGap]
@@ -98,6 +150,30 @@ class CaptureResponse(BaseModel):
 
 class GapStatusUpdate(BaseModel):
     status: GapStatus
+
+
+class QuizSubmissionItem(BaseModel):
+    question_id: str
+    user_answer: str
+
+
+class QuizSubmissionRequest(BaseModel):
+    topic: str
+    sources: list[Literal["pyq", "tutorial", "sentinel"]] = Field(default_factory=list)
+    answers: list[QuizSubmissionItem] = Field(default_factory=list, min_length=1)
+
+
+class QuizSubmissionResponse(BaseModel):
+    schema_version: int = Field(default=SCHEMA_VERSION, ge=1)
+    quiz: QuizRecord
+    readiness_axes: ReadinessAxes
+    topic_updates: list[TopicMastery]
+    new_gap_ids: list[str]
+
+
+class APIErrorResponse(BaseModel):
+    detail: str
+    code: str
 
 
 class EventEnvelope(BaseModel):

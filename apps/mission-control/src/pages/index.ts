@@ -6,3 +6,4 @@ export { DocumentHubPage } from "./DocumentHubPage";
 export { SessionHistoryPage } from "./SessionHistoryPage";
 export { AskSentinelPage } from "./AskSentinelPage";
 export { PreferencesPage } from "./PreferencesPage";
+export { QuizTabPage } from "./QuizTabPage";

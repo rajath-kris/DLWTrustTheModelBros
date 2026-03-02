@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useCourse } from "../context/CourseContext";
+import { useLearningState } from "../context/StateContext";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import type { KnowledgeGap } from "../types";
 
@@ -26,13 +27,14 @@ type SortId = "priority" | "recency" | "status";
 
 export function KnowledgeGapsPage() {
   const { courseId, courseData } = useCourse();
+  const { state } = useLearningState();
   const [filter, setFilter] = useState<FilterId>("all");
   const [sortBy, setSortBy] = useState<SortId>("priority");
   const [search, setSearch] = useState("");
   const [selectedGapId, setSelectedGapId] = useState<string | null>(null);
 
-  const gaps = courseData?.gaps ?? [];
-  const captureTimestamps = courseData?.captureTimestamps ?? {};
+  const gaps = state?.gaps ?? [];
+  const captureTimestamps = Object.fromEntries((state?.captures ?? []).map((capture) => [capture.capture_id, capture.timestamp_utc]));
   const activeCount = gaps.filter((g) => g.status !== "closed").length;
 
   const filteredAndSorted = useMemo(() => {
@@ -51,7 +53,7 @@ export function KnowledgeGapsPage() {
 
   const selectedGap = selectedGapId ? gaps.find((g) => g.gap_id === selectedGapId) : null;
 
-  if (courseId === "all" || !courseData) {
+  if (courseId === "all" || !courseData || !state) {
     return (
       <div className="page-shell page-fade">
         <h1>Knowledge Gaps</h1>

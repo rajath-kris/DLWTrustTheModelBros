@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCourse } from "../context/CourseContext";
+import { useLearningState } from "../context/StateContext";
 import { DeadlineBanner } from "../components/DeadlineBanner";
 import { DocumentHub } from "../components/DocumentHub";
 import { GapList } from "../components/GapList";
@@ -9,28 +10,10 @@ import { ReadinessRadarTopics } from "../components/ReadinessRadarTopics";
 import { StatCards } from "../components/StatCards";
 import { TopBar } from "../components/TopBar";
 import { TopicMastery } from "../components/TopicMastery";
-import type { LearningState } from "../types";
-import { emptyState } from "../api";
-
-function buildStateFromCourseData(courseData: NonNullable<ReturnType<typeof useCourse>["courseData"]>): LearningState {
-  const s = courseData.stats;
-  return {
-    ...emptyState,
-    readiness_axes: { ...emptyState.readiness_axes, concept_mastery: s.masteryPercent / 100 },
-    gaps: courseData.gaps,
-    captures: Array.from({ length: s.sentinelSessionsThisWeek }, (_, i) => ({
-      capture_id: `mock-${i}`,
-      timestamp_utc: new Date().toISOString(),
-      app_name: "",
-      window_title: "",
-      socratic_prompt: "",
-      gaps: [],
-    })),
-  };
-}
 
 export function MissionControlPage() {
   const { courseId, courseData, allCoursesSummary, setCourseId } = useCourse();
+  const { state } = useLearningState();
   const navigate = useNavigate();
   const [deadlineBannerDismissed, setDeadlineBannerDismissed] = useState(false);
 
@@ -85,7 +68,18 @@ export function MissionControlPage() {
     );
   }
 
-  const state = buildStateFromCourseData(courseData);
+  if (!state) {
+    return (
+      <div className="page-shell page-fade">
+        <TopBar />
+        <p className="status-line">Loading learning state...</p>
+      </div>
+    );
+  }
+
+  const captureTimestampMap = Object.fromEntries(
+    state.captures.map((capture) => [capture.capture_id, capture.timestamp_utc])
+  );
   const weakestTopic =
     courseData.topicScores.length > 0
       ? courseData.topicScores.reduce((acc, t) => (t.current < acc.current ? t : acc))
@@ -104,7 +98,7 @@ export function MissionControlPage() {
         dismissed={deadlineBannerDismissed}
         onDismiss={() => setDeadlineBannerDismissed(true)}
         onViewGaps={() => navigate("/gaps")}
-        openGapsCount={courseData.stats.activeGaps}
+        openGapsCount={state.gaps.filter((gap) => gap.status !== "closed").length}
         deadlines={courseData.deadlines}
         state={state}
       />
@@ -157,8 +151,8 @@ export function MissionControlPage() {
             loading={false}
             error={null}
             onCycleStatus={async () => {}}
-            gaps={courseData.gaps}
-            captureTimestamps={courseData.captureTimestamps}
+            gaps={state.gaps}
+            captureTimestamps={{ ...courseData.captureTimestamps, ...captureTimestampMap }}
           />
           <DocumentHub sectionId="document-hub" documents={courseData.documents} />
         </div>

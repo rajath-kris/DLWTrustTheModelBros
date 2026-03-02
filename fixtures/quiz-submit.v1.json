@@ -1,0 +1,54 @@
+{
+  "request": {
+    "topic": "Binary Trees & Traversal",
+    "sources": ["pyq", "tutorial"],
+    "answers": [
+      {
+        "question_id": "q-tree-postorder",
+        "user_answer": "Post-order"
+      }
+    ]
+  },
+  "response": {
+    "schema_version": 1,
+    "quiz": {
+      "id": "quiz-fixture-1",
+      "topic": "Binary Trees & Traversal",
+      "date_taken": "2026-03-02T10:05:00Z",
+      "sources": ["pyq", "tutorial"],
+      "score": {
+        "correct": 1,
+        "total": 1
+      },
+      "questions": [
+        {
+          "question_id": "q-tree-postorder",
+          "question_text": "Which traversal visits the root node last?",
+          "options": ["In-order", "Pre-order", "Post-order", "Level-order"],
+          "correct_answer": "Post-order",
+          "user_answer": "Post-order",
+          "is_correct": true,
+          "source": "PYQ_2025_Q3",
+          "concept": "Tree Traversals"
+        }
+      ],
+      "mastery_delta": 0.05,
+      "generated_gap_ids": []
+    },
+    "readiness_axes": {
+      "concept_mastery": 0.68,
+      "deadline_pressure": 0.55,
+      "retention_risk": 0.33,
+      "problem_transfer": 0.56,
+      "consistency": 0.85
+    },
+    "topic_updates": [
+      {
+        "topic_id": "trees",
+        "name": "Binary Trees & Traversal",
+        "mastery_score": 0.67
+      }
+    ],
+    "new_gap_ids": []
+  }
+}

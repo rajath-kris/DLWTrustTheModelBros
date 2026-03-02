@@ -108,12 +108,15 @@ def main() -> int:
         summary = {
             'ok': captures_after >= captures_before + 1,
             'health_status': health.get('status'),
+            'state_schema_version': state_after.get('schema_version'),
+            'capture_schema_version': capture.get('schema_version'),
             'captures_before': captures_before,
             'captures_after': captures_after,
             'gaps_after': len(state_after.get('gaps', [])),
             'returned_capture_id': capture.get('capture_id'),
             'returned_gap_count': len(capture.get('gaps', [])),
         }
+        summary['ok'] = bool(summary['ok'] and summary['state_schema_version'] == 1 and summary['capture_schema_version'] == 1)
         print(json.dumps(summary, indent=2))
 
         if not summary['ok']:

@@ -1,7 +1,9 @@
 import { useCourse } from "../context/CourseContext";
+import { useLearningState } from "../context/StateContext";
 
 export function PreferencesPage() {
   const { courses } = useCourse();
+  const { source, setSource } = useLearningState();
 
   return (
     <div className="page-shell page-fade">
@@ -42,6 +44,20 @@ export function PreferencesPage() {
       <section className="prefs-section">
         <h2 className="prefs-section-title">Theme</h2>
         <p className="prefs-desc">Dark theme only for now.</p>
+      </section>
+
+      <section className="prefs-section">
+        <h2 className="prefs-section-title">Data Source</h2>
+        <p className="prefs-desc">Choose whether Mission Control reads normalized mock data or live Bridge API state.</p>
+        <select
+          className="prefs-source-select"
+          value={source}
+          onChange={(event) => setSource(event.target.value as "mock" | "bridge")}
+          aria-label="Data source"
+        >
+          <option value="mock">Mock (parity adapter)</option>
+          <option value="bridge">Bridge API (live)</option>
+        </select>
       </section>
 
       <section className="prefs-section">
