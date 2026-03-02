@@ -20,6 +20,14 @@ If implementation and docs conflict, align code to `vision.md` and update stale 
 - Prioritize observable behavior: logs, smoke checks, and reproducible outcomes.
 - Use goal completion criteria, not time-based language. Do not mention hours.
 
+## Copy-Paste Command Policy
+
+- Always provide copy-paste-safe terminal commands in responses.
+- Always include an explicit repo-root `cd` command before run/build/test/git commands.
+- Always include branch commands when relevant (`git branch --show-current`, `git checkout <branch>`).
+- Do not assume the current working directory or open file context.
+- Prefer command blocks that can be pasted and executed as-is on Windows PowerShell.
+
 ## Product Goals (From vision.md)
 
 ### Goal 1: App-Agnostic Capture Trigger

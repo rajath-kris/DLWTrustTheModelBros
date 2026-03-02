@@ -81,6 +81,20 @@ def _deadline_score_for_concept(concept: str, syllabus: dict) -> float:
     return 0.4
 
 
+def _topic_label_from_gaps(gaps: list[KnowledgeGap]) -> str | None:
+    if not gaps:
+        return None
+    ranked = sorted(
+        gaps,
+        key=lambda gap: (gap.priority_score, gap.severity, gap.confidence),
+        reverse=True,
+    )
+    concept = ranked[0].concept.strip()
+    if not concept:
+        return None
+    return concept
+
+
 def _state_payload() -> dict:
     state = store.read()
     return state.model_dump(mode="json")
@@ -187,6 +201,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         socratic_prompt=socratic.socratic_prompt,
         gaps=new_gaps,
         readiness_axes=readiness,
+        topic_label=_topic_label_from_gaps(new_gaps),
     )
 
 

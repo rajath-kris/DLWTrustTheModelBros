@@ -100,6 +100,7 @@ class CaptureResponse(BaseModel):
     socratic_prompt: str
     gaps: list[KnowledgeGap]
     readiness_axes: ReadinessAxes
+    topic_label: str | None = None
 
 
 class GapStatusUpdate(BaseModel):

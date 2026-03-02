@@ -49,6 +49,7 @@ class AnalysisResult:
     thread_id: str = ""
     turn_index: int = 0
     source_mode: str = ""
+    topic_label: str = ""
     error_message: str = ""
     error_hint: str = ""
     error_category: str = ""
@@ -137,6 +138,7 @@ class SentinelController(QObject):
         self._scenario_label = settings.test_scenario_label
         self._active_thread_id: str | None = None
         self._active_turn_index = 0
+        self._active_topic_label: str | None = None
         self._last_prompt_text = ""
         self._pending_user_input_text: str | None = None
         self._pending_success_result: AnalysisResult | None = None
@@ -192,6 +194,8 @@ class SentinelController(QObject):
             return
 
         self._reset_turn_state()
+        self.overlay.reset_manual_position()
+        self.overlay.reset_topic()
         self._last_region = region
         self.overlay.show_analyzing_state(region)
 
@@ -321,7 +325,11 @@ class SentinelController(QObject):
             if is_turn_analysis:
                 self._thinking_visible_request_id = request_id
                 self._thinking_visible_started_at = time.monotonic()
-                self.overlay.show_thinking_state(context.region, text="Thinking...")
+                self.overlay.show_thinking_state(
+                    context.region,
+                    text="Thinking...",
+                    topic_label=self._active_topic_label,
+                )
             else:
                 self._thinking_visible_request_id = None
                 self._thinking_visible_started_at = None
@@ -329,6 +337,7 @@ class SentinelController(QObject):
                     context.region,
                     status_text="Analyzing your response" if is_turn_analysis else "Analyzing capture",
                     message="Generating your next Socratic prompt...",
+                    topic_label=self._active_topic_label,
                 )
         else:
             self._thinking_visible_request_id = None
@@ -373,6 +382,10 @@ class SentinelController(QObject):
                     result.get("socratic_prompt", "What concept feels least clear in this capture?")
                 ).strip() or "What concept feels least clear in this capture?"
                 capture_id = str(result.get("capture_id", "")).strip()
+                topic_label = self._derive_topic_label(
+                    str(result.get("topic_label", "")).strip(),
+                    result.get("gaps"),
+                )
                 resolved_thread_id = str(result.get("thread_id", "")).strip() or thread_id or capture_id or str(uuid4())
                 resolved_turn_index = self._coerce_turn_index(
                     result.get("turn_index"),
@@ -388,6 +401,7 @@ class SentinelController(QObject):
                         thread_id=resolved_thread_id,
                         turn_index=resolved_turn_index,
                         source_mode=source_mode,
+                        topic_label=topic_label,
                     )
                 )
             except requests.Timeout:
@@ -509,6 +523,7 @@ class SentinelController(QObject):
         if result.status == "success":
             self._active_thread_id = result.thread_id.strip() or self._active_thread_id or result.capture_id or str(uuid4())
             self._active_turn_index = max(0, int(result.turn_index))
+            self._active_topic_label = (result.topic_label or "").strip() or self._active_topic_label
             self._last_prompt_text = result.prompt.strip()
             turn_request_was_submitted = self._pending_user_input_text is not None
             self._pending_user_input_text = None
@@ -524,6 +539,7 @@ class SentinelController(QObject):
             result.error_hint or "Retry, or check bridge status.",
             result.region,
             retry_enabled=self._last_capture_context is not None,
+            topic_label=self._active_topic_label,
         )
         self._thinking_visible_request_id = None
         self._thinking_visible_started_at = None
@@ -567,7 +583,11 @@ class SentinelController(QObject):
             hold_elapsed_ms = int(max(0.0, (time.monotonic() - started_at) * 1000.0))
             hold_ms = max(0, target_hold_ms - hold_elapsed_ms)
         else:
-            self.overlay.show_thinking_state(result.region, text="Thinking...")
+            self.overlay.show_thinking_state(
+                result.region,
+                text="Thinking...",
+                topic_label=self._active_topic_label,
+            )
             self._thinking_visible_request_id = result.request_id
             self._thinking_visible_started_at = time.monotonic()
         self._log_event(
@@ -619,6 +639,7 @@ class SentinelController(QObject):
             turn_index=self._active_turn_index,
             ttl_ms=settings.overlay_prompt_ttl_ms,
             retry_enabled=self._last_capture_context is not None,
+            topic_label=self._active_topic_label,
         )
         self._log_event(
             "request_success",
@@ -688,8 +709,44 @@ class SentinelController(QObject):
     def _reset_turn_state(self) -> None:
         self._active_thread_id = None
         self._active_turn_index = 0
+        self._active_topic_label = None
         self._last_prompt_text = ""
         self._pending_user_input_text = None
+
+    def _derive_topic_label(self, topic_label: str, gaps_raw: Any) -> str:
+        cleaned = " ".join(topic_label.split())
+        if cleaned:
+            return cleaned
+        return self._top_gap_concept(gaps_raw) or "Inference pending"
+
+    def _top_gap_concept(self, gaps_raw: Any) -> str | None:
+        if not isinstance(gaps_raw, list):
+            return None
+        best_concept = ""
+        best_rank = (-1.0, -1.0, -1.0)
+        for item in gaps_raw:
+            if not isinstance(item, dict):
+                continue
+            concept = " ".join(str(item.get("concept", "")).split())
+            if not concept:
+                continue
+            try:
+                priority = float(item.get("priority_score", 0.0))
+            except (TypeError, ValueError):
+                priority = 0.0
+            try:
+                severity = float(item.get("severity", 0.0))
+            except (TypeError, ValueError):
+                severity = 0.0
+            try:
+                confidence = float(item.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+            rank = (priority, severity, confidence)
+            if rank > best_rank:
+                best_rank = rank
+                best_concept = concept
+        return best_concept or None
 
     def _preview_text(self, text: str, max_len: int = 64) -> str:
         collapsed = " ".join(text.split())
@@ -718,6 +775,7 @@ class SentinelController(QObject):
 def main() -> None:
     app = QApplication(sys.argv)
     ui_font_family = load_actor_font(use_actor_font=settings.ui_use_actor_font)
+    overlay_font_family = "Segoe UI Variable Text"
 
     overlay = OverlayBubble(
         min_width=settings.overlay_min_width,
@@ -726,7 +784,7 @@ def main() -> None:
         input_max_chars=settings.overlay_input_max_chars,
         show_input_confirmation=settings.overlay_show_input_confirmation,
         input_required=settings.overlay_input_required,
-        font_family=ui_font_family,
+        font_family=overlay_font_family,
         fade_in_ms=settings.ui_fade_in_ms,
         fade_text_stagger_ms=settings.ui_fade_text_stagger_ms,
         thinking_min_width=settings.overlay_thinking_min_width,
