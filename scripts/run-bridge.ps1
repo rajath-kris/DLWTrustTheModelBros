@@ -3,7 +3,9 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $bridgeDir = Join-Path $repoRoot 'services/bridge-api'
-$bridgePython = Join-Path $bridgeDir '.venv/Scripts/python.exe'
+$isWindowsPlatform = $PSVersionTable.Platform -eq 'Win32NT' -or $env:OS -eq 'Windows_NT'
+$venvPythonPath = if ($isWindowsPlatform) { '.venv/Scripts/python.exe' } else { '.venv/bin/python' }
+$bridgePython = Join-Path $bridgeDir $venvPythonPath
 
 if (-not (Test-Path $bridgePython)) {
     throw 'Missing bridge virtualenv. Run .\scripts\bootstrap.ps1 first.'

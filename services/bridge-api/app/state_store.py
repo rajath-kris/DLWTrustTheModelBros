@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import os
 import threading
 from pathlib import Path
 
-from .models import CaptureEvent, KnowledgeGap, LearningState, ReadinessAxes, utc_now_iso
+from .models import LearningState, ReadinessAxes, SCHEMA_VERSION, CaptureEvent, KnowledgeGap, utc_now_iso
 
 
 class StateStore:
@@ -50,9 +50,25 @@ class StateStore:
 
     def _read_unlocked(self) -> LearningState:
         payload = json.loads(self.file_path.read_text(encoding="utf-8"))
-        return LearningState.model_validate(payload)
+        if "schema_version" not in payload:
+            payload["schema_version"] = SCHEMA_VERSION
+        payload.setdefault("topics", [])
+        payload.setdefault("question_bank", [])
+        payload.setdefault("quizzes", [])
+        state = LearningState.model_validate(payload)
+        # Backfill in-memory if stale payloads were loaded.
+        if state.schema_version != SCHEMA_VERSION:
+            state.schema_version = SCHEMA_VERSION
+        if state.topics is None:
+            state.topics = []
+        if state.question_bank is None:
+            state.question_bank = []
+        if state.quizzes is None:
+            state.quizzes = []
+        return state
 
     def _write_unlocked(self, state: LearningState) -> None:
+        state.schema_version = SCHEMA_VERSION
         state.updated_at = utc_now_iso()
         tmp_path = self.file_path.with_suffix(".tmp")
         tmp_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")

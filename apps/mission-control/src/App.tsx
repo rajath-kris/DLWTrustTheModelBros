@@ -1,4 +1,23 @@
+<<<<<<< Updated upstream
 ﻿import { useEffect, useMemo, useState } from "react";
+=======
+import { Outlet, Route, Routes } from "react-router-dom";
+import { CourseProvider } from "./context/CourseContext";
+import { BrainStateProvider } from "./context/BrainStateContext";
+import { StateProvider } from "./context/LearningStateContext";
+import { AppSidebar } from "./components/AppSidebar";
+import {
+  MissionControlPage,
+  KnowledgeGapsPage,
+  QuizPage,
+  SchedulePage,
+  StudyPlannerPage,
+  DocumentHubPage,
+  SessionHistoryPage,
+  AskSentinelPage,
+  PreferencesPage,
+} from "./pages";
+>>>>>>> Stashed changes
 
 import { API_BASE, emptyState, fetchState, openEventStream, updateGapStatus } from "./api";
 import { RadarChart } from "./components/RadarChart";
@@ -115,6 +134,7 @@ export default function App() {
   }
 
   return (
+<<<<<<< Updated upstream
     <main className="page-shell">
       <section className="hero-panel">
         <div>
@@ -235,5 +255,26 @@ export default function App() {
         </article>
       </section>
     </main>
+=======
+    <StateProvider>
+      <BrainStateProvider>
+        <CourseProvider>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<MissionControlPage />} />
+              <Route path="gaps" element={<KnowledgeGapsPage />} />
+              <Route path="quiz" element={<QuizPage />} />
+              <Route path="schedule" element={<SchedulePage />} />
+              <Route path="planner" element={<StudyPlannerPage />} />
+              <Route path="documents" element={<DocumentHubPage />} />
+              <Route path="history" element={<SessionHistoryPage />} />
+              <Route path="ask" element={<AskSentinelPage />} />
+              <Route path="preferences" element={<PreferencesPage />} />
+            </Route>
+          </Routes>
+        </CourseProvider>
+      </BrainStateProvider>
+    </StateProvider>
+>>>>>>> Stashed changes
   );
 }

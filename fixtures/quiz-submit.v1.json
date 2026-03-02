@@ -1,0 +1,12 @@
+{
+  "topic": "Dynamic Programming",
+  "sources": [
+    "tutorial"
+  ],
+  "answers": [
+    {
+      "question_id": "qb-dp-01",
+      "user_answer": "Define states and valid transitions"
+    }
+  ]
+}

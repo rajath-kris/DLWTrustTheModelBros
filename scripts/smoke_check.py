@@ -102,17 +102,22 @@ def main() -> int:
         )
         state_after = _request_json(f"{args.bridge_url.rstrip('/')}/api/v1/state")
 
+        state_schema_ok = int(state_after.get("schema_version", -1)) == 1
+        capture_schema_ok = int(capture.get("schema_version", -1)) == 1
+
         captures_before = len(state_before.get('captures', []))
         captures_after = len(state_after.get('captures', []))
 
         summary = {
-            'ok': captures_after >= captures_before + 1,
+            'ok': captures_after >= captures_before + 1 and state_schema_ok and capture_schema_ok,
             'health_status': health.get('status'),
             'captures_before': captures_before,
             'captures_after': captures_after,
             'gaps_after': len(state_after.get('gaps', [])),
             'returned_capture_id': capture.get('capture_id'),
             'returned_gap_count': len(capture.get('gaps', [])),
+            'state_schema_version': state_after.get('schema_version'),
+            'capture_schema_version': capture.get('schema_version'),
         }
         print(json.dumps(summary, indent=2))
 

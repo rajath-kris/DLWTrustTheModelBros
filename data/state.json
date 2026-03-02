@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-03-02T16:37:57.083793Z",
+  "captures": [
+    {
+      "capture_id": "capture-seed-001",
+      "timestamp_utc": "2026-03-01T09:10:00Z",
+      "app_name": "Seed App",
+      "window_title": "Lecture Notes",
+      "socratic_prompt": "What assumption are you making before applying this method?",
+      "gaps": [
+        "gap-seed-001"
+      ],
+      "course_id": "all",
+      "module_id": null,
+      "material_id": null,
+      "source_warning": null,
+      "source_context": null
+    },
+    {
+      "capture_id": "1af35945-2d1d-428d-8474-ae7be4233238",
+      "timestamp_utc": "2026-03-02T16:36:47.833955Z",
+      "app_name": "Smoke Check",
+      "window_title": "Smoke Check Window",
+      "socratic_prompt": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "gaps": [
+        "c1391ad5-0aab-4138-9801-1a6d7f5d44fb"
+      ],
+      "course_id": "all",
+      "module_id": null,
+      "material_id": null,
+      "source_warning": "No active module selected; response may not be grounded in uploaded materials.",
+      "source_context": null
+    },
+    {
+      "capture_id": "2d7d9c14-8dc2-4ef2-b0f7-2424d786ad33",
+      "timestamp_utc": "2026-03-02T16:37:57.081417Z",
+      "app_name": "Smoke Check",
+      "window_title": "Smoke Check Window",
+      "socratic_prompt": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "gaps": [
+        "2bded2b6-00a9-4984-a2f8-dd0fe9577b83"
+      ],
+      "course_id": "all",
+      "module_id": null,
+      "material_id": null,
+      "source_warning": "No active module selected; response may not be grounded in uploaded materials.",
+      "source_context": null
+    }
+  ],
+  "gaps": [
+    {
+      "gap_id": "gap-seed-001",
+      "concept": "Dynamic Programming: state transition",
+      "severity": 0.62,
+      "confidence": 0.74,
+      "basis_question": "What is your state and transition?",
+      "basis_answer_excerpt": "I jumped to code without defining transitions.",
+      "gap_type": "concept",
+      "course_id": "all",
+      "module_id": null,
+      "material_id": null,
+      "status": "open",
+      "capture_id": "capture-seed-001",
+      "evidence_url": "http://127.0.0.1:8000/captures/capture-seed-001.png",
+      "deadline_score": 0.45,
+      "priority_score": 0.58
+    },
+    {
+      "gap_id": "c1391ad5-0aab-4138-9801-1a6d7f5d44fb",
+      "concept": "Capture",
+      "severity": 0.58,
+      "confidence": 0.62,
+      "basis_question": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "basis_answer_excerpt": null,
+      "gap_type": "reasoning",
+      "course_id": "all",
+      "module_id": null,
+      "material_id": null,
+      "status": "open",
+      "capture_id": "1af35945-2d1d-428d-8474-ae7be4233238",
+      "evidence_url": "http://127.0.0.1:8000/captures/1af35945-2d1d-428d-8474-ae7be4233238.png",
+      "deadline_score": 0.4,
+      "priority_score": 0.526
+    },
+    {
+      "gap_id": "2bded2b6-00a9-4984-a2f8-dd0fe9577b83",
+      "concept": "Capture",
+      "severity": 0.58,
+      "confidence": 0.62,
+      "basis_question": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "basis_answer_excerpt": null,
+      "gap_type": "reasoning",
+      "course_id": "all",
+      "module_id": null,
+      "material_id": null,
+      "status": "open",
+      "capture_id": "2d7d9c14-8dc2-4ef2-b0f7-2424d786ad33",
+      "evidence_url": "http://127.0.0.1:8000/captures/2d7d9c14-8dc2-4ef2-b0f7-2424d786ad33.png",
+      "deadline_score": 0.4,
+      "priority_score": 0.526
+    }
+  ],
+  "topics": [
+    {
+      "topic": "Dynamic Programming",
+      "mastery": 0.56,
+      "momentum": 0.08,
+      "last_updated": "2026-03-01T09:15:00Z"
+    },
+    {
+      "topic": "Graph Algorithms",
+      "mastery": 0.68,
+      "momentum": -0.02,
+      "last_updated": "2026-03-01T09:15:00Z"
+    },
+    {
+      "topic": "Dynamic Programming: state transition",
+      "mastery": 0.38,
+      "momentum": 0.0,
+      "last_updated": "2026-03-02T16:37:57.083767Z"
+    },
+    {
+      "topic": "Capture",
+      "mastery": 0.42000000000000004,
+      "momentum": 0.0,
+      "last_updated": "2026-03-02T16:37:57.083775Z"
+    }
+  ],
+  "question_bank": [
+    {
+      "question_id": "qb-dp-01",
+      "topic": "Dynamic Programming",
+      "source": "tutorial",
+      "concept": "State transition",
+      "question": "What is the key step when building a DP recurrence?",
+      "options": [
+        "Define states and valid transitions",
+        "Start coding before defining states",
+        "Only optimize space first",
+        "Ignore base cases"
+      ],
+      "correct_answer": "Define states and valid transitions",
+      "explanation": "A correct recurrence starts from explicit state meaning and transitions."
+    },
+    {
+      "question_id": "qb-graph-01",
+      "topic": "Graph Algorithms",
+      "source": "pyq",
+      "concept": "BFS shortest path",
+      "question": "For an unweighted graph, which algorithm gives shortest path length?",
+      "options": [
+        "BFS",
+        "DFS",
+        "Dijkstra with negative edges",
+        "Floyd only"
+      ],
+      "correct_answer": "BFS",
+      "explanation": "BFS explores layer by layer and returns minimum edge distance."
+    }
+  ],
+  "quizzes": [
+    {
+      "quiz_id": "quiz-seed-001",
+      "timestamp_utc": "2026-03-01T10:00:00Z",
+      "topic": "Dynamic Programming",
+      "sources": [
+        "tutorial"
+      ],
+      "total_questions": 1,
+      "correct_answers": 1,
+      "score": 1.0,
+      "results": [
+        {
+          "question_id": "qb-dp-01",
+          "topic": "Dynamic Programming",
+          "source": "tutorial",
+          "concept": "State transition",
+          "user_answer": "Define states and valid transitions",
+          "correct_answer": "Define states and valid transitions",
+          "is_correct": true
+        }
+      ]
+    }
+  ],
+  "readiness_axes": {
+    "concept_mastery": 0.40666666666666673,
+    "deadline_pressure": 0.45,
+    "retention_risk": 0.54,
+    "problem_transfer": 0.28666666666666674,
+    "consistency": 0.9811438191683587
+  },
+  "courses": [
+    {
+      "course_id": "all",
+      "course_name": "All Courses"
+    }
+  ],
+  "topic_mastery": [
+    {
+      "topic_id": "dynamic-programming-state-transition",
+      "course_id": "all",
+      "name": "Dynamic Programming: state transition",
+      "current": 0.38,
+      "target": 0.7,
+      "open_gaps": 1
+    },
+    {
+      "topic_id": "capture",
+      "course_id": "all",
+      "name": "Capture",
+      "current": 0.42000000000000004,
+      "target": 0.7,
+      "open_gaps": 2
+    }
+  ],
+  "study_actions": [
+    {
+      "action_id": "c4a4ade4-abf9-43e6-9857-b11a0e300bdb",
+      "course_id": "all",
+      "topic_id": "dynamic-programming-state-transition",
+      "title": "Review Dynamic Programming: state transition",
+      "rationale": "What is your state and transition?",
+      "eta_minutes": 51,
+      "priority": 0.58,
+      "source_gap_ids": [
+        "gap-seed-001"
+      ]
+    },
+    {
+      "action_id": "c9935c84-b18d-4f19-ade1-876235d0b144",
+      "course_id": "all",
+      "topic_id": "capture",
+      "title": "Review Capture",
+      "rationale": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "eta_minutes": 48,
+      "priority": 0.526,
+      "source_gap_ids": [
+        "c1391ad5-0aab-4138-9801-1a6d7f5d44fb"
+      ]
+    },
+    {
+      "action_id": "aea0c329-4e54-4f64-bba0-3a9db5fc5eba",
+      "course_id": "all",
+      "topic_id": "capture",
+      "title": "Review Capture",
+      "rationale": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "eta_minutes": 48,
+      "priority": 0.526,
+      "source_gap_ids": [
+        "2bded2b6-00a9-4984-a2f8-dd0fe9577b83"
+      ]
+    }
+  ],
+  "deadlines": [],
+  "documents": [],
+  "sessions": [
+    {
+      "session_id": "18116967-ba2b-46b4-be7e-87ae15878878",
+      "course_id": "all",
+      "thread_id": "1af35945-2d1d-428d-8474-ae7be4233238",
+      "turn_index": 0,
+      "timestamp_utc": "2026-03-02T16:36:47.837009Z",
+      "summary": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "topic": "Capture",
+      "gap_ids": [
+        "c1391ad5-0aab-4138-9801-1a6d7f5d44fb"
+      ],
+      "capture_id": "1af35945-2d1d-428d-8474-ae7be4233238"
+    },
+    {
+      "session_id": "dd81b931-0840-4648-a67e-4ee4637bea52",
+      "course_id": "all",
+      "thread_id": "2d7d9c14-8dc2-4ef2-b0f7-2424d786ad33",
+      "turn_index": 0,
+      "timestamp_utc": "2026-03-02T16:37:57.083635Z",
+      "summary": "What is the first principle behind this section, and how would you explain it in one sentence before solving anything?",
+      "topic": "Capture",
+      "gap_ids": [
+        "2bded2b6-00a9-4984-a2f8-dd0fe9577b83"
+      ],
+      "capture_id": "2d7d9c14-8dc2-4ef2-b0f7-2424d786ad33"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 import time
 from typing import Any, Callable
 
@@ -180,7 +181,15 @@ def select_region(telemetry_callback: TelemetryCallback | None = None) -> Captur
     selector = RegionSelector(telemetry_callback=telemetry_callback)
     loop = QEventLoop()
     selector.finished.connect(loop.quit)
-    selector.showFullScreen()
+
+    # On macOS, showFullScreen can open a separate fullscreen Space, which
+    # obscures the current desktop with a black backdrop. Keep the selector as a
+    # normal top-level window that already spans virtualGeometry().
+    if platform.system().lower() == "darwin":
+        selector.show()
+    else:
+        selector.showFullScreen()
+
     selector.activateWindow()
     selector.raise_()
     loop.exec()

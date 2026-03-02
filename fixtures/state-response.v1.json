@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-03-02T00:00:00Z",
+  "captures": [],
+  "gaps": [],
+  "topics": [
+    {
+      "topic": "Dynamic Programming",
+      "mastery": 0.56,
+      "momentum": 0.08,
+      "last_updated": "2026-03-01T09:15:00Z"
+    }
+  ],
+  "question_bank": [
+    {
+      "question_id": "qb-dp-01",
+      "topic": "Dynamic Programming",
+      "source": "tutorial",
+      "concept": "State transition",
+      "question": "What is the key step when building a DP recurrence?",
+      "options": [
+        "Define states and valid transitions",
+        "Start coding before defining states"
+      ],
+      "correct_answer": "Define states and valid transitions",
+      "explanation": "A correct recurrence starts from explicit state meaning and transitions."
+    }
+  ],
+  "quizzes": [],
+  "readiness_axes": {
+    "concept_mastery": 0.6,
+    "deadline_pressure": 0.2,
+    "retention_risk": 0.2,
+    "problem_transfer": 0.55,
+    "consistency": 0.7
+  },
+  "courses": [],
+  "topic_mastery": [],
+  "study_actions": [],
+  "deadlines": [],
+  "documents": [],
+  "sessions": []
+}

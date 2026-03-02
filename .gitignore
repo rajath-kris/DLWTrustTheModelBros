@@ -9,7 +9,8 @@ dist/
 
 # Runtime artifacts
 .env
-data/state.json
+data/sentinel-runtime.json
+data/modules/index.json
 data/captures/*.png
 data/captures/*.jpg
 data/captures/*.jpeg
