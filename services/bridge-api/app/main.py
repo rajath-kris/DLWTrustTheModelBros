@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .grounding import GroundingBundle, chunk_text, extract_supported_text, select_top_chunks, tokenize
 from .models import (
     AskRequest,
     AskResponse,
@@ -78,6 +79,9 @@ runtime_manager = SentinelRuntimeManager(settings)
 MATCH_THRESHOLD = 0.22
 WEAK_MATCH_THRESHOLD = 0.14
 MAX_STUDY_ACTIONS = 5
+MODULE_GROUNDING_LIMIT = 3
+COURSE_DOC_GROUNDING_LIMIT = 2
+GROUNDING_MAX_CONTEXT_CHARS = 6200
 NO_ACTIVE_MODULE_WARNING = "No active module selected; response may not be grounded in uploaded materials."
 NO_MATCH_WARNING_TEMPLATE = (
     "No close match found in uploaded materials for active module '{module_name}'; response is best-effort."
@@ -238,6 +242,231 @@ def _source_warning_for(module: ModuleSummary | None, source_context: SourceCont
     if score >= WEAK_MATCH_THRESHOLD:
         return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
     return NO_MATCH_WARNING_TEMPLATE.format(module_name=module.module_name)
+
+
+def _log_bridge_event(
+    *,
+    event: str,
+    endpoint_path: str,
+    capture_id: str | None = None,
+    reason: str | None = None,
+    **fields: object,
+) -> None:
+    payload: dict[str, object] = {
+        "component": "bridge_api",
+        "event": event,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "endpoint_path": endpoint_path,
+    }
+    if capture_id:
+        payload["capture_id"] = capture_id
+    if reason:
+        payload["reason"] = reason
+    payload.update(fields)
+    print(json.dumps(payload, ensure_ascii=True), flush=True)
+
+
+def _dedupe_text_items(values: list[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = " ".join(value.split()).strip()
+        if not cleaned:
+            continue
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        ordered.append(cleaned)
+    return ordered
+
+
+def _score_chunk(query_tokens: set[str], chunk: str) -> int:
+    if not query_tokens:
+        return 0
+    return len(query_tokens & set(tokenize(chunk)))
+
+
+def _collect_module_grounding(module_id: str | None, query_text: str, limit: int = MODULE_GROUNDING_LIMIT) -> GroundingBundle:
+    requested_module_id = (module_id or "").strip()
+    if not requested_module_id:
+        return GroundingBundle(context_text="", citations=[], warnings=[])
+
+    module = module_store.get_module(requested_module_id)
+    if module is None:
+        return GroundingBundle(
+            context_text="",
+            citations=[],
+            warnings=[f"Grounding skipped: module '{requested_module_id}' was not found."],
+        )
+
+    materials = module_store.list_materials(module.module_id)
+    query_tokens = set(tokenize(query_text))
+    candidates: list[tuple[int, str, str]] = []
+    warnings: list[str] = []
+
+    for material in materials:
+        extracted_path = settings.modules_dir / material.extracted_path
+        if not extracted_path.exists():
+            warnings.append(
+                f"Grounding skipped material '{material.material_name}': extracted text file missing."
+            )
+            continue
+
+        try:
+            extracted_text = extracted_path.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(
+                f"Grounding skipped material '{material.material_name}': read failure ({type(exc).__name__})."
+            )
+            continue
+        if not extracted_text:
+            continue
+
+        material_chunks = chunk_text(extracted_text)
+        top_chunks = select_top_chunks(query_text, material_chunks, limit=1)
+        citation = f"module:{module.module_name}/{material.material_name}"
+        for chunk in top_chunks:
+            candidates.append((_score_chunk(query_tokens, chunk), chunk, citation))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    selected = candidates[: max(1, int(limit))]
+    context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation in selected if chunk.strip()]
+    citations = _dedupe_text_items([citation for _, _, citation in selected])
+    return GroundingBundle(
+        context_text="\n\n---\n\n".join(context_parts),
+        citations=citations,
+        warnings=_dedupe_text_items(warnings),
+    )
+
+
+def _course_document_path_from_url(file_url: str) -> Path | None:
+    marker = "/course-documents/"
+    if marker not in file_url:
+        return None
+    relative = file_url.split(marker, 1)[1].lstrip("/")
+    base = settings.documents_dir.resolve()
+    candidate = (base / Path(relative)).resolve()
+    if base not in candidate.parents and candidate != base:
+        return None
+    return candidate
+
+
+def _collect_course_doc_grounding(
+    state: LearningState,
+    course_id: str,
+    query_text: str,
+    limit: int = COURSE_DOC_GROUNDING_LIMIT,
+) -> GroundingBundle:
+    normalized = _normalize_course_id(course_id)
+    eligible_docs = [
+        doc
+        for doc in state.documents
+        if normalized == "all"
+        or _normalize_course_id(doc.course_id) in {normalized, "all"}
+    ]
+    anchored = sorted(
+        [doc for doc in eligible_docs if doc.is_anchor],
+        key=lambda item: item.uploaded_at,
+        reverse=True,
+    )
+    non_anchored = sorted(
+        [doc for doc in eligible_docs if not doc.is_anchor],
+        key=lambda item: item.uploaded_at,
+        reverse=True,
+    )
+    ordered_docs = [*anchored, *non_anchored]
+
+    query_tokens = set(tokenize(query_text))
+    warnings: list[str] = []
+    candidates: list[tuple[int, str, str]] = []
+
+    for document in ordered_docs:
+        doc_path = _course_document_path_from_url(document.file_url)
+        if doc_path is None:
+            warnings.append(
+                f"Grounding skipped document '{document.name}': unsupported file URL path."
+            )
+            continue
+        if not doc_path.exists():
+            warnings.append(
+                f"Grounding skipped document '{document.name}': file not found."
+            )
+            continue
+
+        extracted_text, parse_warning = extract_supported_text(doc_path)
+        if parse_warning and parse_warning.startswith("Unsupported document type for grounding"):
+            warnings.append(
+                f"Grounding skipped document '{document.name}': {parse_warning}"
+            )
+            continue
+        if parse_warning and extracted_text == "No text detected.":
+            warnings.append(
+                f"Grounding skipped document '{document.name}': {parse_warning}"
+            )
+            continue
+
+        selected_chunks = select_top_chunks(query_text, chunk_text(extracted_text), limit=1)
+        citation = f"course-doc:{document.name}"
+        for chunk in selected_chunks:
+            candidates.append((_score_chunk(query_tokens, chunk), chunk, citation))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    selected = candidates[: max(1, int(limit))]
+    context_parts = [f"[{citation}]\n{chunk}" for _, chunk, citation in selected if chunk.strip()]
+    citations = _dedupe_text_items([citation for _, _, citation in selected])
+    return GroundingBundle(
+        context_text="\n\n---\n\n".join(context_parts),
+        citations=citations,
+        warnings=_dedupe_text_items(warnings),
+    )
+
+
+def _build_grounding_bundle(
+    *,
+    state: LearningState,
+    module_id: str | None,
+    course_id: str,
+    query_text: str,
+) -> GroundingBundle:
+    module_bundle = _collect_module_grounding(
+        module_id=module_id,
+        query_text=query_text,
+        limit=MODULE_GROUNDING_LIMIT,
+    )
+    course_bundle = _collect_course_doc_grounding(
+        state=state,
+        course_id=course_id,
+        query_text=query_text,
+        limit=COURSE_DOC_GROUNDING_LIMIT,
+    )
+
+    combined_context = "\n\n".join(
+        part
+        for part in [module_bundle.context_text.strip(), course_bundle.context_text.strip()]
+        if part
+    )
+    if len(combined_context) > GROUNDING_MAX_CONTEXT_CHARS:
+        combined_context = combined_context[: GROUNDING_MAX_CONTEXT_CHARS - 3].rstrip()
+        combined_context = f"{combined_context}..."
+
+    combined_citations = _dedupe_text_items([*module_bundle.citations, *course_bundle.citations])
+    combined_warnings = _dedupe_text_items([*module_bundle.warnings, *course_bundle.warnings])
+    return GroundingBundle(
+        context_text=combined_context,
+        citations=combined_citations,
+        warnings=combined_warnings,
+    )
+
+
+def _merge_warning_messages(base_warning: str | None, extra_warnings: list[str]) -> str | None:
+    values = []
+    if base_warning:
+        values.append(base_warning)
+    values.extend(extra_warnings)
+    merged = _dedupe_text_items(values)
+    if not merged:
+        return None
+    return " | ".join(merged[:3])
 
 
 def _nearest_deadline_days(deadlines: list[CourseDeadline], course_id: str) -> int | None:
@@ -532,6 +761,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     capture_path.write_bytes(image_bytes)
 
     course_id = _normalize_course_id(payload.course_id or payload.module_id)
+    existing_state = store.read()
 
     syllabus = _load_syllabus()
     extraction = vision_client.extract(image_bytes)
@@ -544,8 +774,44 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         if resolved_module is not None
         else None
     )
-    source_warning = _source_warning_for(resolved_module, source_context)
-    socratic = socratic_client.generate(payload, extraction, syllabus)
+    grounding_query_text = " ".join(
+        part
+        for part in [
+            extraction.raw_text,
+            extraction.summary,
+            " ".join(extraction.tags),
+            payload.user_input_text or "",
+            payload.previous_prompt or "",
+        ]
+        if part and str(part).strip()
+    )
+    grounding_bundle = _build_grounding_bundle(
+        state=existing_state,
+        module_id=resolved_module.module_id if resolved_module is not None else None,
+        course_id=course_id,
+        query_text=grounding_query_text,
+    )
+    for warning in grounding_bundle.warnings:
+        _log_bridge_event(
+            event="grounding_warning",
+            endpoint_path="/api/v1/captures",
+            capture_id=capture_id,
+            reason=warning,
+            course_id=course_id,
+            module_id=resolved_module.module_id if resolved_module is not None else None,
+        )
+
+    source_warning = _merge_warning_messages(
+        _source_warning_for(resolved_module, source_context),
+        grounding_bundle.warnings,
+    )
+    socratic = socratic_client.generate(
+        payload,
+        extraction,
+        syllabus,
+        grounding_context=grounding_bundle.context_text or None,
+        grounding_sources=grounding_bundle.citations or None,
+    )
 
     gap_module_id = source_context.module_id if source_context is not None else None
     gap_material_id = source_context.material_id if source_context is not None else None
@@ -593,7 +859,6 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         source_context=source_context,
     )
 
-    existing_state = store.read()
     merged_gaps = [*existing_state.gaps, *new_gaps]
     readiness = calculate_readiness(merged_gaps)
     state = store.append_capture(event, new_gaps, readiness)
@@ -614,6 +879,15 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     state.readiness_axes = calculate_readiness(state.gaps)
     state = _save_state(state)
     await _publish_state(state)
+    _log_bridge_event(
+        event="capture_processed",
+        endpoint_path="/api/v1/captures",
+        capture_id=capture_id,
+        course_id=course_id,
+        module_id=gap_module_id,
+        grounding_citation_count=len(grounding_bundle.citations),
+        grounding_warning_count=len(grounding_bundle.warnings),
+    )
 
     return CaptureResponse(
         capture_id=capture_id,
@@ -792,20 +1066,35 @@ async def ask_sentinel(request: AskRequest) -> AskResponse:
     normalized = _normalize_course_id(request.course_id)
     thread_id = _sanitize_thread_id((request.thread_id or "").strip() or str(uuid4()))
     next_turn = max(0, int(request.turn_index)) + 1
+    state = store.read()
+    syllabus = _load_syllabus()
+    active_module = _resolve_module(None)
+    grounding_bundle = _build_grounding_bundle(
+        state=state,
+        module_id=active_module.module_id if active_module is not None else None,
+        course_id=normalized,
+        query_text=request.message,
+    )
+    for warning in grounding_bundle.warnings:
+        _log_bridge_event(
+            event="grounding_warning",
+            endpoint_path="/api/v1/ask",
+            reason=warning,
+            course_id=normalized,
+            module_id=active_module.module_id if active_module is not None else None,
+        )
 
     prompt = socratic_client.ask(
         message=request.message,
         thread_id=thread_id,
         turn_index=next_turn,
         course_id=normalized,
+        grounding_context=grounding_bundle.context_text or None,
+        grounding_sources=grounding_bundle.citations or None,
+        syllabus=syllabus,
     )
 
-    state = store.read()
-    citations = [
-        doc.name
-        for doc in state.documents
-        if doc.is_anchor and (_normalize_course_id(doc.course_id) in {normalized, "all"} or normalized == "all")
-    ][:3]
+    citations = grounding_bundle.citations[:3]
 
     state.sessions.append(
         SessionEvent(
@@ -821,6 +1110,15 @@ async def ask_sentinel(request: AskRequest) -> AskResponse:
 
     state = _save_state(state)
     await _publish_state(state)
+    _log_bridge_event(
+        event="ask_processed",
+        endpoint_path="/api/v1/ask",
+        course_id=normalized,
+        thread_id=thread_id,
+        turn_index=next_turn,
+        grounding_citation_count=len(grounding_bundle.citations),
+        grounding_warning_count=len(grounding_bundle.warnings),
+    )
 
     return AskResponse(
         thread_id=thread_id,

@@ -8,6 +8,8 @@ _MAX_SUMMARY_CHARS = 480
 _MAX_PREVIOUS_PROMPT_CHARS = 380
 _MAX_LEARNER_REPLY_CHARS = 600
 _MAX_TAGS = 12
+_MAX_GROUNDING_CHARS = 5200
+_MAX_GROUNDING_SOURCES = 12
 
 
 def _compact_text(value: str | None, max_chars: int, empty_fallback: str) -> str:
@@ -30,13 +32,24 @@ def _compact_tags(tags: list[str]) -> str:
     return ", ".join(cleaned[:_MAX_TAGS])
 
 
-def build_system_prompt(syllabus: dict) -> str:
+def _compact_sources(sources: list[str] | None) -> str:
+    if not sources:
+        return "none"
+    cleaned = [" ".join(source.split()) for source in sources if source and source.strip()]
+    if not cleaned:
+        return "none"
+    return ", ".join(cleaned[:_MAX_GROUNDING_SOURCES])
+
+
+def build_system_prompt(syllabus: dict, grounding_sources: list[str] | None = None) -> str:
+    sources_value = _compact_sources(grounding_sources)
     return (
         "You are Sentinel AI, a Socratic tutor. "
         "Do not provide direct final answers, completed derivations, or final numeric results. "
         "Ask one concise, high-leverage question that advances reasoning. "
         "If the learner asks for the answer, redirect with a guiding question instead. "
         "Keep all interpretation and gap detection inside the syllabus anchor. "
+        "Use grounding context from uploaded materials when relevant, but do not invent facts. "
         "Return strict JSON only with keys socratic_prompt and gaps. "
         "Each gap must include concept, severity, confidence with severity/confidence in [0,1]."
         "\n\n"
@@ -44,6 +57,7 @@ def build_system_prompt(syllabus: dict) -> str:
         "(previous Socratic prompt + learner response + OCR context). "
         "When no learner response exists, infer preliminary gaps from OCR and visual summary only."
         "\n\n"
+        f"GROUNDING_SOURCES: {sources_value}\n\n"
         "SYLLABUS_ANCHOR:\n"
         f"{json.dumps(syllabus, indent=2)}"
     )
@@ -57,6 +71,8 @@ def build_user_prompt(
     user_input_text: str | None = None,
     thread_id: str | None = None,
     turn_index: int = 0,
+    grounding_context: str | None = None,
+    grounding_sources: list[str] | None = None,
 ) -> str:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     previous_prompt_value = _compact_text(previous_prompt, _MAX_PREVIOUS_PROMPT_CHARS, "none")
@@ -64,6 +80,8 @@ def build_user_prompt(
     thread_value = _compact_text(thread_id, 80, "none")
     summary_value = _compact_text(summary, _MAX_SUMMARY_CHARS, "none")
     ocr_value = _compact_text(extracted_text, _MAX_OCR_CHARS, "none")
+    grounding_value = _compact_text(grounding_context, _MAX_GROUNDING_CHARS, "none")
+    grounding_sources_value = _compact_sources(grounding_sources)
     has_learner_response = user_input_value != "none"
 
     turn_mode = "follow_up" if has_learner_response else "first_turn"
@@ -84,7 +102,44 @@ def build_user_prompt(
         f"Previous Socratic prompt: {previous_prompt_value}\n"
         f"Learner response: {user_input_value}\n"
         f"OCR text: {ocr_value}\n\n"
+        f"Grounding sources: {grounding_sources_value}\n"
+        f"Grounding context: {grounding_value}\n\n"
         f"Instruction: {turn_instruction}\n"
         "Return strict JSON with fields: "
         "socratic_prompt (string), gaps (array of objects with concept, severity, confidence)."
+    )
+
+
+def build_ask_system_prompt(syllabus: dict, grounding_sources: list[str] | None = None) -> str:
+    sources_value = _compact_sources(grounding_sources)
+    return (
+        "You are Sentinel AI, a Socratic tutor. "
+        "Respond with one concise Socratic question only. "
+        "Do not provide direct final answers."
+        "\n\n"
+        f"GROUNDING_SOURCES: {sources_value}\n\n"
+        "Stay inside the syllabus anchor and avoid out-of-scope concepts."
+        "\n\n"
+        "SYLLABUS_ANCHOR:\n"
+        f"{json.dumps(syllabus, indent=2)}"
+    )
+
+
+def build_ask_user_prompt(
+    *,
+    message: str,
+    thread_id: str,
+    turn_index: int,
+    course_id: str,
+    grounding_context: str | None = None,
+) -> str:
+    cleaned_message = _compact_text(message, 900, "Help me understand this topic.")
+    grounding_value = _compact_text(grounding_context, _MAX_GROUNDING_CHARS, "none")
+    return (
+        f"Course id: {course_id}\n"
+        f"Thread id: {thread_id}\n"
+        f"Turn index: {max(0, int(turn_index))}\n"
+        f"Learner message: {cleaned_message}\n"
+        f"Grounding context: {grounding_value}\n"
+        "Return only the next Socratic question."
     )
