@@ -199,7 +199,6 @@ class SentinelController(QObject):
         self.overlay.reset_manual_position()
         self.overlay.reset_topic()
         self._last_region = region
-        self.overlay.show_analyzing_state(region)
 
         try:
             context = self._build_capture_context(region)
@@ -223,7 +222,8 @@ class SentinelController(QObject):
         self._start_analysis(
             context,
             source_mode=source_mode,
-            show_loading=False,
+            show_loading=True,
+            use_thinking_loading=True,
             thread_id=None,
             turn_index=0,
             previous_prompt=None,
@@ -253,6 +253,7 @@ class SentinelController(QObject):
             context,
             source_mode="retry",
             show_loading=True,
+            use_thinking_loading=False,
             thread_id=self._active_thread_id,
             turn_index=self._active_turn_index,
             previous_prompt=self._last_prompt_text or None,
@@ -289,6 +290,7 @@ class SentinelController(QObject):
             context,
             source_mode="user_input_submit",
             show_loading=True,
+            use_thinking_loading=False,
             thread_id=self._active_thread_id,
             turn_index=self._active_turn_index,
             previous_prompt=self._last_prompt_text or None,
@@ -313,6 +315,7 @@ class SentinelController(QObject):
         context: CaptureContext,
         source_mode: str,
         show_loading: bool,
+        use_thinking_loading: bool,
         thread_id: str | None,
         turn_index: int,
         previous_prompt: str | None,
@@ -324,12 +327,11 @@ class SentinelController(QObject):
         self._request_started_at[request_id] = time.monotonic()
 
         if show_loading:
-            if is_turn_analysis:
+            if is_turn_analysis or use_thinking_loading:
                 self._thinking_visible_request_id = request_id
                 self._thinking_visible_started_at = time.monotonic()
                 self.overlay.show_thinking_state(
                     context.region,
-                    text="Thinking...",
                     topic_label=self._active_topic_label,
                 )
             else:
@@ -338,7 +340,7 @@ class SentinelController(QObject):
                 self.overlay.show_analyzing_state(
                     context.region,
                     status_text="Analyzing your response" if is_turn_analysis else "Analyzing capture",
-                    message="Generating your next Socratic prompt...",
+                    message="Preparing follow-up guidance...",
                     topic_label=self._active_topic_label,
                 )
         else:
@@ -598,7 +600,6 @@ class SentinelController(QObject):
         else:
             self.overlay.show_thinking_state(
                 result.region,
-                text="Thinking...",
                 topic_label=self._active_topic_label,
             )
             self._thinking_visible_request_id = result.request_id

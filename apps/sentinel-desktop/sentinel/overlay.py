@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import html
 from enum import Enum
 from typing import Any, Callable
 
@@ -11,13 +12,13 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from .types import CaptureRegion
 from .ui_theme import qss_font_family_stack
-from .window_effects import apply_blur_behind_for_widget
 
 
 class OverlayState(str, Enum):
@@ -95,8 +96,6 @@ class OverlayBubble(QWidget):
         self._current_topic = "Inference pending"
         self._submit_default_intent = "Continue with the next Socratic step."
         self._telemetry_callback: Callable[[str, dict[str, Any]], None] | None = None
-        self._native_blur_attempted = False
-        self._native_blur_enabled = False
         self._pending_hide_previous_state = OverlayState.HIDDEN.value
         self._pending_hide_reason = "manual"
         self._animation_mode: str | None = None
@@ -104,11 +103,14 @@ class OverlayBubble(QWidget):
         self._placement_anchor_key: tuple[int, int, int, int] | None = None
         self._placement_side: str = "right"
         self._placement_point: QPoint | None = None
+        self._geometry_anim_ms = 160
 
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
-        self._thinking_frames = ["Thinking.", "Thinking..", "Thinking..."]
-        self._thinking_index = 0
+        self._thinking_text = "Agent is Thinking"
+        self._thinking_shimmer_step = 0
+        self._thinking_shimmer_width = 5
+        self._thinking_shimmer_interval_ms = 45
 
         self.setObjectName("OverlayRoot")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -126,10 +128,30 @@ class OverlayBubble(QWidget):
         self._top_highlight.setObjectName("TopHighlight")
         self._top_highlight.setFixedHeight(2)
 
+        self._dismiss_button = QPushButton("×", self._card)
+        self._dismiss_button.setObjectName("DismissButton")
+        self._dismiss_button.setToolTip("Dismiss (Esc)")
+        self._dismiss_button.setAccessibleName("Dismiss")
+        self._dismiss_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._dismiss_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._dismiss_button.setFixedSize(20, 20)
+        self._dismiss_button.clicked.connect(self._on_dismiss_clicked)
+
         self._message_label = QLabel("", self._card)
         self._message_label.setObjectName("MessageLabel")
         self._message_label.setWordWrap(True)
         self._message_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._message_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._message_label.setMinimumWidth(0)
+
+        self._message_row = QFrame(self._card)
+        self._message_row.setObjectName("MessageRow")
+        message_layout = QHBoxLayout()
+        message_layout.setContentsMargins(0, 0, 0, 0)
+        message_layout.setSpacing(8)
+        message_layout.addWidget(self._dismiss_button, stretch=0, alignment=Qt.AlignmentFlag.AlignTop)
+        message_layout.addWidget(self._message_label, stretch=1)
+        self._message_row.setLayout(message_layout)
 
         self._loading_label = QLabel("", self._card)
         self._loading_label.setObjectName("LoadingLabel")
@@ -147,18 +169,30 @@ class OverlayBubble(QWidget):
         self._input_edit.setPlaceholderText("Type your response...")
         self._input_edit.setMaxLength(self._input_max_chars)
         self._input_edit.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self._input_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._input_edit.setMinimumWidth(0)
         self._input_edit.submit_pressed.connect(self._on_submit_clicked)
         self._input_edit.focus_intent.connect(self._on_input_focus_intent)
         self._input_edit.escape_pressed.connect(self._on_dismiss_clicked)
 
+        self._submit_button = QPushButton("→", self._composer)
+        self._submit_button.setObjectName("SubmitButton")
+        self._submit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._submit_button.clicked.connect(self._on_submit_clicked)
+        self._submit_button.setToolTip("Submit (Enter)")
+        self._submit_button.setAccessibleName("Submit")
+        self._submit_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._submit_button.setFixedSize(24, 24)
+
         input_palette = self._input_edit.palette()
-        input_palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(210, 220, 231, 140))
+        input_palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(214, 225, 238, 170))
         self._input_edit.setPalette(input_palette)
 
         composer_layout = QHBoxLayout()
-        composer_layout.setContentsMargins(10, 6, 10, 6)
-        composer_layout.setSpacing(8)
+        composer_layout.setContentsMargins(8, 5, 8, 5)
+        composer_layout.setSpacing(6)
         composer_layout.addWidget(self._input_edit, stretch=1)
+        composer_layout.addWidget(self._submit_button, stretch=0)
         self._composer.setLayout(composer_layout)
 
         self._actions_row = QFrame(self._card)
@@ -171,40 +205,23 @@ class OverlayBubble(QWidget):
         self._retry_button.setToolTip("Retry request")
         self._retry_button.setAccessibleName("Retry")
 
-        self._dismiss_button = QPushButton("×", self._actions_row)
-        self._dismiss_button.setObjectName("DismissButton")
-        self._dismiss_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._dismiss_button.clicked.connect(self._on_dismiss_clicked)
-        self._dismiss_button.setToolTip("Dismiss (Esc)")
-        self._dismiss_button.setAccessibleName("Dismiss")
-
-        self._submit_button = QPushButton("→", self._actions_row)
-        self._submit_button.setObjectName("SubmitButton")
-        self._submit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._submit_button.clicked.connect(self._on_submit_clicked)
-        self._submit_button.setToolTip("Submit (Enter)")
-        self._submit_button.setAccessibleName("Submit")
-
-        for button in (self._retry_button, self._dismiss_button, self._submit_button):
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setFixedHeight(28)
-            button.setMinimumWidth(32)
-            button.setMaximumWidth(34)
+        self._retry_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._retry_button.setFixedHeight(28)
+        self._retry_button.setMinimumWidth(32)
+        self._retry_button.setMaximumWidth(34)
 
         actions_layout = QHBoxLayout()
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(6)
         actions_layout.addWidget(self._retry_button, stretch=0)
-        actions_layout.addWidget(self._dismiss_button, stretch=0)
-        actions_layout.addWidget(self._submit_button, stretch=0)
         actions_layout.addStretch(1)
         self._actions_row.setLayout(actions_layout)
 
         card_layout = QVBoxLayout()
-        card_layout.setContentsMargins(15, 12, 15, 12)
-        card_layout.setSpacing(8)
+        card_layout.setContentsMargins(14, 10, 14, 10)
+        card_layout.setSpacing(6)
         card_layout.addWidget(self._top_highlight)
-        card_layout.addWidget(self._message_label)
+        card_layout.addWidget(self._message_row)
         card_layout.addWidget(self._loading_label)
         card_layout.addWidget(self._prompt_divider)
         card_layout.addWidget(self._composer)
@@ -229,6 +246,9 @@ class OverlayBubble(QWidget):
         self._opacity_animation = QPropertyAnimation(self, b"windowOpacity", self)
         self._opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._opacity_animation.finished.connect(self._on_opacity_animation_finished)
+        self._geometry_animation = QPropertyAnimation(self, b"geometry", self)
+        self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._geometry_animation.setDuration(self._geometry_anim_ms)
 
         self._set_prompt_mode_visible(False)
         self._set_error_mode_visible(False)
@@ -263,7 +283,7 @@ class OverlayBubble(QWidget):
         self,
         region: CaptureRegion,
         status_text: str = "Analyzing capture",
-        message: str = "Preparing your next Socratic prompt...",
+        message: str = "Preparing guidance...",
         topic_label: str | None = None,
     ) -> None:
         self._state = OverlayState.ANALYZING
@@ -272,11 +292,13 @@ class OverlayBubble(QWidget):
         self._set_input_mode(False)
         self._set_prompt_mode_visible(False)
         self._set_error_mode_visible(False)
+        self._message_label.setTextFormat(Qt.TextFormat.PlainText)
         self._message_label.setText(f"{status_text.strip() or 'Analyzing'}\n{message.strip() or ''}".strip())
         self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._loading_index = 0
         self._loading_label.setText(self._loading_frames[self._loading_index])
         self._loading_label.show()
+        self._loading_timer.setInterval(self._loading_dot_interval_ms)
         self._loading_timer.start()
         self._auto_hide_timer.stop()
         self.set_retry_enabled(False)
@@ -294,19 +316,19 @@ class OverlayBubble(QWidget):
         text: str = "Thinking...",
         topic_label: str | None = None,
     ) -> None:
+        _ = text  # Keep argument for compatibility; visual copy is fixed for thinking state.
         self._state = OverlayState.THINKING
         self._anchor_region = region
         self._resolve_topic(topic_label)
         self._set_input_mode(False)
         self._set_prompt_mode_visible(False)
         self._set_error_mode_visible(False)
-        base = text.strip().rstrip(".") or "Thinking"
-        self._thinking_frames = [f"{base}.", f"{base}..", f"{base}..."]
-        self._thinking_index = len(self._thinking_frames) - 1
-        self._message_label.setText(self._thinking_frames[self._thinking_index])
+        self._thinking_shimmer_step = 0
+        self._message_label.setTextFormat(Qt.TextFormat.RichText)
+        self._message_label.setText(self._build_thinking_shimmer_markup(self._thinking_shimmer_step))
         self._message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._loading_label.setText("Processing")
-        self._loading_label.show()
+        self._loading_label.hide()
+        self._loading_timer.setInterval(self._thinking_shimmer_interval_ms)
         self._loading_timer.start()
         self._auto_hide_timer.stop()
         self._render_and_show(
@@ -318,7 +340,7 @@ class OverlayBubble(QWidget):
             "overlay_state_thinking",
             state=self._state.value,
             region=self._region_payload(region),
-            message=self._thinking_frames[self._thinking_index],
+            message=self._thinking_text,
             topic_label=self._current_topic,
         )
 
@@ -341,6 +363,7 @@ class OverlayBubble(QWidget):
         self._set_error_mode_visible(False)
         self._set_prompt_mode_visible(True)
         self._clear_input()
+        self._message_label.setTextFormat(Qt.TextFormat.PlainText)
         self._message_label.setText(prompt.strip())
         self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._loading_timer.stop()
@@ -386,6 +409,7 @@ class OverlayBubble(QWidget):
         self._set_input_mode(False)
         self._set_prompt_mode_visible(False)
         self._set_error_mode_visible(True)
+        self._message_label.setTextFormat(Qt.TextFormat.PlainText)
         details = message.strip()
         if hint.strip():
             details = f"{details}\n{hint.strip()}".strip()
@@ -412,6 +436,8 @@ class OverlayBubble(QWidget):
         self._loading_timer.stop()
         self._loading_label.hide()
         self._set_input_mode(False)
+        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+            self._geometry_animation.stop()
 
         if not self.isVisible():
             self._complete_hide(previous_state=previous_state, reason=reason)
@@ -434,11 +460,10 @@ class OverlayBubble(QWidget):
         self._prompt_divider.setVisible(visible)
         self._submit_button.setVisible(visible)
         self._submit_button.setEnabled(visible)
-        self._dismiss_button.setVisible(visible)
-        self._dismiss_button.setEnabled(visible)
         self._retry_button.setVisible(False)
-        self._actions_row.setVisible(visible)
+        self._actions_row.setVisible(False)
         self._input_edit.setEnabled(visible)
+        self._dismiss_button.setVisible(visible)
 
     def _set_error_mode_visible(self, visible: bool) -> None:
         self._composer.setVisible(False)
@@ -446,10 +471,9 @@ class OverlayBubble(QWidget):
         self._submit_button.setVisible(False)
         self._retry_button.setVisible(visible)
         self._retry_button.setEnabled(visible and self._retry_button.isEnabled())
-        self._dismiss_button.setVisible(visible)
-        self._dismiss_button.setEnabled(visible)
         self._actions_row.setVisible(visible)
         self._input_edit.setEnabled(False)
+        self._dismiss_button.setVisible(visible)
 
     def _render_and_show(
         self,
@@ -507,7 +531,6 @@ class OverlayBubble(QWidget):
         first_show = not self.isVisible()
         self.show()
         self.raise_()
-        self._apply_native_blur_if_needed()
         self._play_show_animation(self._state, first_show=first_show)
 
     def _resolve_position(
@@ -638,12 +661,43 @@ class OverlayBubble(QWidget):
             return
 
         if self._state == OverlayState.THINKING:
-            self._thinking_index = (self._thinking_index + 1) % len(self._thinking_frames)
-            self._message_label.setText(self._thinking_frames[self._thinking_index])
+            self._thinking_shimmer_step += 1
+            self._message_label.setText(self._build_thinking_shimmer_markup(self._thinking_shimmer_step))
             return
 
         self._loading_timer.stop()
         self._loading_label.hide()
+
+    def _build_thinking_shimmer_markup(self, step: int) -> str:
+        text = self._thinking_text
+        if not text:
+            return "Agent is Thinking"
+
+        width = max(2, min(self._thinking_shimmer_width, len(text)))
+        cycle_len = len(text) + (width * 2)
+        center = (step % cycle_len) - width
+        base = (201, 212, 227, 188)
+        highlight = (245, 249, 255, 250)
+        parts: list[str] = []
+
+        for index, char in enumerate(text):
+            distance = abs(index - center)
+            strength = max(0.0, 1.0 - (distance / max(1, width)))
+            red = self._lerp_channel(base[0], highlight[0], strength)
+            green = self._lerp_channel(base[1], highlight[1], strength)
+            blue = self._lerp_channel(base[2], highlight[2], strength)
+            alpha = self._lerp_channel(base[3], highlight[3], strength)
+            weight = 500 if strength < 0.35 else 600
+            escaped = "&nbsp;" if char == " " else html.escape(char, quote=False)
+            parts.append(
+                f'<span style="color: rgba({red}, {green}, {blue}, {alpha}); font-weight: {weight};">{escaped}</span>'
+            )
+        return "".join(parts)
+
+    @staticmethod
+    def _lerp_channel(start: int, end: int, factor: float) -> int:
+        bounded = max(0.0, min(1.0, factor))
+        return int(start + ((end - start) * bounded))
 
     def _on_auto_hide_timeout(self) -> None:
         self._emit(
@@ -834,6 +888,8 @@ class OverlayBubble(QWidget):
 
     def _complete_hide(self, previous_state: str, reason: str) -> None:
         self._animation_mode = None
+        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+            self._geometry_animation.stop()
         self.setWindowOpacity(1.0)
         self.hide()
         self._emit(
@@ -844,30 +900,50 @@ class OverlayBubble(QWidget):
             region=self._region_payload(self._anchor_region),
         )
 
-    def _apply_native_blur_if_needed(self) -> None:
-        if self._native_blur_attempted:
-            return
-        if not self.isVisible() or self.width() <= 1 or self.height() <= 1:
-            return
-        self._native_blur_attempted = True
-        if self.windowHandle() is None:
-            self.winId()
-        self._native_blur_enabled = apply_blur_behind_for_widget(self, blur_strength=14)
-        self._emit(
-            "overlay_native_blur_result",
-            state=self._state.value,
-            enabled=self._native_blur_enabled,
-        )
-
     def _apply_window_geometry(self, x: int, y: int, width: int, height: int) -> None:
         target_width = max(1, int(width))
         target_height = max(1, int(height))
         target_x = int(x)
         target_y = int(y)
-        if self.width() != target_width or self.height() != target_height:
-            self.resize(target_width, target_height)
-        if self.x() != target_x or self.y() != target_y:
-            self.move(target_x, target_y)
+        target_rect = QRect(target_x, target_y, target_width, target_height)
+        current_rect = self.geometry()
+        if current_rect == target_rect:
+            return
+
+        if (
+            not self.isVisible()
+            or current_rect.width() <= 1
+            or current_rect.height() <= 1
+        ):
+            self.setGeometry(target_rect)
+            return
+
+        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+            self._geometry_animation.stop()
+            current_rect = self.geometry()
+            if current_rect == target_rect:
+                return
+
+        size_changed = (
+            current_rect.width() != target_rect.width()
+            or current_rect.height() != target_rect.height()
+        )
+        if not size_changed:
+            self.setGeometry(target_rect)
+            return
+
+        delta = abs(target_rect.width() - current_rect.width()) + abs(target_rect.height() - current_rect.height())
+        expanding = target_rect.width() > current_rect.width() or target_rect.height() > current_rect.height()
+        if self._state == OverlayState.PROMPT and expanding:
+            duration = self._clamp(int(220 + (delta * 0.45)), 220, 360)
+            self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
+        else:
+            duration = self._clamp(int(120 + (delta * 0.35)), 120, 220)
+            self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._geometry_animation.setDuration(duration)
+        self._geometry_animation.setStartValue(current_rect)
+        self._geometry_animation.setEndValue(target_rect)
+        self._geometry_animation.start()
 
     def _region_payload(self, region: CaptureRegion | None) -> dict[str, int] | None:
         if region is None:
@@ -892,33 +968,48 @@ class OverlayBubble(QWidget):
             }
 
             QFrame#ResponseCard {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 rgba(54, 74, 98, 112),
-                    stop: 0.40 rgba(34, 46, 64, 96),
-                    stop: 1 rgba(18, 25, 38, 82)
-                );
-                border: 1px solid rgba(242, 248, 255, 72);
+                background: rgba(8, 11, 15, 166);
+                border: none;
                 border-radius: 16px;
             }
 
             QFrame#TopHighlight {
                 border: none;
                 border-radius: 1px;
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 rgba(186, 212, 242, 28),
-                    stop: 0.5 rgba(214, 234, 255, 146),
-                    stop: 1 rgba(186, 212, 242, 28)
-                );
+                background: rgba(219, 231, 245, 36);
+            }
+
+            QFrame#MessageRow {
+                background: transparent;
+                border: none;
+            }
+
+            QPushButton#DismissButton {
+                background: rgba(34, 41, 50, 232);
+                border: 1px solid rgba(214, 226, 241, 38);
+                border-radius: 10px;
+                color: rgba(226, 236, 248, 210);
+                font-family: __FONT_STACK__;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 0px;
+                margin: 0px;
+            }
+
+            QPushButton#DismissButton:hover {
+                background: rgba(42, 50, 60, 236);
+            }
+
+            QPushButton#DismissButton:pressed {
+                background: rgba(27, 33, 40, 240);
             }
 
             QLabel#MessageLabel {
                 background: transparent;
                 border: none;
-                color: rgba(239, 245, 252, 226);
+                color: rgba(242, 247, 253, 236);
                 font-family: __FONT_STACK__;
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 500;
                 selection-background-color: rgba(116, 154, 194, 120);
                 selection-color: rgba(247, 251, 255, 250);
@@ -927,44 +1018,35 @@ class OverlayBubble(QWidget):
             QLabel#LoadingLabel {
                 background: transparent;
                 border: none;
-                color: rgba(196, 208, 223, 178);
+                color: rgba(201, 212, 227, 190);
                 font-family: __FONT_STACK__;
-                font-size: 11px;
+                font-size: 10px;
                 font-weight: 450;
                 letter-spacing: 0.3px;
             }
 
             QFrame#PromptDivider {
                 border: none;
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 rgba(248, 252, 255, 14),
-                    stop: 0.5 rgba(248, 252, 255, 64),
-                    stop: 1 rgba(248, 252, 255, 14)
-                );
+                background: rgba(228, 237, 249, 56);
                 min-height: 1px;
                 max-height: 1px;
             }
 
             QFrame#ComposerPanel {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 0,
-                    stop: 0 rgba(14, 22, 34, 118),
-                    stop: 1 rgba(10, 16, 26, 104)
-                );
-                border: 1px solid rgba(244, 248, 255, 60);
+                background: rgba(0, 0, 0, 214);
+                border: 1px solid rgba(220, 231, 244, 74);
                 border-radius: 11px;
             }
 
             QLineEdit#InputEdit {
                 background: transparent;
                 border: none;
-                color: rgba(244, 248, 255, 234);
+                color: rgba(245, 249, 255, 238);
                 font-family: __FONT_STACK__;
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 450;
-                padding: 4px 2px;
-                selection-background-color: rgba(120, 160, 200, 122);
+                padding: 3px 1px;
+                selection-background-color: rgba(105, 139, 170, 132);
                 selection-color: rgba(248, 251, 255, 250);
             }
 
@@ -977,13 +1059,11 @@ class OverlayBubble(QWidget):
                 border: none;
             }
 
-            QPushButton#SubmitButton,
-            QPushButton#DismissButton,
             QPushButton#RetryButton {
                 border-radius: 9px;
                 padding: 0px;
                 font-family: __FONT_STACK__;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 600;
                 min-height: 28px;
                 max-height: 28px;
@@ -992,54 +1072,43 @@ class OverlayBubble(QWidget):
             }
 
             QPushButton#SubmitButton {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 rgba(112, 172, 224, 150),
-                    stop: 1 rgba(95, 159, 216, 134)
-                );
-                color: rgba(244, 249, 255, 238);
-                border: 1px solid rgba(206, 230, 255, 88);
+                background: rgba(22, 124, 203, 238);
+                color: rgba(245, 251, 255, 244);
+                border: 1px solid rgba(74, 162, 230, 144);
+                border-radius: 12px;
+                padding: 0px;
+                min-height: 24px;
+                max-height: 24px;
+                min-width: 24px;
+                max-width: 24px;
+                font-family: __FONT_STACK__;
+                font-size: 10px;
+                font-weight: 700;
             }
 
             QPushButton#SubmitButton:hover {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 rgba(112, 172, 224, 160),
-                    stop: 1 rgba(95, 159, 216, 144)
-                );
+                background: rgba(30, 134, 213, 244);
             }
 
             QPushButton#SubmitButton:pressed {
-                background: rgba(95, 159, 216, 158);
+                background: rgba(16, 106, 173, 245);
             }
 
-            QPushButton#DismissButton,
             QPushButton#RetryButton {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 rgba(248, 251, 255, 56),
-                    stop: 1 rgba(232, 240, 250, 36)
-                );
-                color: rgba(234, 241, 250, 232);
-                border: 1px solid rgba(246, 249, 253, 62);
+                background: rgba(62, 83, 103, 222);
+                color: rgba(232, 241, 251, 236);
+                border: 1px solid rgba(184, 202, 223, 104);
             }
 
-            QPushButton#DismissButton:hover,
             QPushButton#RetryButton:hover {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 0, y2: 1,
-                    stop: 0 rgba(248, 251, 255, 64),
-                    stop: 1 rgba(232, 240, 250, 42)
-                );
+                background: rgba(68, 91, 113, 228);
             }
 
-            QPushButton#DismissButton:pressed,
             QPushButton#RetryButton:pressed {
-                background: rgba(232, 240, 250, 38);
+                background: rgba(56, 76, 95, 232);
             }
 
             QPushButton#SubmitButton:disabled,
-            QPushButton#DismissButton:disabled,
             QPushButton#RetryButton:disabled {
                 color: rgba(176, 188, 202, 140);
                 background-color: rgba(246, 249, 253, 14);

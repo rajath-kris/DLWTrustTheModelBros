@@ -8,7 +8,7 @@ This document defines the visual and interaction system for Sentinel desktop UI 
 - `apps/sentinel-desktop/sentinel/region_selector.py`
 - `apps/sentinel-desktop/sentinel/main.py` (Journey Control panel)
 - `apps/sentinel-desktop/sentinel/ui_theme.py`
-- `apps/sentinel-desktop/sentinel/window_effects.py` (composition policy only)
+- `apps/sentinel-desktop/sentinel/window_effects.py` (diagnostic utility; not active in overlay runtime)
 
 This document explicitly excludes Mission Control (`apps/mission-control/*`).
 
@@ -35,31 +35,32 @@ Use these tokens as target values unless explicitly overridden by component cons
 | Token | Target |
 | --- | --- |
 | `card.radius` | `16px` |
-| `card.border.alpha` | `62-74` |
-| `card.fill.alpha.stops` | `112 / 96 / 82` |
+| `card.border.alpha` | `88` |
+| `card.fill` | solid black tint `rgba(8,11,15,166)` (no gradient) |
 | `highlight.rail.height` | `2px` |
 | `divider.height` | `1px` |
-| `divider.alpha.edges/center` | `14 / 64` |
+| `divider.alpha` | `56` |
 | `composer.radius` | `11px` |
-| `composer.fill.alpha.stops` | `118 / 104` |
-| `composer.border.alpha` | `56-62` |
+| `composer.fill` | solid black `rgba(0,0,0,214)` (more opaque than card) |
+| `composer.border.alpha` | `74` |
 
 ### Typography Tokens
 
 | Token | Target |
 | --- | --- |
 | `font.family` | from `qss_font_family_stack(...)` |
-| `message.size/weight` | `14px / 500` |
-| `input.size/weight` | `13px / 450` |
-| `loading.size/weight` | `11px / 450` |
-| `button.icon.size/weight` | `12px / 600` |
+| `message.size/weight` | `13px / 500` |
+| `input.size/weight` | `12px / 450` |
+| `loading.size/weight` | `10px / 450` |
+| `button.icon.size/weight` | `11px / 600` |
 
 ### Spacing Tokens
 
 | Token | Target |
 | --- | --- |
-| `card.padding` | `15 12 15 12` |
-| `card.spacing` | `8px` |
+| `card.padding` | `14 10 14 10` |
+| `card.spacing` | `6px` |
+| `composer.padding` | `8 5 8 5` |
 | `action.gap` | `6px` |
 | `button.size` | `32-34w x 28h` |
 | `button.radius` | `9px` |
@@ -68,10 +69,12 @@ Use these tokens as target values unless explicitly overridden by component cons
 
 | Token | Target |
 | --- | --- |
-| `accent.primary.base` | neutral blue (`#5F9FD8` family) |
-| `text.primary` | light cool white (`alpha >= 226`) |
-| `text.secondary` | muted cool gray-blue |
-| `frost.secondary.button` | near-white low alpha gradient |
+| `card.base` | near-black translucent (`rgba(8,11,15,166)`) |
+| `composer.base` | black, higher-opacity than card (`rgba(0,0,0,214)`) |
+| `accent.primary.base` | muted neutral blue (`rgba(86,124,156,230)`) |
+| `text.primary` | light cool white (`alpha 236+`) |
+| `text.secondary` | muted cool gray-blue (`alpha ~190`) |
+| `secondary.button.base` | opaque desaturated blue-gray (`rgba(62,83,103,222)`) |
 | `selection.stroke` | bright green accent (selector) |
 
 ### Motion Tokens
@@ -84,23 +87,15 @@ Use these tokens as target values unless explicitly overridden by component cons
 | `easing` | `OutCubic` |
 | `escape.hide` | immediate |
 
-## 4) Blur / Composition Policy
+## 4) Composition Policy
 
-Native composition is controlled via `SENTINEL_OVERLAY_BLUR_MODE`.
-
-### Runtime modes
-
-- `dwm_first`: production default, preferred for balanced style fidelity.
-- `dwm_only`: tuning mode for style work and screenshot comparisons.
-- `acrylic_first`: use only when DWM-only parity is unacceptable on specific machines.
-- `acrylic_only`: diagnostic fallback.
-- `off`: style-isolation diagnostic mode.
+Overlay materials are QSS-authored only for this UI baseline. Runtime blur injection is not called from `overlay.py`.
 
 ### Rules
 
-- Do not raise acrylic tint alpha to values that mask QSS layers.
-- Prefer DWM path first to preserve QSS-authored materials.
-- Any blur tuning must preserve readability and avoid warning-noise regressions.
+- Keep card/composer legibility by tuning QSS alpha values, not native acrylic composition.
+- Keep `window_effects.py` available for diagnostics and controlled experiments only.
+- Any future blur reintroduction must pass warning-noise gates and preserve focus/placement behavior.
 
 ## 5) Component Specs
 
@@ -161,8 +156,8 @@ Native composition is controlled via `SENTINEL_OVERLAY_BLUR_MODE`.
 ## 7) Accessibility and Legibility
 
 - Minimum size:
-  - prompt/message text >= `14px`
-  - input text >= `13px`
+  - prompt/message text >= `13px`
+  - input text >= `12px`
 - Keep tooltips for icon-only buttons:
   - Submit (Enter), Dismiss (Esc), Retry request
 - Maintain sufficient text/background contrast on light and dark wallpapers.
