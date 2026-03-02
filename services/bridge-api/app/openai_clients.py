@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,7 +11,18 @@ import requests
 
 from .config import Settings
 from .models import CaptureRequest, VisionExtraction
-from .prompting import build_system_prompt, build_user_prompt
+from .prompting import (
+    build_ask_system_prompt,
+    build_ask_user_prompt,
+    build_system_prompt,
+    build_user_prompt,
+)
+
+
+_RETRIABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+_MAX_RETRIES = 5
+_BASE_RETRY_DELAY_SECONDS = 1.0
+_MAX_RETRY_DELAY_SECONDS = 8.0
 
 
 @dataclass
@@ -98,28 +110,51 @@ class _OpenAIChatClient:
             "max_tokens": max_tokens,
         }
 
-        try:
-            response = requests.post(
-                f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._settings.openai_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=self._settings.request_timeout_seconds,
-            )
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-            if isinstance(content, str):
-                return content
-            if isinstance(content, list):
-                return "\n".join(
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict) and part.get("type") == "text"
+        retry_delay_seconds = _BASE_RETRY_DELAY_SECONDS
+        for attempt_index in range(_MAX_RETRIES):
+            is_last_attempt = attempt_index >= (_MAX_RETRIES - 1)
+            try:
+                response = requests.post(
+                    f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._settings.openai_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=self._settings.request_timeout_seconds,
                 )
-        except Exception:
-            return None
+                if response.status_code in _RETRIABLE_STATUS_CODES:
+                    if is_last_attempt:
+                        return None
+                    time.sleep(retry_delay_seconds)
+                    retry_delay_seconds = min(_MAX_RETRY_DELAY_SECONDS, retry_delay_seconds * 1.8)
+                    continue
+
+                response.raise_for_status()
+                content = response.json()["choices"][0]["message"]["content"]
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, list):
+                    return "\n".join(
+                        part.get("text", "")
+                        for part in content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    )
+                return None
+            except (requests.Timeout, requests.ConnectionError):
+                if is_last_attempt:
+                    return None
+                time.sleep(retry_delay_seconds)
+                retry_delay_seconds = min(_MAX_RETRY_DELAY_SECONDS, retry_delay_seconds * 1.8)
+            except requests.HTTPError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code in _RETRIABLE_STATUS_CODES and not is_last_attempt:
+                    time.sleep(retry_delay_seconds)
+                    retry_delay_seconds = min(_MAX_RETRY_DELAY_SECONDS, retry_delay_seconds * 1.8)
+                    continue
+                return None
+            except Exception:
+                return None
         return None
 
 
@@ -186,10 +221,17 @@ class OpenAISocraticClient:
     def __init__(self, settings: Settings) -> None:
         self._chat_client = _OpenAIChatClient(settings)
 
-    def generate(self, capture: CaptureRequest, extraction: VisionExtraction, syllabus: dict) -> SocraticOutput:
+    def generate(
+        self,
+        capture: CaptureRequest,
+        extraction: VisionExtraction,
+        syllabus: dict,
+        grounding_context: str | None = None,
+        grounding_sources: list[str] | None = None,
+    ) -> SocraticOutput:
         fallback = self._fallback_output(capture, extraction)
         content = self._chat_client.complete(
-            system_prompt=build_system_prompt(syllabus),
+            system_prompt=build_system_prompt(syllabus, grounding_sources=grounding_sources),
             user_prompt=build_user_prompt(
                 extraction.raw_text,
                 extraction.summary,
@@ -198,6 +240,8 @@ class OpenAISocraticClient:
                 user_input_text=capture.user_input_text,
                 thread_id=capture.thread_id,
                 turn_index=capture.turn_index,
+                grounding_context=grounding_context,
+                grounding_sources=grounding_sources,
             ),
             max_tokens=420,
         )
@@ -212,22 +256,23 @@ class OpenAISocraticClient:
         thread_id: str,
         turn_index: int,
         course_id: str,
+        grounding_context: str | None = None,
+        grounding_sources: list[str] | None = None,
+        syllabus: dict | None = None,
     ) -> str:
-        cleaned_message = _normalize_text(message, max_chars=900) or "Help me understand this topic."
         fallback = (
             "What assumption are you making right now, and what evidence from your notes supports it?"
         )
-        system_prompt = (
-            "You are Sentinel AI, a Socratic tutor. "
-            "Respond with one concise Socratic question only. "
-            "Do not provide direct final answers."
+        system_prompt = build_ask_system_prompt(
+            syllabus=syllabus or {"concepts": []},
+            grounding_sources=grounding_sources,
         )
-        user_prompt = (
-            f"Course id: {course_id}\n"
-            f"Thread id: {thread_id}\n"
-            f"Turn index: {max(0, int(turn_index))}\n"
-            f"Learner message: {cleaned_message}\n"
-            "Return only the next Socratic question."
+        user_prompt = build_ask_user_prompt(
+            message=message,
+            thread_id=thread_id,
+            turn_index=turn_index,
+            course_id=course_id,
+            grounding_context=grounding_context,
         )
         content = self._chat_client.complete(
             system_prompt=system_prompt,
