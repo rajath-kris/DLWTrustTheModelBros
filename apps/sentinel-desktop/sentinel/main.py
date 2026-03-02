@@ -821,7 +821,10 @@ def main() -> None:
         thinking_min_width=settings.overlay_thinking_min_width,
         thinking_max_width=settings.overlay_thinking_max_width,
     )
-    bridge = BridgeClient(settings.bridge_url)
+    bridge = BridgeClient(
+        settings.bridge_url,
+        timeout_seconds=settings.bridge_timeout_seconds,
+    )
     controller = SentinelController(overlay, bridge)
     overlay.show_launcher(animated=False)
 
@@ -850,6 +853,7 @@ def main() -> None:
     if settings.test_mode:
         print("Test mode enabled.")
     print(f"Bridge: {settings.bridge_url}")
+    print(f"Bridge timeout: {settings.bridge_timeout_seconds:.1f}s")
 
     try:
         app.exec()
