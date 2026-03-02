@@ -12,6 +12,7 @@ GapType = Literal["concept", "reasoning", "misconception"]
 PlatformName = Literal["windows", "macos"]
 SentinelRuntimeLastAction = Literal["none", "start", "stop"]
 SentinelRuntimeAction = Literal["start", "stop"]
+QuestionSource = Literal["pyq", "tutorial", "sentinel"]
 
 
 def utc_now_iso() -> str:
@@ -142,6 +143,7 @@ class CourseDeadline(BaseModel):
 class CourseDocument(BaseModel):
     doc_id: str = Field(default_factory=lambda: str(uuid4()))
     course_id: str = "all"
+    module_id: str
     name: str
     size_bytes: int = Field(ge=0)
     type: str = "other"
@@ -162,6 +164,69 @@ class SessionEvent(BaseModel):
     capture_id: str | None = None
 
 
+class QuestionBankItem(BaseModel):
+    question_id: str = Field(default_factory=lambda: str(uuid4()))
+    topic: str
+    source: QuestionSource
+    concept: str
+    question: str
+    options: list[str] = Field(default_factory=list, min_length=2)
+    correct_answer: str
+    explanation: str | None = None
+    course_id: str = "all"
+    module_id: str | None = None
+
+
+class QuizAnswerSubmission(BaseModel):
+    question_id: str
+    user_answer: str
+
+
+class QuizSubmitRequest(BaseModel):
+    topic: str
+    sources: list[QuestionSource] = Field(default_factory=list)
+    answers: list[QuizAnswerSubmission] = Field(default_factory=list)
+    course_id: str | None = None
+    module_id: str | None = None
+
+
+class QuizQuestionResult(BaseModel):
+    question_id: str
+    topic: str
+    source: QuestionSource
+    concept: str
+    user_answer: str
+    correct_answer: str
+    is_correct: bool
+
+
+class QuizRecord(BaseModel):
+    quiz_id: str = Field(default_factory=lambda: str(uuid4()))
+    timestamp_utc: str = Field(default_factory=utc_now_iso)
+    topic: str
+    sources: list[QuestionSource] = Field(default_factory=list)
+    total_questions: int = Field(ge=0)
+    correct_answers: int = Field(ge=0)
+    score: float = Field(ge=0.0, le=1.0)
+    results: list[QuizQuestionResult] = Field(default_factory=list)
+    course_id: str = "all"
+    module_id: str | None = None
+
+
+class TopicUpdate(BaseModel):
+    topic: str
+    before_mastery: float = Field(ge=0.0, le=1.0)
+    after_mastery: float = Field(ge=0.0, le=1.0)
+    delta: float = Field(ge=-1.0, le=1.0)
+
+
+class QuizSubmitResponse(BaseModel):
+    quiz: QuizRecord
+    readiness_axes: ReadinessAxes
+    topic_updates: list[TopicUpdate] = Field(default_factory=list)
+    new_gap_ids: list[str] = Field(default_factory=list)
+
+
 class LearningState(BaseModel):
     updated_at: str = Field(default_factory=utc_now_iso)
     captures: list[CaptureEvent] = Field(default_factory=list)
@@ -172,6 +237,8 @@ class LearningState(BaseModel):
     deadlines: list[CourseDeadline] = Field(default_factory=list)
     documents: list[CourseDocument] = Field(default_factory=list)
     sessions: list[SessionEvent] = Field(default_factory=list)
+    question_bank: list[QuestionBankItem] = Field(default_factory=list)
+    quizzes: list[QuizRecord] = Field(default_factory=list)
     readiness_axes: ReadinessAxes = Field(
         default_factory=lambda: ReadinessAxes(
             concept_mastery=0.0,

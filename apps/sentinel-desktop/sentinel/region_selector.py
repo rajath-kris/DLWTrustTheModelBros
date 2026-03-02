@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 import time
 from typing import Any, Callable
 
@@ -220,7 +221,13 @@ def select_region(telemetry_callback: TelemetryCallback | None = None) -> Captur
     selector = RegionSelector(telemetry_callback=telemetry_callback)
     loop = QEventLoop()
     selector.finished.connect(loop.quit)
-    selector.showFullScreen()
+
+    # On macOS, fullscreen can move selector into a dedicated Space and hide the active desktop.
+    if platform.system().lower() == "darwin":
+        selector.show()
+    else:
+        selector.showFullScreen()
+
     selector.activateWindow()
     selector.raise_()
     loop.exec()

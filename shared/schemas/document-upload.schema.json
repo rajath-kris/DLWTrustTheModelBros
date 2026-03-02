@@ -4,6 +4,11 @@
   "title": "DocumentUploadMetadata",
   "type": "object",
   "properties": {
+    "module_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
     "document_name": {
       "type": "string",
       "minLength": 1,
@@ -15,5 +20,6 @@
       "maxLength": 40
     }
   },
+  "required": ["module_id"],
   "additionalProperties": false
 }

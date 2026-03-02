@@ -10,6 +10,7 @@ import {
   DocumentHubPage,
   SessionHistoryPage,
   AskSentinelPage,
+  QuizPage,
   PreferencesPage,
 } from "./pages";
 
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="documents" element={<DocumentHubPage />} />
             <Route path="history" element={<SessionHistoryPage />} />
             <Route path="ask" element={<AskSentinelPage />} />
+            <Route path="quiz" element={<QuizPage />} />
             <Route path="preferences" element={<PreferencesPage />} />
           </Route>
         </Routes>

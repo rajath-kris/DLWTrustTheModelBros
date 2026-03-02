@@ -681,11 +681,15 @@
 .docs-page-header { margin-bottom: 1rem; }
 .docs-page-title-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 .docs-page-title-row h1 { font-size: 1.5rem; margin: 0; }
+.docs-upload-controls { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.docs-upload-control { display: flex; flex-direction: column; gap: 0.35rem; min-width: 180px; font-size: 0.8rem; color: var(--muted); }
+.docs-upload-control select { font-size: 0.9rem; padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); color: var(--text); }
 .docs-page-footer { font-size: 0.85rem; color: var(--muted); margin: 1rem 0 0; }
 .document-hub-item-with-actions .document-hub-item-actions { opacity: 0; }
 .document-hub-item-with-actions:hover .document-hub-item-actions { opacity: 1; }
 .document-hub-item-actions { display: flex; gap: 0.5rem; margin-left: auto; transition: opacity 0.15s; }
 .doc-hub-action-btn { font-size: 0.75rem; padding: 0.25rem 0.5rem; border: 1px solid var(--panel-border); background: transparent; color: var(--text); cursor: pointer; border-radius: 6px; }
+.doc-hub-action-btn:disabled { opacity: 0.5; cursor: default; }
 .doc-hub-action-delete { color: #e74c3c; border-color: #e74c3c; }
 
 .history-page-header { margin-bottom: 1rem; }
@@ -1604,6 +1608,11 @@ h1 {
   border-color: var(--highlight);
 }
 
+.top-bar-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Deadline banner */
 .deadline-banner {
   display: flex;
@@ -1934,6 +1943,12 @@ h1 {
   box-shadow: 0 0 16px rgba(59, 130, 246, 0.5);
 }
 
+.document-hub-dropzone-compact.upload-disabled {
+  border-color: rgba(160, 160, 176, 0.2);
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: none;
+}
+
 .document-hub-drop-icon {
   color: var(--muted);
   margin-bottom: 0.4rem;
@@ -1992,6 +2007,26 @@ h1 {
 .document-hub-item-meta {
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.document-hub-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.pill-doc-tag {
+  font-size: 0.68rem;
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(147, 197, 253, 0.5);
+  padding: 0.12rem 0.4rem;
+}
+
+.pill-doc-tag-module {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.45);
 }
 
 .document-hub-head-flex {

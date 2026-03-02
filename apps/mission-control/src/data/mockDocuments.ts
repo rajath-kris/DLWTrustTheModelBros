@@ -1,5 +1,9 @@
 export interface MockDocument {
   doc_id?: string;
+  course_id?: string;
+  module_id?: string;
+  course_label?: string;
+  module_label?: string;
   name: string;
   size: string;
   upload_date: string;

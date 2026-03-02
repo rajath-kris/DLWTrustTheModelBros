@@ -71,6 +71,9 @@ export function MissionControlPage() {
           <div className="all-courses-stats">
             <p>Total Sentinel sessions this week: {allCoursesSummary.reduce((s, { data }) => s + data.stats.sentinelSessionsThisWeek, 0)}</p>
           </div>
+          <section className="dashboard-section">
+            <LearningLoopDiagram />
+          </section>
         </section>
       </div>
     );
@@ -146,9 +149,6 @@ export function MissionControlPage() {
           </article>
           <TopicMastery gaps={courseData.gaps} topics={courseData.topicScores} />
         </div>
-      </section>
-      <section className="dashboard-section">
-        <LearningLoopDiagram />
       </section>
       <section className="gaps-resources-section">
         <h2 className="section-heading">GAPS & RESOURCES</h2>

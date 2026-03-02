@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MOCK_DOCUMENTS, type MockDocument } from "../data/mockDocuments";
 
 const DOC_HUB_SECTION_ID = "document-hub";
@@ -15,6 +15,8 @@ export function DocumentHub({
   documents: initialDocuments,
   hideHeader = false,
   showRowActions = false,
+  uploadEnabled = true,
+  uploadRequirementHint,
   onUploadClickRef,
   onUploadFiles,
   onSetAnchor,
@@ -24,59 +26,88 @@ export function DocumentHub({
   documents?: MockDocument[];
   hideHeader?: boolean;
   showRowActions?: boolean;
+  uploadEnabled?: boolean;
+  uploadRequirementHint?: string;
   /** Set from parent so "+ Upload" can trigger file input. */
   onUploadClickRef?: React.MutableRefObject<(() => void) | null>;
   onUploadFiles?: (files: File[]) => Promise<void>;
-  onSetAnchor?: (docId: string) => Promise<void>;
-  onDeleteDocument?: (docId: string) => Promise<void>;
+  onSetAnchor?: (doc: MockDocument) => Promise<void>;
+  onDeleteDocument?: (doc: MockDocument) => Promise<void>;
 }) {
   const [documents, setDocuments] = useState<MockDocument[]>(initialDocuments ?? MOCK_DOCUMENTS);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const openFileDialog = useCallback(() => fileInputRef.current?.click(), []);
+  const openFileDialog = useCallback(() => {
+    if (!uploadEnabled) {
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [uploadEnabled]);
+
   useEffect(() => {
     if (onUploadClickRef) onUploadClickRef.current = openFileDialog;
-    return () => { if (onUploadClickRef) onUploadClickRef.current = null; };
+    return () => {
+      if (onUploadClickRef) onUploadClickRef.current = null;
+    };
   }, [onUploadClickRef, openFileDialog]);
 
   useEffect(() => {
     if (initialDocuments != null) setDocuments(initialDocuments);
   }, [initialDocuments]);
+
   const [dragging, setDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [workingDocId, setWorkingDocId] = useState<string | null>(null);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragging(true);
-  }, []);
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!uploadEnabled) {
+        return;
+      }
+      setDragging(true);
+    },
+    [uploadEnabled]
+  );
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragging(false);
-  }, []);
+  const handleDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!uploadEnabled) {
+        return;
+      }
+      setDragging(false);
+    },
+    [uploadEnabled]
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!uploadEnabled) {
+        return;
+      }
       setDragging(false);
       const files = e.dataTransfer?.files;
       if (!files?.length) return;
       void handleFiles(Array.from(files));
     },
-    [onUploadFiles]
+    [onUploadFiles, uploadEnabled]
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!uploadEnabled) {
+        return;
+      }
       const files = e.target.files;
       if (!files?.length) return;
       void handleFiles(Array.from(files));
       e.target.value = "";
     },
-    [onUploadFiles]
+    [onUploadFiles, uploadEnabled]
   );
 
   async function handleFiles(files: File[]) {
@@ -100,7 +131,7 @@ export function DocumentHub({
     setUploadError(null);
     setWorkingDocId(doc.doc_id);
     try {
-      await onSetAnchor(doc.doc_id);
+      await onSetAnchor(doc);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Could not set document anchor.");
     } finally {
@@ -115,7 +146,7 @@ export function DocumentHub({
     setUploadError(null);
     setWorkingDocId(doc.doc_id);
     try {
-      await onDeleteDocument(doc.doc_id);
+      await onDeleteDocument(doc);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Could not delete document.");
     } finally {
@@ -133,7 +164,7 @@ export function DocumentHub({
       )}
 
       <div
-        className={`document-hub-dropzone document-hub-dropzone-compact ${dragging ? "dragging" : ""}`}
+        className={`document-hub-dropzone document-hub-dropzone-compact ${dragging ? "dragging" : ""} ${uploadEnabled ? "" : "upload-disabled"}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -144,6 +175,7 @@ export function DocumentHub({
           multiple
           accept=".pdf,.doc,.docx,.txt"
           onChange={handleFileInput}
+          disabled={!uploadEnabled}
           className="document-hub-input"
           aria-label="Choose files to upload"
         />
@@ -154,7 +186,11 @@ export function DocumentHub({
             <line x1="9" y1="14" x2="15" y2="14" />
           </svg>
         </div>
-        <p className="document-hub-drop-text">Drag & drop or click to upload / PDFs, Word docs, syllabi, lecture notes.</p>
+        <p className="document-hub-drop-text">
+          {uploadEnabled
+            ? "Drag & drop or click to upload / PDFs, Word docs, syllabi, lecture notes."
+            : uploadRequirementHint || "Select required tags before uploading."}
+        </p>
       </div>
 
       {uploadError && <p className="status-line error">{uploadError}</p>}
@@ -171,8 +207,18 @@ export function DocumentHub({
               <div className="document-hub-item-body">
                 <span className="document-hub-item-name">{doc.name}</span>
                 <span className="document-hub-item-meta">
-                  {doc.size} · {doc.upload_date}
+                  {doc.size} | {doc.upload_date}
                 </span>
+                {showRowActions && (doc.course_label || doc.course_id || doc.module_label || doc.module_id) && (
+                  <div className="document-hub-item-tags">
+                    {(doc.course_label || doc.course_id) && (
+                      <span className="pill pill-doc-tag">{(doc.course_label || doc.course_id || "").toString()}</span>
+                    )}
+                    {(doc.module_label || doc.module_id) && (
+                      <span className="pill pill-doc-tag pill-doc-tag-module">{(doc.module_label || doc.module_id || "").toString()}</span>
+                    )}
+                  </div>
+                )}
               </div>
               {(doc.type === "anchor" || doc.is_anchor) && (
                 <span className="pill pill-syllabus-anchor">Syllabus Anchor</span>

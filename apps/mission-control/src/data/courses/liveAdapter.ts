@@ -50,6 +50,10 @@ function mapLiveDocuments(state: LearningState, courseId: string): MockDocument[
     .filter((item) => courseId === "all" || item.course_id === courseId)
     .map((item) => ({
       doc_id: item.doc_id,
+      course_id: item.course_id,
+      module_id: item.module_id,
+      course_label: item.course_id.toUpperCase(),
+      module_label: item.module_id,
       name: item.name,
       size: formatBytes(item.size_bytes),
       upload_date: item.uploaded_at.split("T")[0] ?? item.uploaded_at,

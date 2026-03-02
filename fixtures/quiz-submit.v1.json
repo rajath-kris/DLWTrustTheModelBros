@@ -1,0 +1,53 @@
+{
+  "request": {
+    "topic": "Binary Trees & Traversal",
+    "sources": ["pyq", "tutorial"],
+    "answers": [
+      {
+        "question_id": "qb-tree-postorder",
+        "user_answer": "Post-order"
+      }
+    ],
+    "course_id": "all"
+  },
+  "response": {
+    "quiz": {
+      "quiz_id": "quiz-fixture-1",
+      "timestamp_utc": "2026-03-02T10:05:00Z",
+      "topic": "Binary Trees & Traversal",
+      "sources": ["pyq", "tutorial"],
+      "total_questions": 1,
+      "correct_answers": 1,
+      "score": 1.0,
+      "results": [
+        {
+          "question_id": "qb-tree-postorder",
+          "topic": "Binary Trees & Traversal",
+          "source": "pyq",
+          "concept": "Traversal Order",
+          "user_answer": "Post-order",
+          "correct_answer": "Post-order",
+          "is_correct": true
+        }
+      ],
+      "course_id": "all",
+      "module_id": null
+    },
+    "readiness_axes": {
+      "concept_mastery": 0.68,
+      "deadline_pressure": 0.55,
+      "retention_risk": 0.33,
+      "problem_transfer": 0.56,
+      "consistency": 0.85
+    },
+    "topic_updates": [
+      {
+        "topic": "Binary Trees & Traversal",
+        "before_mastery": 0.62,
+        "after_mastery": 0.7,
+        "delta": 0.08
+      }
+    ],
+    "new_gap_ids": []
+  }
+}

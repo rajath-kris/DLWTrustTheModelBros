@@ -136,10 +136,11 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["doc_id", "course_id", "name", "size_bytes", "type", "uploaded_at", "file_url", "is_anchor"],
+        "required": ["doc_id", "course_id", "module_id", "name", "size_bytes", "type", "uploaded_at", "file_url", "is_anchor"],
         "properties": {
           "doc_id": { "type": "string" },
           "course_id": { "type": "string" },
+          "module_id": { "type": "string" },
           "name": { "type": "string" },
           "size_bytes": { "type": "integer", "minimum": 0 },
           "type": { "type": "string" },
@@ -168,6 +169,78 @@
             "items": { "type": "string" }
           },
           "capture_id": { "type": ["string", "null"] }
+        }
+      },
+      "default": []
+    },
+    "question_bank": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "topic", "source", "concept", "question", "options", "correct_answer", "course_id"],
+        "properties": {
+          "question_id": { "type": "string" },
+          "topic": { "type": "string" },
+          "source": { "type": "string", "enum": ["pyq", "tutorial", "sentinel"] },
+          "concept": { "type": "string" },
+          "question": { "type": "string" },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "type": "string" }
+          },
+          "correct_answer": { "type": "string" },
+          "explanation": { "type": ["string", "null"] },
+          "course_id": { "type": "string" },
+          "module_id": { "type": ["string", "null"] }
+        }
+      },
+      "default": []
+    },
+    "quizzes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "quiz_id",
+          "timestamp_utc",
+          "topic",
+          "sources",
+          "total_questions",
+          "correct_answers",
+          "score",
+          "results",
+          "course_id"
+        ],
+        "properties": {
+          "quiz_id": { "type": "string" },
+          "timestamp_utc": { "type": "string", "format": "date-time" },
+          "topic": { "type": "string" },
+          "sources": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["pyq", "tutorial", "sentinel"] }
+          },
+          "total_questions": { "type": "integer", "minimum": 0 },
+          "correct_answers": { "type": "integer", "minimum": 0 },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["question_id", "topic", "source", "concept", "user_answer", "correct_answer", "is_correct"],
+              "properties": {
+                "question_id": { "type": "string" },
+                "topic": { "type": "string" },
+                "source": { "type": "string", "enum": ["pyq", "tutorial", "sentinel"] },
+                "concept": { "type": "string" },
+                "user_answer": { "type": "string" },
+                "correct_answer": { "type": "string" },
+                "is_correct": { "type": "boolean" }
+              }
+            }
+          },
+          "course_id": { "type": "string" },
+          "module_id": { "type": ["string", "null"] }
         }
       },
       "default": []

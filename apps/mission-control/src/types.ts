@@ -1,4 +1,5 @@
 export type GapStatus = "open" | "reviewing" | "closed";
+export type QuizSourceType = "pyq" | "tutorial" | "sentinel";
 
 export interface ReadinessAxes {
   concept_mastery: number;
@@ -71,12 +72,31 @@ export interface CourseDeadline {
 export interface CourseDocument {
   doc_id: string;
   course_id: string;
+  module_id: string;
   name: string;
   size_bytes: number;
   type: string;
   uploaded_at: string;
   file_url: string;
   is_anchor: boolean;
+}
+
+export interface ModuleSummary {
+  module_id: string;
+  module_name: string;
+  material_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModuleListResponse {
+  modules: ModuleSummary[];
+  active_module_id: string | null;
+}
+
+export interface ActiveModuleResponse {
+  active_module_id: string | null;
+  active_module_name: string | null;
 }
 
 export interface SessionEvent {
@@ -91,6 +111,67 @@ export interface SessionEvent {
   capture_id?: string | null;
 }
 
+export interface QuestionBankItem {
+  question_id: string;
+  topic: string;
+  source: QuizSourceType;
+  concept: string;
+  question: string;
+  options: string[];
+  correct_answer: string;
+  explanation?: string | null;
+  course_id: string;
+  module_id?: string | null;
+}
+
+export interface QuizQuestionResult {
+  question_id: string;
+  topic: string;
+  source: QuizSourceType;
+  concept: string;
+  user_answer: string;
+  correct_answer: string;
+  is_correct: boolean;
+}
+
+export interface QuizRecord {
+  quiz_id: string;
+  timestamp_utc: string;
+  topic: string;
+  sources: QuizSourceType[];
+  total_questions: number;
+  correct_answers: number;
+  score: number;
+  results: QuizQuestionResult[];
+  course_id: string;
+  module_id?: string | null;
+}
+
+export interface TopicUpdate {
+  topic: string;
+  before_mastery: number;
+  after_mastery: number;
+  delta: number;
+}
+
+export interface QuizSubmitRequest {
+  topic: string;
+  sources: QuizSourceType[];
+  answers: Array<{
+    question_id: string;
+    user_answer: string;
+  }>;
+  course_id?: string;
+  module_id?: string;
+}
+
+export interface QuizSubmitResponse {
+  quiz: QuizRecord;
+  readiness_axes: ReadinessAxes;
+  topic_updates: TopicUpdate[];
+  new_gap_ids: string[];
+}
+
 export interface LearningState {
   updated_at: string;
   captures: CaptureEvent[];
@@ -101,6 +182,8 @@ export interface LearningState {
   deadlines: CourseDeadline[];
   documents: CourseDocument[];
   sessions: SessionEvent[];
+  question_bank: QuestionBankItem[];
+  quizzes: QuizRecord[];
   readiness_axes: ReadinessAxes;
 }
 

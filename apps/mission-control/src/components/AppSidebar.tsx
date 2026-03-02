@@ -37,6 +37,12 @@ const ICONS = {
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /><line x1="8" y1="6" x2="16" y2="6" /><line x1="8" y1="10" x2="16" y2="10" />
     </svg>
   ),
+  quiz: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M9 9h.01M15 9h.01M8 14h8M8 18h5" />
+    </svg>
+  ),
   folder: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
@@ -191,6 +197,7 @@ export function AppSidebar() {
           <li><NavItem path="/gaps" label="Knowledge Gaps" icon={ICONS.map} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/gaps")} /></li>
           <li><NavItem path="/schedule" label="Schedule" icon={ICONS.calendar} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/schedule")} /></li>
           <li><NavItem path="/planner" label="Study Planner" icon={ICONS.book} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/planner")} /></li>
+          <li><NavItem path="/quiz" label="Quiz" icon={ICONS.quiz} pathname={pathname} collapsed={collapsed} onClick={() => navigate("/quiz")} /></li>
         </ul>
 
         {!collapsed && <div className="sidebar-nav-group-label">RESOURCES</div>}

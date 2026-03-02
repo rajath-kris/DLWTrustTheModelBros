@@ -8,10 +8,11 @@ import {
   fetchState,
   openEventStream,
   setDocumentAnchor,
+  submitQuiz,
   updateGapStatus,
   uploadDocument,
 } from "../api";
-import type { AskResponse, GapStatus, LearningState, ServerEventEnvelope } from "../types";
+import type { AskResponse, GapStatus, LearningState, QuizSubmitRequest, QuizSubmitResponse, ServerEventEnvelope } from "../types";
 
 interface BrainStateContextValue {
   state: LearningState;
@@ -21,10 +22,11 @@ interface BrainStateContextValue {
   refreshState: () => Promise<void>;
   setGapStatus: (gapId: string, status: GapStatus) => Promise<void>;
   addDeadline: (courseId: string, payload: { name: string; due_date: string; readiness_score?: number }) => Promise<void>;
-  uploadCourseDocument: (courseId: string, file: File, documentName?: string, documentType?: string) => Promise<void>;
+  uploadCourseDocument: (courseId: string, moduleId: string, file: File, documentName?: string, documentType?: string) => Promise<void>;
   anchorCourseDocument: (courseId: string, docId: string) => Promise<void>;
   removeCourseDocument: (courseId: string, docId: string) => Promise<void>;
   ask: (payload: { course_id: string; thread_id?: string; turn_index?: number; message: string }) => Promise<AskResponse>;
+  submitQuiz: (payload: QuizSubmitRequest) => Promise<QuizSubmitResponse>;
 }
 
 const BrainStateContext = createContext<BrainStateContextValue | null>(null);
@@ -108,8 +110,8 @@ export function BrainStateProvider({ children }: { children: React.ReactNode }) 
   );
 
   const uploadCourseDocument = useCallback(
-    async (courseId: string, file: File, documentName?: string, documentType?: string) => {
-      await uploadDocument(courseId, file, documentName, documentType);
+    async (courseId: string, moduleId: string, file: File, documentName?: string, documentType?: string) => {
+      await uploadDocument(courseId, moduleId, file, documentName, documentType);
       await refreshState();
     },
     [refreshState]
@@ -140,6 +142,15 @@ export function BrainStateProvider({ children }: { children: React.ReactNode }) 
     [refreshState]
   );
 
+  const submitQuizAttempt = useCallback(
+    async (payload: QuizSubmitRequest) => {
+      const response = await submitQuiz(payload);
+      await refreshState();
+      return response;
+    },
+    [refreshState]
+  );
+
   const value = useMemo<BrainStateContextValue>(
     () => ({
       state,
@@ -153,6 +164,7 @@ export function BrainStateProvider({ children }: { children: React.ReactNode }) 
       anchorCourseDocument,
       removeCourseDocument,
       ask,
+      submitQuiz: submitQuizAttempt,
     }),
     [
       state,
@@ -166,6 +178,7 @@ export function BrainStateProvider({ children }: { children: React.ReactNode }) 
       anchorCourseDocument,
       removeCourseDocument,
       ask,
+      submitQuizAttempt,
     ]
   );
 

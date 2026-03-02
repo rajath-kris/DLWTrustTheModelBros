@@ -1,10 +1,14 @@
 import type {
+  ActiveModuleResponse,
   AskResponse,
   BrainOverviewResponse,
   CourseDeadline,
   CourseDocument,
   GapStatus,
   LearningState,
+  ModuleListResponse,
+  QuizSubmitRequest,
+  QuizSubmitResponse,
   SentinelRuntimeActionResponse,
   SentinelRuntimeStatus,
   SessionEvent,
@@ -22,6 +26,8 @@ export const emptyState: LearningState = {
   deadlines: [],
   documents: [],
   sessions: [],
+  question_bank: [],
+  quizzes: [],
   readiness_axes: {
     concept_mastery: 0,
     deadline_pressure: 0,
@@ -101,14 +107,32 @@ export async function fetchDocuments(courseId: string): Promise<CourseDocument[]
   return Array.isArray(data.documents) ? data.documents : [];
 }
 
+export async function fetchModules(): Promise<ModuleListResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/modules`);
+  if (!response.ok) {
+    throw new Error(`Modules request failed: ${response.status}`);
+  }
+  return (await response.json()) as ModuleListResponse;
+}
+
+export async function fetchActiveModule(): Promise<ActiveModuleResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/modules/active`);
+  if (!response.ok) {
+    throw new Error(`Active module request failed: ${response.status}`);
+  }
+  return (await response.json()) as ActiveModuleResponse;
+}
+
 export async function uploadDocument(
   courseId: string,
+  moduleId: string,
   file: File,
   documentName?: string,
   documentType?: string
 ): Promise<CourseDocument> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("module_id", moduleId.trim());
   if (documentName && documentName.trim()) {
     formData.append("document_name", documentName.trim());
   }
@@ -169,6 +193,20 @@ export async function askSentinel(payload: {
     throw new Error(`Ask request failed: ${response.status}`);
   }
   return (await response.json()) as AskResponse;
+}
+
+export async function submitQuiz(payload: QuizSubmitRequest): Promise<QuizSubmitResponse> {
+  const response = await fetch(`${API_BASE}/api/v1/quizzes/submit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(`Quiz submit failed: ${response.status}`);
+  }
+  return (await response.json()) as QuizSubmitResponse;
 }
 
 export function openEventStream(onMessage: (event: MessageEvent) => void): EventSource {

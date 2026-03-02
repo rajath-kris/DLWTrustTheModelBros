@@ -28,11 +28,17 @@ from .models import (
     GapStatusUpdate,
     KnowledgeGap,
     LearningState,
+    QuestionBankItem,
+    QuizQuestionResult,
+    QuizRecord,
+    QuizSubmitRequest,
+    QuizSubmitResponse,
     SessionEvent,
     SentinelRuntimeActionResponse,
     SentinelRuntimeStatus,
     SourceContext,
     StudyAction,
+    TopicUpdate,
     TopicMasteryItem,
 )
 from .module_models import (
@@ -86,6 +92,8 @@ NO_ACTIVE_MODULE_WARNING = "No active module selected; response may not be groun
 NO_MATCH_WARNING_TEMPLATE = (
     "No close match found in uploaded materials for active module '{module_name}'; response is best-effort."
 )
+FALLBACK_MODULE_ID = "module-general"
+FALLBACK_MODULE_NAME = "General Materials"
 
 
 def _load_syllabus() -> dict:
@@ -100,6 +108,12 @@ def _normalize_course_id(raw: str | None) -> str:
     cleaned = re.sub(r"[^a-z0-9_-]", "-", text)
     cleaned = cleaned.strip("-")
     return cleaned or "all"
+
+
+def _normalize_module_id(raw: str | None) -> str:
+    text = (raw or "").strip().lower()
+    cleaned = re.sub(r"[^a-z0-9_-]", "-", text)
+    return cleaned.strip("-")
 
 
 def _course_display_name(course_id: str) -> str:
@@ -158,6 +172,45 @@ def _sanitize_capture_id(raw_value: str) -> str:
 def _sanitize_thread_id(raw_value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_-]", "-", raw_value.strip())
     return (cleaned[:80] or str(uuid4())).strip("-") or str(uuid4())
+
+
+def _normalize_topic(raw: str | None) -> str:
+    compact = " ".join((raw or "").strip().split())
+    return compact or "General"
+
+
+def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _question_visible_for_course(item: QuestionBankItem, course_id: str) -> bool:
+    normalized = _normalize_course_id(course_id)
+    item_course = _normalize_course_id(item.course_id)
+    return normalized == "all" or item_course in {"all", normalized}
+
+
+def _question_visible_for_module(item: QuestionBankItem, module_id: str | None) -> bool:
+    requested = _normalize_module_id(module_id)
+    if not requested:
+        return True
+    item_module = _normalize_module_id(item.module_id)
+    return item_module in {"", requested}
+
+
+def _find_topic_mastery_row(
+    state: LearningState,
+    *,
+    course_id: str,
+    topic_name: str,
+) -> TopicMasteryItem | None:
+    normalized_topic = _normalize_topic(topic_name).lower()
+    normalized_course = _normalize_course_id(course_id)
+    for row in state.topic_mastery:
+        if _normalize_course_id(row.course_id) != normalized_course:
+            continue
+        if _normalize_topic(row.name).lower() == normalized_topic:
+            return row
+    return None
 
 
 def _deadline_score_for_concept(concept: str, syllabus: dict) -> float:
@@ -280,6 +333,10 @@ def _dedupe_text_items(values: list[str]) -> list[str]:
     return ordered
 
 
+def _count_citations_with_prefix(citations: list[str], prefix: str) -> int:
+    return sum(1 for citation in citations if citation.startswith(prefix))
+
+
 def _score_chunk(query_tokens: set[str], chunk: str) -> int:
     if not query_tokens:
         return 0
@@ -354,16 +411,36 @@ def _course_document_path_from_url(file_url: str) -> Path | None:
 def _collect_course_doc_grounding(
     state: LearningState,
     course_id: str,
+    module_id: str | None,
     query_text: str,
     limit: int = COURSE_DOC_GROUNDING_LIMIT,
 ) -> GroundingBundle:
     normalized = _normalize_course_id(course_id)
-    eligible_docs = [
+    target_module_id = _normalize_module_id(module_id)
+    if not target_module_id:
+        return GroundingBundle(context_text="", citations=[], warnings=[])
+
+    course_scoped_docs = [
         doc
         for doc in state.documents
         if normalized == "all"
         or _normalize_course_id(doc.course_id) in {normalized, "all"}
     ]
+    exact_module_docs = [
+        doc for doc in course_scoped_docs if _normalize_module_id(doc.module_id) == target_module_id
+    ]
+    fallback_module_docs = [
+        doc for doc in course_scoped_docs if _normalize_module_id(doc.module_id) == FALLBACK_MODULE_ID
+    ]
+    use_fallback = len(exact_module_docs) == 0 and len(fallback_module_docs) > 0
+    eligible_docs = fallback_module_docs if use_fallback else exact_module_docs
+
+    warnings: list[str] = []
+    if use_fallback:
+        warnings.append(
+            f"Grounding used fallback course documents from '{FALLBACK_MODULE_ID}' because no documents matched module '{target_module_id}'."
+        )
+
     anchored = sorted(
         [doc for doc in eligible_docs if doc.is_anchor],
         key=lambda item: item.uploaded_at,
@@ -377,7 +454,6 @@ def _collect_course_doc_grounding(
     ordered_docs = [*anchored, *non_anchored]
 
     query_tokens = set(tokenize(query_text))
-    warnings: list[str] = []
     candidates: list[tuple[int, str, str]] = []
 
     for document in ordered_docs:
@@ -436,6 +512,7 @@ def _build_grounding_bundle(
     course_bundle = _collect_course_doc_grounding(
         state=state,
         course_id=course_id,
+        module_id=module_id,
         query_text=query_text,
         limit=COURSE_DOC_GROUNDING_LIMIT,
     )
@@ -486,6 +563,9 @@ def _nearest_deadline_days(deadlines: list[CourseDeadline], course_id: str) -> i
 
 
 def _recompute_derived(state: LearningState) -> LearningState:
+    if state.quizzes is None:
+        state.quizzes = []
+
     open_gaps = [gap for gap in state.gaps if gap.status != "closed"]
 
     topic_buckets: dict[tuple[str, str], list[KnowledgeGap]] = {}
@@ -591,6 +671,83 @@ def _save_state(state: LearningState) -> LearningState:
     return derived
 
 
+def _migrate_document_module_tags() -> None:
+    state_path = settings.state_file
+    if not state_path.exists():
+        return
+
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="documents_module_migration_failed",
+            endpoint_path="/startup",
+            reason=f"State file read failure ({type(exc).__name__}).",
+        )
+        return
+
+    documents_raw = payload.get("documents")
+    if not isinstance(documents_raw, list):
+        return
+
+    missing_count = 0
+    for document in documents_raw:
+        if not isinstance(document, dict):
+            continue
+        if _normalize_module_id(document.get("module_id")):
+            continue
+        missing_count += 1
+
+    if missing_count == 0:
+        return
+
+    active_module = module_store.get_active_module()
+    if active_module is not None:
+        fallback_module_id = active_module.module_id
+        fallback_mode = "active-module"
+    else:
+        fallback_module = module_store.get_module(FALLBACK_MODULE_ID)
+        if fallback_module is None:
+            fallback_module = module_store.upsert_module(FALLBACK_MODULE_ID, FALLBACK_MODULE_NAME)
+        fallback_module_id = fallback_module.module_id
+        fallback_mode = "module-general"
+
+    updated_count = 0
+    for document in documents_raw:
+        if not isinstance(document, dict):
+            continue
+        if _normalize_module_id(document.get("module_id")):
+            continue
+        document["module_id"] = fallback_module_id
+        updated_count += 1
+
+    if updated_count == 0:
+        return
+
+    try:
+        state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="documents_module_migration_failed",
+            endpoint_path="/startup",
+            reason=f"State file write failure ({type(exc).__name__}).",
+            migrated_count=updated_count,
+            fallback_module_id=fallback_module_id,
+        )
+        return
+
+    _log_bridge_event(
+        event="documents_module_migrated",
+        endpoint_path="/startup",
+        migrated_count=updated_count,
+        fallback_module_id=fallback_module_id,
+        fallback_mode=fallback_mode,
+    )
+
+
+_migrate_document_module_tags()
+
+
 def _filter_state_for_course(state: LearningState, course_id: str) -> LearningState:
     normalized = _normalize_course_id(course_id)
     if normalized == "all":
@@ -606,6 +763,12 @@ def _filter_state_for_course(state: LearningState, course_id: str) -> LearningSt
             "documents": [item for item in state.documents if _normalize_course_id(item.course_id) == normalized],
             "sessions": [item for item in state.sessions if _normalize_course_id(item.course_id) == normalized],
             "courses": [item for item in state.courses if _normalize_course_id(item.course_id) == normalized],
+            "question_bank": [
+                item
+                for item in state.question_bank
+                if _normalize_course_id(item.course_id) in {"all", normalized}
+            ],
+            "quizzes": [item for item in state.quizzes if _normalize_course_id(item.course_id) == normalized],
         }
     )
     filtered.readiness_axes = calculate_readiness(filtered.gaps)
@@ -886,6 +1049,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         course_id=course_id,
         module_id=gap_module_id,
         grounding_citation_count=len(grounding_bundle.citations),
+        module_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "module:"),
+        course_doc_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "course-doc:"),
         grounding_warning_count=len(grounding_bundle.warnings),
     )
 
@@ -900,6 +1065,148 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         course_id=course_id,
         source_warning=source_warning,
         source_context=source_context,
+    )
+
+
+@app.post("/api/v1/quizzes/submit", response_model=QuizSubmitResponse)
+async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
+    state = _recompute_derived(store.read())
+    if not state.question_bank:
+        raise HTTPException(status_code=400, detail="Question bank is empty.")
+    if not request.answers:
+        raise HTTPException(status_code=400, detail="Quiz answers must not be empty.")
+
+    normalized_course_id = _normalize_course_id(request.course_id)
+    normalized_topic = _normalize_topic(request.topic)
+    topic_is_all = normalized_topic.lower() == "all topics"
+    selected_sources = set(request.sources) if request.sources else {"pyq", "tutorial", "sentinel"}
+    selected_module = _resolve_module(request.module_id)
+    selected_module_id = selected_module.module_id if selected_module is not None else _normalize_module_id(request.module_id) or None
+
+    question_by_id = {item.question_id: item for item in state.question_bank}
+    question_results: list[QuizQuestionResult] = []
+
+    for answer in request.answers:
+        item = question_by_id.get(answer.question_id)
+        if item is None:
+            raise HTTPException(status_code=400, detail=f"Unknown question_id: {answer.question_id}")
+        if not _question_visible_for_course(item, normalized_course_id):
+            raise HTTPException(status_code=400, detail=f"Question course mismatch for {answer.question_id}.")
+        if not _question_visible_for_module(item, selected_module_id):
+            raise HTTPException(status_code=400, detail=f"Question module mismatch for {answer.question_id}.")
+        if item.source not in selected_sources:
+            raise HTTPException(status_code=400, detail=f"Question source mismatch for {answer.question_id}.")
+        if not topic_is_all and _normalize_topic(item.topic).lower() != normalized_topic.lower():
+            raise HTTPException(status_code=400, detail=f"Question topic mismatch for {answer.question_id}.")
+
+        user_answer = " ".join(answer.user_answer.strip().split())
+        correct_answer = " ".join(item.correct_answer.strip().split())
+        is_correct = _normalize_concept(user_answer) == _normalize_concept(correct_answer)
+        question_results.append(
+            QuizQuestionResult(
+                question_id=item.question_id,
+                topic=item.topic,
+                source=item.source,
+                concept=item.concept,
+                user_answer=user_answer,
+                correct_answer=correct_answer,
+                is_correct=is_correct,
+            )
+        )
+
+    if not question_results:
+        raise HTTPException(status_code=400, detail="No quiz results computed.")
+
+    total_questions = len(question_results)
+    correct_answers = sum(1 for result in question_results if result.is_correct)
+    score = _clamp(correct_answers / total_questions)
+    effective_topic = _normalize_topic(question_results[0].topic if topic_is_all else normalized_topic)
+    quiz = QuizRecord(
+        topic=effective_topic,
+        sources=sorted(selected_sources),
+        total_questions=total_questions,
+        correct_answers=correct_answers,
+        score=score,
+        results=question_results,
+        course_id=normalized_course_id,
+        module_id=selected_module_id,
+    )
+
+    before_mastery = state.readiness_axes.concept_mastery
+    existing_topic = _find_topic_mastery_row(
+        state,
+        course_id=normalized_course_id,
+        topic_name=effective_topic,
+    )
+    if existing_topic is not None:
+        before_mastery = existing_topic.current
+    mastery_delta = _clamp((score - 0.6) * 0.18, -0.08, 0.08)
+    after_mastery = _clamp(before_mastery + mastery_delta)
+    topic_updates = [
+        TopicUpdate(
+            topic=effective_topic,
+            before_mastery=before_mastery,
+            after_mastery=after_mastery,
+            delta=after_mastery - before_mastery,
+        )
+    ]
+
+    syllabus = _load_syllabus()
+    new_gap_ids: list[str] = []
+    new_gaps: list[KnowledgeGap] = []
+    seen_concepts: set[str] = set()
+    for result in question_results:
+        if result.is_correct:
+            continue
+        concept = f"{result.topic}: {result.concept}".strip(": ")
+        concept_key = _normalize_concept(concept)
+        if concept_key in seen_concepts:
+            continue
+        seen_concepts.add(concept_key)
+
+        severity = _clamp(0.5 + (1.0 - score) * 0.4)
+        confidence = _clamp(0.65 + (1.0 - score) * 0.2)
+        deadline_score = _deadline_score_for_concept(result.concept or result.topic, syllabus)
+        priority_score = _clamp((severity * 0.7) + (deadline_score * 0.3))
+        gap = KnowledgeGap(
+            concept=concept,
+            severity=severity,
+            confidence=confidence,
+            basis_question=f"Quiz miss: {result.question_id}",
+            basis_answer_excerpt=(result.user_answer[:320] or None),
+            gap_type="concept",
+            course_id=normalized_course_id,
+            module_id=selected_module_id,
+            material_id=None,
+            capture_id=f"quiz-{quiz.quiz_id}",
+            evidence_url=f"quiz://{result.question_id}",
+            deadline_score=deadline_score,
+            priority_score=priority_score,
+        )
+        new_gaps.append(gap)
+        new_gap_ids.append(gap.gap_id)
+
+    state.quizzes.append(quiz)
+    state.gaps.extend(new_gaps)
+    state.readiness_axes = calculate_readiness(state.gaps)
+    state = _save_state(state)
+    await _publish_state(state)
+    _log_bridge_event(
+        event="quiz_submitted",
+        endpoint_path="/api/v1/quizzes/submit",
+        course_id=normalized_course_id,
+        module_id=selected_module_id,
+        quiz_id=quiz.quiz_id,
+        total_questions=total_questions,
+        correct_answers=correct_answers,
+        new_gap_count=len(new_gaps),
+    )
+
+    return QuizSubmitResponse(
+        quiz=quiz,
+        readiness_axes=state.readiness_axes,
+        topic_updates=topic_updates,
+        new_gap_ids=new_gap_ids,
     )
 
 
@@ -958,10 +1265,32 @@ def list_course_documents(course_id: str) -> dict:
 async def upload_course_document(
     course_id: str,
     file: UploadFile = File(...),
+    module_id: str = Form(...),
     document_name: str | None = Form(default=None),
     document_type: str | None = Form(default=None),
 ) -> CourseDocument:
     normalized = _normalize_course_id(course_id)
+    normalized_module_id = _normalize_module_id(module_id)
+    if not normalized_module_id:
+        _log_bridge_event(
+            event="document_upload_validation_failed",
+            endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+            course_id=normalized,
+            reason="module_id must not be empty.",
+        )
+        raise HTTPException(status_code=400, detail="module_id must not be empty.")
+
+    module = module_store.get_module(normalized_module_id)
+    if module is None:
+        _log_bridge_event(
+            event="document_upload_validation_failed",
+            endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+            course_id=normalized,
+            module_id=normalized_module_id,
+            reason=f"module_id '{normalized_module_id}' was not found.",
+        )
+        raise HTTPException(status_code=404, detail=f"Module not found: {normalized_module_id}")
+
     raw_bytes = await file.read(settings.material_upload_max_bytes + 1)
     if len(raw_bytes) > settings.material_upload_max_bytes:
         raise HTTPException(
@@ -983,6 +1312,7 @@ async def upload_course_document(
     document = CourseDocument(
         doc_id=doc_id,
         course_id=normalized,
+        module_id=module.module_id,
         name=display_name,
         size_bytes=len(raw_bytes),
         type=doc_type,
@@ -1114,9 +1444,12 @@ async def ask_sentinel(request: AskRequest) -> AskResponse:
         event="ask_processed",
         endpoint_path="/api/v1/ask",
         course_id=normalized,
+        module_id=active_module.module_id if active_module is not None else None,
         thread_id=thread_id,
         turn_index=next_turn,
         grounding_citation_count=len(grounding_bundle.citations),
+        module_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "module:"),
+        course_doc_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "course-doc:"),
         grounding_warning_count=len(grounding_bundle.warnings),
     )
 
