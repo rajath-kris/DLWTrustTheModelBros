@@ -1,7 +1,9 @@
-﻿import type { ReadinessAxes } from "../types";
+import type { ReadinessAxes } from "../types";
 
 interface RadarChartProps {
   axes: ReadinessAxes;
+  /** Optional target series (e.g. goal/deadline); drawn as a second polygon. */
+  targetAxes?: Partial<ReadinessAxes> | null;
 }
 
 interface AxisConfig {
@@ -25,7 +27,7 @@ function polarToCartesian(cx: number, cy: number, radius: number, angleDeg: numb
   };
 }
 
-export function RadarChart({ axes }: RadarChartProps) {
+export function RadarChart({ axes, targetAxes }: RadarChartProps) {
   const size = 320;
   const center = size / 2;
   const maxRadius = 114;
@@ -40,6 +42,15 @@ export function RadarChart({ axes }: RadarChartProps) {
   });
 
   const polygonPath = dataPoints.map((point) => `${point.x},${point.y}`).join(" ");
+
+  const targetPoints =
+    targetAxes &&
+    AXES.map((axis, index) => {
+      const raw = targetAxes[axis.key];
+      const value = typeof raw === "number" ? Math.max(0, Math.min(1, raw)) : 0.8;
+      return polarToCartesian(center, center, maxRadius * value, startAngle + index * angleStep);
+    });
+  const targetPath = targetPoints?.map((p) => `${p.x},${p.y}`).join(" ");
 
   return (
     <svg viewBox={`0 0 ${size} ${size}`} className="radar-svg" role="img" aria-label="Readiness radar chart">
@@ -74,6 +85,7 @@ export function RadarChart({ axes }: RadarChartProps) {
       })}
 
       <polygon points={polygonPath} className="radar-shape" />
+      {targetPath && <polygon points={targetPath} className="radar-shape radar-target" />}
       {dataPoints.map((point, index) => (
         <circle key={AXES[index].key} cx={point.x} cy={point.y} r={4.2} className="radar-dot" />
       ))}
