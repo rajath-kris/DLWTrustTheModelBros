@@ -37,6 +37,10 @@ Use these tokens as target values unless explicitly overridden by component cons
 | `card.radius` | `16px` |
 | `card.border.alpha` | `88` |
 | `card.fill` | solid black tint `rgba(8,11,15,166)` (no gradient) |
+| `launcher.size` | `46px` |
+| `launcher.margin` | `16px` from primary-screen top-left |
+| `launcher.ring` | `rgba(22,124,203,236)` |
+| `launcher.fill` | dark translucent `rgba(26,31,38,234)` |
 | `highlight.rail.height` | `2px` |
 | `divider.height` | `1px` |
 | `divider.alpha` | `56` |
@@ -81,10 +85,13 @@ Use these tokens as target values unless explicitly overridden by component cons
 
 | Token | Target |
 | --- | --- |
+| `launcher.expand.duration` | `220ms` |
+| `launcher.collapse.duration` | `180ms` |
+| `launcher.escape-collapse.duration` | `120ms` |
 | `overlay.show.duration` | `160-190ms` |
 | `overlay.refresh.duration` | `120-150ms` |
 | `overlay.hide.duration` | `110-140ms` |
-| `easing` | `OutCubic` |
+| `easing` | `InOutCubic` for launcher geometry transitions; `OutCubic` for opacity fades |
 | `escape.hide` | immediate |
 
 ## 4) Composition Policy
@@ -105,6 +112,7 @@ Overlay materials are QSS-authored only for this UI baseline. Runtime blur injec
 
 | State | Surface | Actions | Required messaging |
 | --- | --- | --- | --- |
+| `LAUNCHER` | fixed top-left circular launcher | click launcher | capture affordance only |
 | `ANALYZING` | glass card + loading label | none | status + progress text |
 | `THINKING` | same material | none | concise thinking text |
 | `PROMPT` | same material + composer | submit + dismiss | Socratic prompt text |
@@ -114,7 +122,7 @@ Overlay materials are QSS-authored only for this UI baseline. Runtime blur injec
 
 - Keep controller API and telemetry events unchanged.
 - Keep no-focus-steal default and click-to-focus input mode.
-- Keep placement continuity for same capture region.
+- Keep fixed launcher anchor continuity on the primary screen.
 
 ## 5.2 Region Selector (`region_selector.py`)
 
@@ -150,8 +158,9 @@ Overlay materials are QSS-authored only for this UI baseline. Runtime blur injec
   - Action controls use pointer cursor.
   - No hidden drag logic in overlay.
 - Placement:
-  - Near-region anchor with clamp to active screen.
-  - No center-jump regressions between thinking and prompt states.
+  - Launcher is fixed to top-left of primary-screen available geometry.
+  - Expanded card grows from launcher origin and stays in the same anchor zone.
+  - Launcher is temporarily hidden while region selection is active to avoid capture contamination.
 
 ## 7) Accessibility and Legibility
 

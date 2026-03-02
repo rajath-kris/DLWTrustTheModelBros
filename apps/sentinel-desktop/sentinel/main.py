@@ -158,6 +158,7 @@ class SentinelController(QObject):
         self.capture_requested.connect(self._on_capture_requested)
         self.escape_requested.connect(self._on_escape_requested)
         self.analysis_ready.connect(self._on_analysis_ready)
+        self.overlay.launcher_requested.connect(lambda: self.trigger_capture("overlay_launcher"))
         self.overlay.retry_requested.connect(self._on_retry_requested)
         self.overlay.dismiss_requested.connect(lambda: self.trigger_escape("overlay_dismiss"))
         self.overlay.user_input_submitted.connect(self._on_user_input_submitted)
@@ -172,6 +173,7 @@ class SentinelController(QObject):
         self.escape_requested.emit(source_mode)
 
     def shutdown(self) -> None:
+        self.overlay.hide_prompt(reason="teardown")
         self._analysis_executor.shutdown(wait=False, cancel_futures=True)
         self._request_started_at.clear()
 
@@ -187,11 +189,14 @@ class SentinelController(QObject):
 
         self._log_event("capture_triggered", source_mode=source_mode)
         self._selector_active = True
+        self.overlay.set_launcher_temporarily_hidden(True)
         try:
             region = select_region(telemetry_callback=self._on_selector_event)
         finally:
             self._selector_active = False
         if region is None:
+            self.overlay.set_launcher_temporarily_hidden(False)
+            self.overlay.show_launcher(animated=False)
             self._log_event("capture_aborted", source_mode=source_mode, reason="selector_cancelled")
             return
 
@@ -203,6 +208,7 @@ class SentinelController(QObject):
         try:
             context = self._build_capture_context(region)
         except Exception:
+            self.overlay.set_launcher_temporarily_hidden(False)
             self.overlay.show_error_state(
                 "Capture failed.",
                 "Try selecting a smaller region and retry.",
@@ -218,6 +224,7 @@ class SentinelController(QObject):
             traceback.print_exc()
             return
 
+        # Keep launcher hidden through selection; expanded card will unhide overlay on state render.
         self._last_capture_context = context
         self._start_analysis(
             context,
@@ -813,6 +820,7 @@ def main() -> None:
     )
     bridge = BridgeClient(settings.bridge_url)
     controller = SentinelController(overlay, bridge)
+    overlay.show_launcher(animated=False)
 
     hotkeys = HotkeyManager(settings.capture_hotkey, settings.escape_hotkey)
     hotkeys.start(

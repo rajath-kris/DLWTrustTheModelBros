@@ -22,6 +22,7 @@ from .ui_theme import qss_font_family_stack
 
 
 class OverlayState(str, Enum):
+    LAUNCHER = "launcher"
     HIDDEN = "hidden"
     ANALYZING = "analyzing"
     THINKING = "thinking"
@@ -55,6 +56,7 @@ class ComposerLineEdit(QLineEdit):
 
 
 class OverlayBubble(QWidget):
+    launcher_requested = pyqtSignal()
     retry_requested = pyqtSignal()
     dismiss_requested = pyqtSignal()
     user_input_submitted = pyqtSignal(str)
@@ -86,10 +88,13 @@ class OverlayBubble(QWidget):
         self._fade_text_stagger_ms = max(0, int(fade_text_stagger_ms))
         self._fade_enabled = self._fade_in_ms > 1
         self._screen_margin = 12
+        self._launcher_margin = 16
+        self._launcher_size = 46
 
-        self._state: OverlayState = OverlayState.HIDDEN
+        self._state: OverlayState = OverlayState.LAUNCHER
         self._anchor_region: CaptureRegion | None = None
         self._input_mode_enabled = False
+        self._launcher_temporarily_hidden = False
         self._last_submitted_text = ""
         self._thread_id = ""
         self._turn_index = 0
@@ -104,6 +109,9 @@ class OverlayBubble(QWidget):
         self._placement_side: str = "right"
         self._placement_point: QPoint | None = None
         self._geometry_anim_ms = 160
+        self._geometry_animation_mode: str | None = None
+        self._pending_collapse_reason = "manual"
+        self._pending_collapse_previous_state = OverlayState.HIDDEN.value
 
         self._loading_frames = ["-", "--", "---", "----", "---", "--"]
         self._loading_index = 0
@@ -127,6 +135,15 @@ class OverlayBubble(QWidget):
         self._top_highlight = QFrame(self._card)
         self._top_highlight.setObjectName("TopHighlight")
         self._top_highlight.setFixedHeight(2)
+
+        self._launcher_button = QPushButton("", self)
+        self._launcher_button.setObjectName("LauncherButton")
+        self._launcher_button.setToolTip("Capture (Alt+S)")
+        self._launcher_button.setAccessibleName("Capture launcher")
+        self._launcher_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._launcher_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._launcher_button.setFixedSize(self._launcher_size, self._launcher_size)
+        self._launcher_button.clicked.connect(self._on_launcher_clicked)
 
         self._dismiss_button = QPushButton("×", self._card)
         self._dismiss_button.setObjectName("DismissButton")
@@ -249,10 +266,13 @@ class OverlayBubble(QWidget):
         self._geometry_animation = QPropertyAnimation(self, b"geometry", self)
         self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
         self._geometry_animation.setDuration(self._geometry_anim_ms)
+        self._geometry_animation.finished.connect(self._on_geometry_animation_finished)
 
         self._set_prompt_mode_visible(False)
         self._set_error_mode_visible(False)
         self._loading_label.hide()
+        self._card.hide()
+        self._launcher_button.show()
         self.hide()
 
     @property
@@ -279,6 +299,60 @@ class OverlayBubble(QWidget):
     def reset_topic(self) -> None:
         self._current_topic = "Inference pending"
 
+    def show_launcher(self, animated: bool = False) -> None:
+        previous_state = self._state.value
+        self._state = OverlayState.LAUNCHER
+        self._anchor_region = None
+        self._auto_hide_timer.stop()
+        self._loading_timer.stop()
+        self._loading_label.hide()
+        self._set_input_mode(False)
+        self._set_prompt_mode_visible(False)
+        self._set_error_mode_visible(False)
+
+        if self._launcher_temporarily_hidden:
+            self.hide()
+            return
+
+        if animated and self.isVisible() and self._card.isVisible():
+            self._collapse_to_launcher(reason="manual", previous_state=previous_state)
+            return
+
+        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+            self._geometry_animation.stop()
+        self._card.hide()
+        self._launcher_button.show()
+        launcher_rect = self._launcher_rect()
+        self.setGeometry(launcher_rect)
+        self.show()
+        self.raise_()
+        self.setWindowOpacity(1.0)
+        self._emit(
+            "overlay_launcher_shown",
+            state=self._state.value,
+            region=self._region_payload(self._anchor_region),
+        )
+
+    def set_launcher_temporarily_hidden(self, hidden: bool) -> None:
+        flag = bool(hidden)
+        if self._launcher_temporarily_hidden == flag:
+            return
+        self._launcher_temporarily_hidden = flag
+
+        if flag:
+            if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+                self._geometry_animation.stop()
+            self.hide()
+            self._emit("overlay_launcher_visibility", hidden=True)
+            return
+
+        self._emit("overlay_launcher_visibility", hidden=False)
+        if self._state == OverlayState.LAUNCHER:
+            self.show_launcher(animated=False)
+        elif not self.isVisible():
+            self.show()
+            self.raise_()
+
     def show_analyzing_state(
         self,
         region: CaptureRegion,
@@ -286,6 +360,7 @@ class OverlayBubble(QWidget):
         message: str = "Preparing guidance...",
         topic_label: str | None = None,
     ) -> None:
+        self._launcher_temporarily_hidden = False
         self._state = OverlayState.ANALYZING
         self._anchor_region = region
         self._resolve_topic(topic_label)
@@ -317,6 +392,7 @@ class OverlayBubble(QWidget):
         topic_label: str | None = None,
     ) -> None:
         _ = text  # Keep argument for compatibility; visual copy is fixed for thinking state.
+        self._launcher_temporarily_hidden = False
         self._state = OverlayState.THINKING
         self._anchor_region = region
         self._resolve_topic(topic_label)
@@ -354,6 +430,7 @@ class OverlayBubble(QWidget):
         retry_enabled: bool = True,
         topic_label: str | None = None,
     ) -> None:
+        self._launcher_temporarily_hidden = False
         self._state = OverlayState.PROMPT
         self._anchor_region = region
         self._thread_id = thread_id.strip()
@@ -403,6 +480,7 @@ class OverlayBubble(QWidget):
         retry_enabled: bool = False,
         topic_label: str | None = None,
     ) -> None:
+        self._launcher_temporarily_hidden = False
         self._state = OverlayState.ERROR
         self._anchor_region = region
         self._resolve_topic(topic_label)
@@ -431,29 +509,29 @@ class OverlayBubble(QWidget):
 
     def hide_prompt(self, reason: str = "manual") -> None:
         previous_state = self._state.value
-        self._state = OverlayState.HIDDEN
         self._auto_hide_timer.stop()
         self._loading_timer.stop()
         self._loading_label.hide()
         self._set_input_mode(False)
-        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
-            self._geometry_animation.stop()
-
-        if not self.isVisible():
-            self._complete_hide(previous_state=previous_state, reason=reason)
-            return
-
-        if reason == "escape":
+        if reason in {"shutdown", "teardown"}:
+            self._state = OverlayState.HIDDEN
+            if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+                self._geometry_animation.stop()
             if self._opacity_animation.state() != QPropertyAnimation.State.Stopped:
                 self._opacity_animation.stop()
-            self._complete_hide(previous_state=previous_state, reason=reason)
+            self._card.hide()
+            self._launcher_button.hide()
+            self.hide()
+            self._emit(
+                "overlay_hidden",
+                state=self._state.value,
+                previous_state=previous_state,
+                reason=reason,
+                region=self._region_payload(self._anchor_region),
+            )
             return
 
-        if self._fade_enabled:
-            self._play_hide_animation(previous_state=previous_state, reason=reason)
-            return
-
-        self._complete_hide(previous_state=previous_state, reason=reason)
+        self._collapse_to_launcher(reason=reason, previous_state=previous_state)
 
     def _set_prompt_mode_visible(self, visible: bool) -> None:
         self._composer.setVisible(visible)
@@ -485,14 +563,11 @@ class OverlayBubble(QWidget):
         max_width_default = self._max_width if effective_max_width is None else max(160, int(effective_max_width))
         max_width = max(min_width, max_width_default)
 
-        screen = self._resolve_active_screen(region)
-        available_height: int | None = None
-        if screen is not None:
-            geometry = screen.availableGeometry()
-            available_width = max(160, geometry.width() - (self._screen_margin * 2))
-            available_height = max(120, geometry.height() - (self._screen_margin * 2))
-            min_width = min(min_width, available_width)
-            max_width = min(max_width, available_width)
+        geometry = self._primary_available_geometry()
+        available_height = max(120, geometry.height() - (self._launcher_margin * 2))
+        available_width = max(160, geometry.width() - (self._launcher_margin * 2))
+        min_width = min(min_width, available_width)
+        max_width = min(max_width, available_width)
 
         self._card.setMinimumWidth(min_width)
         self._card.setMaximumWidth(max_width)
@@ -501,37 +576,131 @@ class OverlayBubble(QWidget):
         natural_width = max(1, self.sizeHint().width())
         width = min(max_width, max(min_width, natural_width))
         natural_height = max(self.sizeHint().height(), self.minimumSizeHint().height(), 1)
-        height = natural_height if available_height is None else min(natural_height, available_height)
+        height = min(natural_height, available_height)
+        origin = self._launcher_origin()
+        target_rect = QRect(origin.x(), origin.y(), width, height)
 
-        anchor_key = self._region_anchor_key(region)
-        if anchor_key != self._placement_anchor_key:
-            self._placement_anchor_key = anchor_key
-            self._placement_side = self._preferred_side_for_region(region)
-            self._placement_point = None
-
-        if self._placement_point is not None:
-            x, y = self._clamp_to_screen(
-                self._placement_point.x(),
-                self._placement_point.y(),
-                region,
-                bubble_width=width,
-                bubble_height=height,
-            )
-        else:
-            x, y = self._resolve_position(
-                region,
-                bubble_width=width,
-                bubble_height=height,
-                preferred_side=self._placement_side,
-            )
-
-        self._placement_point = QPoint(x, y)
-        self._apply_window_geometry(x=x, y=y, width=width, height=height)
-
+        collapsed = self._launcher_button.isVisible() and not self._card.isVisible()
+        self._card.show()
+        self._launcher_button.hide()
         first_show = not self.isVisible()
+
+        if collapsed or first_show:
+            self._expand_from_launcher_to_card(target_rect)
+        else:
+            self._apply_window_geometry(
+                x=target_rect.x(),
+                y=target_rect.y(),
+                width=target_rect.width(),
+                height=target_rect.height(),
+            )
+            self.show()
+            self.raise_()
+        self._play_show_animation(self._state, first_show=first_show)
+
+    def _primary_available_geometry(self) -> QRect:
+        primary = QGuiApplication.primaryScreen()
+        if primary is not None:
+            return primary.availableGeometry()
+        screens = list(QGuiApplication.screens())
+        if screens:
+            return screens[0].availableGeometry()
+        return QRect(0, 0, 1280, 720)
+
+    def _launcher_origin(self) -> QPoint:
+        geometry = self._primary_available_geometry()
+        return QPoint(
+            geometry.left() + self._launcher_margin,
+            geometry.top() + self._launcher_margin,
+        )
+
+    def _launcher_rect(self) -> QRect:
+        origin = self._launcher_origin()
+        return QRect(origin.x(), origin.y(), self._launcher_size, self._launcher_size)
+
+    def _expand_from_launcher_to_card(self, target_rect: QRect) -> None:
+        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+            self._geometry_animation.stop()
+        if self._opacity_animation.state() != QPropertyAnimation.State.Stopped:
+            self._opacity_animation.stop()
+
+        start_rect = self._launcher_rect()
+        self._geometry_animation_mode = "expand"
+        self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._geometry_animation.setDuration(220)
+        self._geometry_animation.setStartValue(start_rect)
+        self._geometry_animation.setEndValue(target_rect)
+        self.setGeometry(start_rect)
         self.show()
         self.raise_()
-        self._play_show_animation(self._state, first_show=first_show)
+        self._geometry_animation.start()
+
+    def _collapse_to_launcher(self, reason: str, previous_state: str | None = None) -> None:
+        prior = previous_state or self._state.value
+        already_launcher = self._launcher_button.isVisible() and not self._card.isVisible()
+        self._state = OverlayState.LAUNCHER
+        self._set_input_mode(False)
+        self._auto_hide_timer.stop()
+        self._loading_timer.stop()
+        self._loading_label.hide()
+        if self._opacity_animation.state() != QPropertyAnimation.State.Stopped:
+            self._opacity_animation.stop()
+        if self._geometry_animation.state() != QPropertyAnimation.State.Stopped:
+            self._geometry_animation.stop()
+
+        target_rect = self._launcher_rect()
+        duration = 120 if reason == "escape" else 180
+        if already_launcher:
+            if self._launcher_temporarily_hidden:
+                self.hide()
+            else:
+                self.setGeometry(target_rect)
+                self.show()
+                self.raise_()
+            self._emit(
+                "overlay_hidden",
+                state=self._state.value,
+                previous_state=prior,
+                reason=reason,
+                region=self._region_payload(self._anchor_region),
+            )
+            return
+
+        if not self.isVisible():
+            self._card.hide()
+            self._launcher_button.show()
+            if self._launcher_temporarily_hidden:
+                self.hide()
+            else:
+                self.setGeometry(target_rect)
+                self.show()
+                self.raise_()
+            self._emit(
+                "overlay_collapsed_to_launcher",
+                state=self._state.value,
+                previous_state=prior,
+                reason=reason,
+                region=self._region_payload(self._anchor_region),
+            )
+            self._emit(
+                "overlay_hidden",
+                state=self._state.value,
+                previous_state=prior,
+                reason=reason,
+                region=self._region_payload(self._anchor_region),
+            )
+            return
+
+        self._geometry_animation_mode = "collapse"
+        self._pending_collapse_reason = reason
+        self._pending_collapse_previous_state = prior
+        self._card.show()
+        self._launcher_button.hide()
+        self._geometry_animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._geometry_animation.setDuration(duration)
+        self._geometry_animation.setStartValue(self.geometry())
+        self._geometry_animation.setEndValue(target_rect)
+        self._geometry_animation.start()
 
     def _resolve_position(
         self,
@@ -668,6 +837,37 @@ class OverlayBubble(QWidget):
         self._loading_timer.stop()
         self._loading_label.hide()
 
+    def _on_geometry_animation_finished(self) -> None:
+        mode = self._geometry_animation_mode
+        self._geometry_animation_mode = None
+        if mode != "collapse":
+            return
+
+        reason = self._pending_collapse_reason
+        previous_state = self._pending_collapse_previous_state
+        self._card.hide()
+        self._launcher_button.show()
+        if self._launcher_temporarily_hidden:
+            self.hide()
+        else:
+            self.setGeometry(self._launcher_rect())
+            self.show()
+            self.raise_()
+        self._emit(
+            "overlay_collapsed_to_launcher",
+            state=self._state.value,
+            previous_state=previous_state,
+            reason=reason,
+            region=self._region_payload(self._anchor_region),
+        )
+        self._emit(
+            "overlay_hidden",
+            state=self._state.value,
+            previous_state=previous_state,
+            reason=reason,
+            region=self._region_payload(self._anchor_region),
+        )
+
     def _build_thinking_shimmer_markup(self, step: int) -> str:
         text = self._thinking_text
         if not text:
@@ -714,6 +914,14 @@ class OverlayBubble(QWidget):
             region=self._region_payload(self._anchor_region),
         )
         self.retry_requested.emit()
+
+    def _on_launcher_clicked(self) -> None:
+        self._emit(
+            "overlay_launcher_clicked",
+            state=self._state.value,
+            region=self._region_payload(self._anchor_region),
+        )
+        self.launcher_requested.emit()
 
     def _on_dismiss_clicked(self) -> None:
         self._emit(
@@ -965,6 +1173,24 @@ class OverlayBubble(QWidget):
         stylesheet = """
             QWidget#OverlayRoot {
                 background: transparent;
+            }
+
+            QPushButton#LauncherButton {
+                background: rgba(26, 31, 38, 234);
+                border: 3px solid rgba(22, 124, 203, 236);
+                border-radius: 23px;
+                padding: 0px;
+                margin: 0px;
+            }
+
+            QPushButton#LauncherButton:hover {
+                background: rgba(34, 40, 49, 238);
+                border-color: rgba(38, 138, 218, 238);
+            }
+
+            QPushButton#LauncherButton:pressed {
+                background: rgba(20, 25, 31, 242);
+                border-color: rgba(16, 110, 186, 238);
             }
 
             QFrame#ResponseCard {
