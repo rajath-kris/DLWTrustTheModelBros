@@ -71,6 +71,21 @@ python .\scripts\smoke_check.py
 
 This starts the bridge, posts a capture, verifies state increments, and exits.
 
+## Mock Laplace Flow
+
+Run a deterministic two-turn mock capture flow using one lecture fixture and one tutorial fixture for the same concept:
+
+```powershell
+python .\scripts\run-laplace-mock-flow.py
+```
+
+Fixtures:
+
+- `docs/mock-content/laplace_lecture_slide.md`
+- `docs/mock-content/laplace_tutorial.md`
+
+The script posts both captures to `POST /api/v1/captures`, reuses thread context across turns, and writes a summary artifact under `artifacts/mock-laplace/`.
+
 ## Overlay Isolated Journey (One Command)
 
 Run the overlay in an isolated environment with a mock bridge, live timeline, and session artifacts:
