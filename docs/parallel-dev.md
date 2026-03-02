@@ -23,6 +23,12 @@ Responsibilities:
 - Global trigger (`Alt+S`), region selection, capture fidelity.
 - Overlay UX (positioning, readability, `Esc` dismissal, non-focus-stealing behavior).
 - Capture payload correctness to `/api/v1/captures`.
+- Sentinel UI reconstruction workflow defined in `docs/sentinel-ui-vision.md`.
+
+Sentinel UI docs:
+
+- `docs/sentinel-ui-vision.md` (source of truth for desktop visual system and interaction contracts)
+- `docs/sentinel-ui-prompts/*` (prompt templates for component-level reconstruction and QA)
 
 ### Track B: Mission Control
 

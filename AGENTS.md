@@ -10,6 +10,7 @@ Treat this file as the operational playbook for implementing `vision.md`.
 1. Product specification: `vision.md`
 2. API/data contract: `services/bridge-api/app/models.py` and `shared/schemas/*`
 3. Runtime wiring/config: `.env.example`, `services/bridge-api/app/config.py`, `apps/sentinel-desktop/sentinel/config.py`
+4. Sentinel desktop UI spec + prompt workflow: `docs/sentinel-ui-vision.md`, `docs/sentinel-ui-prompts/*`
 
 If implementation and docs conflict, align code to `vision.md` and update stale docs in the same change.
 
