@@ -1,9 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import requests
 
@@ -28,6 +28,93 @@ def _extract_json_blob(text: str) -> dict[str, Any] | None:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
+            return None
+
+
+def _build_llm_payload(capture: CaptureRequest, extraction: VisionExtraction, syllabus: dict) -> dict[str, Any]:
+    return {
+        "messages": [
+            {"role": "system", "content": build_system_prompt(syllabus)},
+            {
+                "role": "user",
+                "content": build_user_prompt(
+                    extraction.raw_text,
+                    extraction.summary,
+                    extraction.tags,
+                    previous_prompt=capture.previous_prompt,
+                    user_input_text=capture.user_input_text,
+                    thread_id=capture.thread_id,
+                    turn_index=capture.turn_index,
+                ),
+            },
+        ],
+        "temperature": 0.3,
+        "max_tokens": 400,
+    }
+
+
+class _SocraticProvider(Protocol):
+    def generate(self, capture: CaptureRequest, extraction: VisionExtraction, syllabus: dict) -> str | None:
+        ...
+
+
+class _OpenAIProvider:
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    def generate(self, capture: CaptureRequest, extraction: VisionExtraction, syllabus: dict) -> str | None:
+        api_key = self._settings.openai_api_key
+        base_url = self._settings.openai_base_url
+        model = self._settings.openai_model
+        if not api_key or not base_url or not model:
+            return None
+
+        payload = _build_llm_payload(capture, extraction, syllabus)
+        payload["model"] = model
+
+        try:
+            response = requests.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self._settings.request_timeout_seconds,
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
+        except Exception:
+            return None
+
+
+class _AzureOpenAIProvider:
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    def generate(self, capture: CaptureRequest, extraction: VisionExtraction, syllabus: dict) -> str | None:
+        endpoint = self._settings.azure_openai_endpoint
+        key = self._settings.azure_openai_key
+        deployment = self._settings.azure_openai_deployment
+        if not endpoint or not key or not deployment:
+            return None
+
+        try:
+            response = requests.post(
+                (
+                    f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions"
+                    f"?api-version={self._settings.azure_openai_api_version}"
+                ),
+                headers={
+                    "api-key": key,
+                    "Content-Type": "application/json",
+                },
+                json=_build_llm_payload(capture, extraction, syllabus),
+                timeout=self._settings.request_timeout_seconds,
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"]
+        except Exception:
             return None
 
 
@@ -93,82 +180,66 @@ class AzureVisionClient:
 class AzureSocraticClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._providers: dict[str, _SocraticProvider] = {
+            "openai": _OpenAIProvider(settings),
+            "azure": _AzureOpenAIProvider(settings),
+        }
 
     def generate(self, capture: CaptureRequest, extraction: VisionExtraction, syllabus: dict) -> SocraticOutput:
-        endpoint = self._settings.azure_openai_endpoint
-        key = self._settings.azure_openai_key
-        deployment = self._settings.azure_openai_deployment
-
         fallback = self._fallback_output(capture, extraction)
-        if not endpoint or not key or not deployment:
+
+        preferred = self._resolve_provider(self._settings.sentinel_llm_provider)
+        provider_order = [preferred, *[item for item in ("azure", "openai") if item != preferred]]
+
+        for provider_name in provider_order:
+            provider = self._providers.get(provider_name)
+            if provider is None:
+                continue
+            content = provider.generate(capture, extraction, syllabus)
+            if content is not None:
+                return self._parse_socratic_output(content, capture, extraction)
+
+        return fallback
+
+    def _resolve_provider(self, raw_provider: str) -> str:
+        provider = (raw_provider or "").strip().lower()
+        if provider in self._providers:
+            return provider
+        return "openai"
+
+    def _parse_socratic_output(
+        self,
+        content: str,
+        capture: CaptureRequest,
+        extraction: VisionExtraction,
+    ) -> SocraticOutput:
+        fallback = self._fallback_output(capture, extraction)
+        blob = _extract_json_blob(content)
+        if not blob:
             return fallback
 
-        url = (
-            f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions"
-            f"?api-version={self._settings.azure_openai_api_version}"
-        )
-        headers = {
-            "api-key": key,
-            "Content-Type": "application/json",
-        }
+        prompt = str(blob.get("socratic_prompt", "")).strip() or fallback.socratic_prompt
+        gaps = blob.get("gaps", [])
+        if not isinstance(gaps, list):
+            return SocraticOutput(socratic_prompt=prompt, gaps=fallback.gaps)
 
-        system_prompt = build_system_prompt(syllabus)
-        user_prompt = build_user_prompt(
-            extraction.raw_text,
-            extraction.summary,
-            extraction.tags,
-            previous_prompt=capture.previous_prompt,
-            user_input_text=capture.user_input_text,
-            thread_id=capture.thread_id,
-            turn_index=capture.turn_index,
-        )
-
-        payload = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 400,
-        }
-
-        try:
-            response = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=self._settings.request_timeout_seconds,
+        cleaned_gaps: list[dict[str, Any]] = []
+        for gap in gaps:
+            if not isinstance(gap, dict):
+                continue
+            concept = str(gap.get("concept", "")).strip()
+            if not concept:
+                continue
+            severity = float(gap.get("severity", 0.5))
+            confidence = float(gap.get("confidence", 0.6))
+            cleaned_gaps.append(
+                {
+                    "concept": concept,
+                    "severity": max(0.0, min(1.0, severity)),
+                    "confidence": max(0.0, min(1.0, confidence)),
+                }
             )
-            response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
-            blob = _extract_json_blob(content)
-            if not blob:
-                return fallback
-
-            prompt = str(blob.get("socratic_prompt", "")).strip() or fallback.socratic_prompt
-            gaps = blob.get("gaps", [])
-            if not isinstance(gaps, list):
-                gaps = fallback.gaps
-
-            cleaned_gaps: list[dict[str, Any]] = []
-            for gap in gaps:
-                if not isinstance(gap, dict):
-                    continue
-                concept = str(gap.get("concept", "")).strip()
-                if not concept:
-                    continue
-                severity = float(gap.get("severity", 0.5))
-                confidence = float(gap.get("confidence", 0.6))
-                cleaned_gaps.append(
-                    {
-                        "concept": concept,
-                        "severity": max(0.0, min(1.0, severity)),
-                        "confidence": max(0.0, min(1.0, confidence)),
-                    }
-                )
-            return SocraticOutput(socratic_prompt=prompt, gaps=cleaned_gaps or fallback.gaps)
-        except Exception:
-            return fallback
+        return SocraticOutput(socratic_prompt=prompt, gaps=cleaned_gaps or fallback.gaps)
 
     def _fallback_output(self, capture: CaptureRequest, extraction: VisionExtraction) -> SocraticOutput:
         seed_concept = "Concept interpretation"
@@ -176,9 +247,7 @@ class AzureSocraticClient:
             seed_concept = extraction.tags[0].replace("_", " ").title()
         learner_reply = (capture.user_input_text or "").strip()
         if learner_reply:
-            prompt = (
-                "What assumption in your last response is strongest, and which one needs evidence?"
-            )
+            prompt = "What assumption in your last response is strongest, and which one needs evidence?"
         else:
             prompt = (
                 "What is the first principle behind this section, and how would you explain it "
