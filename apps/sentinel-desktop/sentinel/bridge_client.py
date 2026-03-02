@@ -10,7 +10,7 @@ from .types import CaptureRegion, MonitorSnapshot, WindowMetadata
 
 
 class BridgeClient:
-    def __init__(self, base_url: str, timeout_seconds: float = 12.0) -> None:
+    def __init__(self, base_url: str, timeout_seconds: float = 45.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
