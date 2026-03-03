@@ -120,11 +120,15 @@ class ScoraticAgentAdapter:
 
     def _resolve_script_path(self) -> Path:
         if self._settings.scoratic_agent_script_path:
-            return Path(self._settings.scoratic_agent_script_path).expanduser().resolve()
+            configured = Path(self._settings.scoratic_agent_script_path).expanduser()
+            if not configured.is_absolute():
+                configured = PROJECT_ROOT / configured
+            return configured.resolve()
 
         candidates = [
-            PROJECT_ROOT.parent / "aayush code" / "sentinel_brain (1).py",
+            PROJECT_ROOT / "scripts" / "sentinel_brain (1).py",
             PROJECT_ROOT / "sentinel_brain (1).py",
+            PROJECT_ROOT.parent / "aayush code" / "sentinel_brain (1).py",
         ]
         for candidate in candidates:
             if candidate.exists():

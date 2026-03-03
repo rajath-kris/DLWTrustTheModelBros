@@ -1,0 +1,36 @@
+{
+  "gaps": {
+    "modulus operation": {
+      "attempts": 1,
+      "mastery": 0.45,
+      "last_seen": "2026-03-04T04:15:54",
+      "gap_description": "loop condition",
+      "knows": [
+        "mod 2 checks parity"
+      ],
+      "confused_about": "loop condition",
+      "evidence": [
+        {
+          "time": "2026-03-04T04:15:54",
+          "delta": -0.05,
+          "confused_about": "loop condition"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T04:15:51",
+      "user_text": "I think mod 2 checks parity, but I cannot place it in my loop condition",
+      "assistant_reply": "How do you think using `mod 2` could help determine whether a number is even or odd in your loop?",
+      "draft_reply": "How do you think using `mod 2` could help determine whether a number is even or odd in your loop?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

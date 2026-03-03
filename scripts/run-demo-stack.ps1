@@ -13,6 +13,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $bridgeDir = Join-Path $repoRoot 'services/bridge-api'
 $missionDir = Join-Path $repoRoot 'apps/mission-control'
 $sentinelDir = Join-Path $repoRoot 'apps/sentinel-desktop'
+$defaultScoraticScript = Join-Path $repoRoot 'scripts/sentinel_brain (1).py'
 
 $bridgePython = Join-Path $bridgeDir '.venv/Scripts/python.exe'
 $sentinelPython = Join-Path $sentinelDir '.venv/Scripts/python.exe'
@@ -182,6 +183,9 @@ function Start-Stack {
     $env:BRIDGE_PORT = $resolvedBridgePort.ToString()
     $env:SENTINEL_BRIDGE_URL = $resolvedBridgeUrl
     $env:VITE_API_BASE_URL = $resolvedBridgeUrl
+    if ([string]::IsNullOrWhiteSpace($env:SENTINEL_SCORATIC_SCRIPT_PATH) -and (Test-Path $defaultScoraticScript)) {
+        $env:SENTINEL_SCORATIC_SCRIPT_PATH = $defaultScoraticScript
+    }
 
     $bridgeLog = Join-Path $runDir 'bridge.log'
     $bridgeErr = Join-Path $runDir 'bridge.err.log'
