@@ -1,5 +1,9 @@
 ﻿# Sentinel AI MVP (Vision Scaffold)
 
+## Demo Note
+
+For judging clarity: we could not reliably fit every feature into a strict two-minute live demo. The system is still hard to run end-to-end on macOS, and setup/stack orchestration on Windows is also non-trivial. Because of that, we recorded and shared an uncut demo video so reviewers can see all implemented features and full runtime behavior without cuts. We also want to acknowledge that parts of this project were built while some team members were operating from an active war zone and we would like to appreciate their committment to this hackathon even while in potential danger.
+
 Minimal monorepo scaffold for the `vision.md` loop:
 
 - `apps/sentinel-desktop`: The Sentinel + Overlay (`Alt+S`, region capture, floating Socratic bubble).
@@ -167,20 +171,6 @@ python .\scripts\smoke_check.py
 
 This starts the bridge, posts a capture, verifies state increments, and exits.
 
-## Mock Laplace Flow
-
-Run a deterministic two-turn mock capture flow using one lecture fixture and one tutorial fixture for the same concept:
-
-```powershell
-python .\scripts\run-laplace-mock-flow.py
-```
-
-Fixtures:
-
-- `docs/mock-content/laplace_lecture_slide.md`
-- `docs/mock-content/laplace_tutorial.md`
-
-The script posts both captures to `POST /api/v1/captures`, reuses thread context across turns, and writes a summary artifact under `artifacts/mock-laplace/`.
 
 ## Topic-Bound Screenshot Flow (Warn + Continue)
 
@@ -201,45 +191,3 @@ python .\\scripts\\run-topic-bound-mock-flow.py
 ```
 
 This writes an artifact under `artifacts/topic-bound-flow/` showing one matched and one unmatched path.
-
-## Overlay Isolated Journey (One Command)
-
-Run the overlay in an isolated environment with a mock bridge, live timeline, and session artifacts:
-
-```powershell
-.\scripts\run-overlay-journey.ps1
-```
-
-Useful options:
-
-```powershell
-.\scripts\run-overlay-journey.ps1 -Scenario flaky
-.\scripts\run-overlay-journey.ps1 -Scenario success_slow -SkipBootstrap
-```
-
-What this does:
-
-1. Starts a local mock bridge on `127.0.0.1:8011`.
-2. Starts sentinel desktop in test mode with local Journey Control trigger.
-3. Streams timeline events in terminal while you perform capture/escape/retry actions.
-4. Writes artifacts to `artifacts/overlay-journey/<timestamp>/`:
-   - `raw-sentinel.log`
-   - `raw-mock-bridge.log`
-   - `timeline.json`
-   - `session-report.md`
-
-Prompt-by-prompt input loop (desktop overlay):
-
-1. Trigger a capture (`Alt+S` or Journey Control button).
-2. Select region and wait for the first Socratic prompt card.
-3. Click input area to enter text mode, type one response, then press `Send` (or Enter).
-4. Overlay transitions to analyzing and then returns with next prompt + cleared input box.
-5. Retry/Dismiss remain available; `Esc` dismisses selector/overlay.
-
-Input behavior defaults:
-
-- `SENTINEL_OVERLAY_INPUT_REQUIRED=1`
-- `SENTINEL_OVERLAY_INPUT_MAX_CHARS=280`
-- `SENTINEL_OVERLAY_SHOW_INPUT_CONFIRMATION=1`
-
-See `docs/overlay-test-journey.md` for full scenario matrix and guided steps.
