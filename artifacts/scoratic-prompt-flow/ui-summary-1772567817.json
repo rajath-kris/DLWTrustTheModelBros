@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "log_file": "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\sentinel_ui.log",
+  "thread_id": null,
+  "steps_completed": 0,
+  "results": [],
+  "errors": [
+    "No thread_id found in log."
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "gaps": {
+    "Laplace transform": {
+      "attempts": 2,
+      "mastery": 0.4,
+      "last_seen": "2026-03-04T03:48:01",
+      "gap_description": "initial conditions",
+      "knows": [
+        "Laplace transform",
+        "derivatives",
+        "initial conditions"
+      ],
+      "confused_about": "initial conditions",
+      "evidence": [
+        {
+          "time": "2026-03-04T03:47:57",
+          "delta": -0.05,
+          "confused_about": "why initial conditions appear"
+        },
+        {
+          "time": "2026-03-04T03:48:01",
+          "delta": -0.05,
+          "confused_about": "initial conditions"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T03:47:56",
+      "user_text": "I am trying to understand why initial conditions appear in Laplace transform.",
+      "assistant_reply": "What do you notice about how the Laplace transform handles derivatives?",
+      "draft_reply": "What do you notice about how the Laplace transform handles derivatives?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T03:48:01",
+      "user_text": "I think I ignored derivative terms and got stuck.",
+      "assistant_reply": "Consider how the Laplace transform of a derivative involves initial conditions. How does this relate to the original function?",
+      "draft_reply": "Consider how the Laplace transform of a derivative involves initial conditions. How does this relate to the original function?",
+      "had_screenshot": true,
+      "topic_at_turn": "Laplace transform",
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T03:48:06",
+      "user_text": "thanks, I got it now",
+      "assistant_reply": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "draft_reply": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "had_screenshot": true,
+      "topic_at_turn": "Laplace transform",
+      "reply_mode": "closure"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

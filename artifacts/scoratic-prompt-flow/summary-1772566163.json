@@ -1,0 +1,46 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772566094",
+  "prompt_count": 4,
+  "steps_completed": 2,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:28:19.078767Z",
+      "latency_ms": 4942,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "7e5cc7fd-89df-495e-be56-efdc75bf7ee2",
+      "thread_id": "scoratic-flow-1772566094",
+      "turn_index": 1,
+      "socratic_prompt": "Good honesty in your attempt, especially \"I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.\". You are not far off, we just need to tighten one reasoning link from \"I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.\". I couldn't parse the visual content. Could you describe what you see or ask about a specific part?",
+      "reply_mode": "gentle_correction",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:28:23.321640Z",
+      "latency_ms": 4242,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "cf1f1f61-dcca-46d1-850a-5340aa6cbadd",
+      "thread_id": "scoratic-flow-1772566094",
+      "turn_index": 2,
+      "socratic_prompt": "Nice progress, your point \"I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial\" is close. You are on the right path, so let's deepen it by stress-testing the key assumption around \"I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial\". It seems you're trying to simplify the process. Why might initial conditions be important when transforming derivatives into the s-domain?",
+      "reply_mode": "right_path_intuition",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    }
+  ],
+  "errors": [
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:29:23.333835Z",
+      "latency_ms": 60012,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "error": "TimeoutError: timed out"
+    }
+  ]
+}

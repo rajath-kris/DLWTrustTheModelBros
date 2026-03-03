@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772566188",
+  "prompt_count": 3,
+  "steps_completed": 2,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:29:52.917702Z",
+      "latency_ms": 4661,
+      "input_prompt": "I am trying to understand why initial conditions appear in Laplace transform.",
+      "capture_id": "0f2e082b-bc02-4344-8812-e4746d439361",
+      "thread_id": "scoratic-flow-1772566188",
+      "turn_index": 1,
+      "socratic_prompt": "Thanks for sharing that thought, \"I am trying to understand why initial conditions appear in Laplace transform.\". Let's reconnect with Linked Lists. Which exact step from this problem do you want to fix first?",
+      "reply_mode": "off_topic_redirect",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:29:55.641702Z",
+      "latency_ms": 2723,
+      "input_prompt": "I think I ignored derivative terms and got stuck.",
+      "capture_id": "12a81a88-0fe3-4a8d-8546-1b4c15cfe8e0",
+      "thread_id": "scoratic-flow-1772566188",
+      "turn_index": 2,
+      "socratic_prompt": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "reply_mode": "session_complete",
+      "session_ended": true,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    }
+  ],
+  "errors": []
+}

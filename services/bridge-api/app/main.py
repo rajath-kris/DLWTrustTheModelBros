@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .friend_agent_adapter import FriendAgentAdapter, FriendAgentResult
+from .scoratic_agent_adapter import ScoraticAgentAdapter, ScoraticAgentResult
 from .grounding import GroundingBundle, chunk_text, extract_supported_text, select_top_chunks, tokenize
 from .models import (
     CaptureEvent,
@@ -62,7 +62,8 @@ from .topic_models import (
     TopicUpsertRequest,
 )
 from .topic_store import TopicStore
-from .openai_clients import OpenAISocraticClient, OpenAITopicPickerClient, OpenAIVisionClient
+from .openai_clients import OpenAIPlainFallbackClient, OpenAITopicPickerClient, OpenAIVisionClient
+from .prompting import build_plain_openai_fallback_input, build_scoratic_capture_input
 from .quiz_seeding import QuizSeeder, is_generic_generated_question
 from .readiness import calculate_readiness
 from .sentinel_runtime import SentinelRuntimeManager
@@ -98,10 +99,10 @@ app.mount(
 store = StateStore(settings.state_file)
 broker = SSEBroker()
 vision_client = OpenAIVisionClient(settings)
-socratic_client = OpenAISocraticClient(settings)
+openai_fallback_client = OpenAIPlainFallbackClient(settings)
 topic_picker_client = OpenAITopicPickerClient(settings)
 quiz_seeder = QuizSeeder(settings)
-friend_agent = FriendAgentAdapter(settings)
+scoratic_agent = ScoraticAgentAdapter(settings)
 topic_store = TopicStore(settings.topics_dir, vision_client)
 runtime_manager = SentinelRuntimeManager(settings)
 session_context_store = SentinelSessionContextStore(settings.sentinel_session_context_file)
@@ -153,6 +154,10 @@ NEEDS_GUIDANCE_PATTERNS = [
         r"\b(stuck|lost|no idea)\b",
         r"\b(i (?:do not|don't) know)\b",
         r"\b(i (?:might be|am) wrong)\b",
+        r"\b(can(?:not|'t)\s+(?:tell|figure out|see))\b",
+        r"\b(can(?:not|'t)\s+place)\b",
+        r"\b(not sure where|don't know where)\b",
+        r"\b(help me|need help)\b",
     ]
 ]
 OFF_TOPIC_HINT_TOKENS = {
@@ -376,10 +381,56 @@ def _is_off_topic(
     return len(user_tokens & context_tokens) == 0
 
 
+def _looks_like_study_attempt(user_text: str) -> bool:
+    normalized = " ".join((user_text or "").split()).strip()
+    if not normalized:
+        return False
+    tokens = _tokenize_intent_text(normalized)
+    technical_markers = {
+        "equation",
+        "derivative",
+        "integral",
+        "matrix",
+        "vector",
+        "array",
+        "loop",
+        "condition",
+        "remainder",
+        "mod",
+        "modulo",
+        "function",
+        "variable",
+        "proof",
+        "theorem",
+        "algorithm",
+        "formula",
+    }
+    if tokens & technical_markers:
+        return True
+    return re.search(r"[=+\-*/^]|\b\d+\b", normalized) is not None
+
+
 def _single_question(text: str | None, fallback: str) -> str:
     compact = _optional_text(text, max_chars=420) or fallback
     if "?" in compact:
         compact = compact.split("?", 1)[0].strip()
+    # Keep only the final clause so policy wrappers do not feel like two stitched replies.
+    clauses = [segment.strip() for segment in re.split(r"[.!]+", compact) if segment.strip()]
+    if clauses:
+        compact = clauses[-1]
+    question_start = re.search(
+        r"\b(what|which|how|why|where|when|who|can|could|would|should)\b",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    if question_start is None:
+        question_start = re.search(
+            r"\b(do|does|did|is|are)\s+(you|we|i)\b",
+            compact,
+            flags=re.IGNORECASE,
+        )
+    if question_start and question_start.start() > 0:
+        compact = compact[question_start.start() :].strip()
     compact = compact.rstrip(".! ")
     if not compact:
         compact = fallback.rstrip("?").strip()
@@ -402,7 +453,22 @@ def _learner_focus_excerpt(user_text: str) -> str | None:
     compact = _optional_text(user_text, max_chars=110)
     if not compact:
         return None
-    return f"\"{compact}\""
+    return compact
+
+
+def _acknowledgement_line(user_text: str, style: str) -> str:
+    excerpt = _learner_focus_excerpt(user_text)
+    if style == "far":
+        if excerpt:
+            return f"Thanks for sharing that thought, {excerpt}."
+        return "Thanks for sharing that."
+    if style == "mid":
+        if excerpt:
+            return f"Good honesty in your attempt, especially {excerpt}."
+        return "Good honesty in your attempt."
+    if excerpt:
+        return f"Nice progress, your point {excerpt} is close."
+    return "Nice progress, you are close."
 
 
 def _apply_reply_policy(
@@ -416,48 +482,40 @@ def _apply_reply_policy(
     if not learner_reply:
         return generated_prompt, None, False
 
-    focus = _focus_label(topic_name, extraction)
-    learner_excerpt = _learner_focus_excerpt(learner_reply)
-
     if _has_completion_intent(learner_reply):
-        return "Great, that sounds understood. We'll end this turn here.", "session_complete", True
+        return "Great work, that sounds understood. We can end this turn here.", "session_complete", True
 
-    if _needs_guidance(learner_reply):
-        guidance_question = _single_question(
-            generated_prompt,
-            "Which assumption in your last step should we re-check first",
-        )
-        excerpt_clause = f" in your point {learner_excerpt}" if learner_excerpt else ""
-        prompt = (
-            "Good effort. Let's correct one piece at a time by re-checking the key assumption"
-            f"{excerpt_clause}. "
-            f"{guidance_question}"
-        )
-        return prompt, "gentle_correction", False
-
-    if _is_off_topic(
+    needs_guidance = _needs_guidance(learner_reply)
+    off_topic = _is_off_topic(
         user_text=learner_reply,
         previous_prompt=payload.previous_prompt,
         extraction=extraction,
         topic_name=topic_name,
-    ):
+    )
+    if off_topic and payload.turn_index <= 1 and not _optional_text(payload.previous_prompt):
+        off_topic = False
+    if off_topic and needs_guidance:
+        # Prefer guidance for "stuck/confused" responses unless there is an explicit off-topic hint.
+        user_tokens = _tokenize_intent_text(learner_reply)
+        if not (user_tokens & OFF_TOPIC_HINT_TOKENS):
+            off_topic = False
+    if off_topic and _looks_like_study_attempt(learner_reply):
+        user_tokens = _tokenize_intent_text(learner_reply)
+        if not (user_tokens & OFF_TOPIC_HINT_TOKENS):
+            off_topic = False
+
+    if off_topic:
+        focus = _focus_label(topic_name, extraction)
         prompt = (
-            f"That seems unrelated to {focus}. Let's refocus on this topic. "
-            "Which step is blocking you right now?"
+            f"{_acknowledgement_line(learner_reply, 'far')} "
+            f"Let's reconnect with {focus}. "
+            "Which exact step from this problem do you want to fix first?"
         )
         return prompt, "off_topic_redirect", False
 
-    intuition_question = _single_question(
-        generated_prompt,
-        "What assumption in your reasoning gives you the strongest confidence",
-    )
-    excerpt_clause = f" around your point {learner_excerpt}" if learner_excerpt else ""
-    prompt = (
-        "You're on the right path. Strengthen your intuition by stress-testing the key assumption"
-        f"{excerpt_clause}. "
-        f"{intuition_question}"
-    )
-    return prompt, "right_path_intuition", False
+    # Preserve model-generated guidance for normal tutoring turns and only classify mode.
+    mode: ReplyMode = "gentle_correction" if needs_guidance else "right_path_intuition"
+    return generated_prompt, mode, False
 
 
 def _normalize_gap_type(raw_value: object) -> str | None:
@@ -1077,14 +1135,14 @@ def _is_pdf_document(document: CourseDocument, file_path: Path | None) -> bool:
     return document.name.lower().endswith(".pdf")
 
 
-def _select_friend_notes_path(
+def _select_scoratic_notes_path(
     *,
     state: LearningState,
     course_id: str,
     topic_id: str | None,
 ) -> str | None:
-    if settings.friend_agent_notes_path:
-        configured_path = Path(settings.friend_agent_notes_path).expanduser()
+    if settings.scoratic_agent_notes_path:
+        configured_path = Path(settings.scoratic_agent_notes_path).expanduser()
         if configured_path.exists():
             return str(configured_path.resolve())
 
@@ -1121,18 +1179,6 @@ def _select_friend_notes_path(
     return None
 
 
-def _build_friend_capture_user_text(payload: CaptureRequest, extraction: VisionExtraction) -> str:
-    if (payload.user_input_text or "").strip():
-        return payload.user_input_text.strip()
-    summary = extraction.summary.strip()
-    raw_text = extraction.raw_text.strip()
-    tags = ", ".join(extraction.tags[:5])
-    parts = [part for part in [summary, raw_text, tags] if part]
-    if parts:
-        return f"I need help with this screenshot context: {' | '.join(parts)}"
-    return "I need help understanding this screenshot."
-
-
 def _build_topic_signal_text(payload: CaptureRequest, extraction: VisionExtraction) -> str:
     user_text = " ".join((payload.user_input_text or "").split()).strip()
     if user_text:
@@ -1164,9 +1210,9 @@ def _build_grounding_query_text(payload: CaptureRequest, extraction: VisionExtra
     ).strip()
 
 
-def _friend_result_to_gap_payloads(
+def _scoratic_result_to_gap_payloads(
     *,
-    result: FriendAgentResult,
+    result: ScoraticAgentResult,
     extraction: VisionExtraction,
     syllabus: dict,
 ) -> list[dict[str, object]]:
@@ -2266,20 +2312,20 @@ _log_bridge_event(
     reason="POST /api/v1/ask removed from public API surface.",
 )
 
-if friend_agent.configured:
-    if friend_agent.enabled:
+if scoratic_agent.configured:
+    if scoratic_agent.enabled:
         _log_bridge_event(
-            event="friend_agent_enabled",
+            event="scoratic_agent_enabled",
             endpoint_path="/startup",
-            reason="Friend agent backend is active.",
-            script_path=friend_agent.script_path,
+            reason="Scoratic agent backend is active.",
+            script_path=scoratic_agent.script_path,
         )
     else:
         _log_bridge_event(
-            event="friend_agent_unavailable",
+            event="scoratic_agent_unavailable",
             endpoint_path="/startup",
-            reason=friend_agent.load_error or "Failed to initialize friend agent.",
-            script_path=friend_agent.script_path,
+            reason=scoratic_agent.load_error or "Failed to initialize scoratic agent.",
+            script_path=scoratic_agent.script_path,
         )
 
 
@@ -2784,10 +2830,12 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     if topic_scope_warning:
         topic_warning = _merge_warning_messages(topic_warning, [topic_scope_warning])
     source_warning = _merge_warning_messages(topic_warning, grounding_bundle.warnings)
-    agent_backend_used = "bridge"
+    agent_backend_used = "scoratic"
+    fallback_reason: str | None = None
     socratic_prompt: str
     reply_mode: ReplyMode | None = None
     session_ended = False
+    scoratic_reply_mode: str | None = None
     raw_gap_payloads: list[dict[str, object]]
 
     if not grounding_bundle.citations:
@@ -2798,96 +2846,102 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         socratic_prompt = NO_SOURCE_CAPTURE_PROMPT
         raw_gap_payloads = []
         agent_backend_used = "bridge-no-source"
+        fallback_reason = None
     else:
-        if friend_agent.enabled:
-            try:
-                friend_notes_path = _select_friend_notes_path(
-                    state=existing_state,
-                    course_id=course_id,
-                    topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
-                )
-                friend_result = friend_agent.chat(
-                    thread_id=thread_id,
-                    user_text=_build_friend_capture_user_text(payload, extraction),
-                    notes_path=friend_notes_path,
-                    image_bytes=image_bytes,
-                )
-                socratic_prompt = friend_result.reply
-                raw_gap_payloads = _friend_result_to_gap_payloads(
-                    result=friend_result,
-                    extraction=extraction,
-                    syllabus=syllabus,
-                )
-                agent_backend_used = "friend"
-            except Exception as exc:  # noqa: BLE001
-                _log_bridge_event(
-                    event="friend_agent_fallback",
-                    endpoint_path="/api/v1/captures",
-                    capture_id=capture_id,
-                    reason=f"{type(exc).__name__}: {exc}",
-                    course_id=course_id,
-                    topic_id=context_topic.topic_id if context_topic is not None else None,
-                )
-                socratic = socratic_client.generate(
-                    payload,
-                    extraction,
-                    syllabus,
-                    grounding_context=grounding_bundle.context_text or None,
-                    grounding_sources=grounding_bundle.citations or None,
-                )
-                if socratic_client.last_backend_warning:
-                    _log_bridge_event(
-                        event="bridge_agent_fallback",
-                        endpoint_path="/api/v1/captures",
-                        capture_id=capture_id,
-                        reason=socratic_client.last_backend_warning,
-                        agent_backend="bridge",
-                        course_id=course_id,
-                        topic_id=context_topic.topic_id if context_topic is not None else None,
-                    )
-                socratic_prompt = socratic.socratic_prompt
-                raw_gap_payloads = socratic.gaps
-        else:
-            socratic = socratic_client.generate(
-                payload,
-                extraction,
-                syllabus,
+        try:
+            scoratic_notes_path = _select_scoratic_notes_path(
+                state=existing_state,
+                course_id=course_id,
+                topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
+            )
+            scoratic_user_input = build_scoratic_capture_input(
+                extracted_text=extraction.raw_text,
+                summary=extraction.summary,
+                tags=extraction.tags,
+                previous_prompt=payload.previous_prompt,
+                user_input_text=payload.user_input_text,
+                thread_id=thread_id,
+                turn_index=payload.turn_index,
                 grounding_context=grounding_bundle.context_text or None,
                 grounding_sources=grounding_bundle.citations or None,
             )
-            if socratic_client.last_backend_warning:
-                _log_bridge_event(
-                    event="bridge_agent_fallback",
-                    endpoint_path="/api/v1/captures",
-                    capture_id=capture_id,
-                    reason=socratic_client.last_backend_warning,
-                    agent_backend="bridge",
-                    course_id=course_id,
-                    topic_id=context_topic.topic_id if context_topic is not None else None,
-                )
-            socratic_prompt = socratic.socratic_prompt
-            raw_gap_payloads = socratic.gaps
+            scoratic_result = scoratic_agent.chat(
+                thread_id=thread_id,
+                user_text=scoratic_user_input,
+                notes_path=scoratic_notes_path,
+                image_bytes=image_bytes,
+            )
+            scoratic_reply_mode = " ".join((scoratic_result.reply_mode or "").split()).strip().lower() or None
+            if scoratic_reply_mode == "closure":
+                reply_mode = "session_complete"
+                session_ended = True
+            elif scoratic_reply_mode == "nudge":
+                reply_mode = "off_topic_redirect"
+            socratic_prompt = scoratic_result.reply
+            raw_gap_payloads = _scoratic_result_to_gap_payloads(
+                result=scoratic_result,
+                extraction=extraction,
+                syllabus=syllabus,
+            )
+            agent_backend_used = "scoratic"
+            fallback_reason = None
+        except Exception as exc:  # noqa: BLE001
+            fallback_reason = f"{type(exc).__name__}: {exc}"
+            _log_bridge_event(
+                event="scoratic_agent_fallback",
+                endpoint_path="/api/v1/captures",
+                capture_id=capture_id,
+                reason=fallback_reason,
+                course_id=course_id,
+                topic_id=context_topic.topic_id if context_topic is not None else None,
+            )
+            fallback_prompt_input = build_plain_openai_fallback_input(
+                extracted_text=extraction.raw_text,
+                summary=extraction.summary,
+                tags=extraction.tags,
+                previous_prompt=payload.previous_prompt,
+                user_input_text=payload.user_input_text,
+                thread_id=thread_id,
+                turn_index=payload.turn_index,
+                grounding_context=grounding_bundle.context_text or None,
+            )
+            fallback_output = openai_fallback_client.generate(prompt_text=fallback_prompt_input)
+            socratic_prompt = fallback_output.socratic_prompt
+            if fallback_output.fallback_reason:
+                fallback_reason = fallback_output.fallback_reason
+            raw_gap_payloads = []
+            agent_backend_used = "openai-fallback"
 
-    socratic_prompt = _strip_source_mentions(
-        socratic_prompt,
-        source_material_label=grounding_bundle.primary_source_label,
-        source_material_name=source_context.material_name if source_context is not None else None,
-        citations=grounding_bundle.citations,
-    )
-    socratic_prompt, reply_mode, session_ended = _apply_reply_policy(
-        generated_prompt=socratic_prompt,
-        payload=payload,
-        extraction=extraction,
-        topic_name=context_topic.topic_name if context_topic is not None else None,
-    )
-    socratic_prompt = _strip_source_mentions(
-        socratic_prompt,
-        source_material_label=grounding_bundle.primary_source_label,
-        source_material_name=source_context.material_name if source_context is not None else None,
-        citations=grounding_bundle.citations,
-    )
-    if session_ended:
-        raw_gap_payloads = []
+    if agent_backend_used != "openai-fallback":
+        socratic_prompt = _strip_source_mentions(
+            socratic_prompt,
+            source_material_label=grounding_bundle.primary_source_label,
+            source_material_name=source_context.material_name if source_context is not None else None,
+            citations=grounding_bundle.citations,
+        )
+        if not session_ended:
+            policy_prompt, policy_reply_mode, policy_session_ended = _apply_reply_policy(
+                generated_prompt=socratic_prompt,
+                payload=payload,
+                extraction=extraction,
+                topic_name=context_topic.topic_name if context_topic is not None else None,
+            )
+            socratic_prompt = policy_prompt
+            if policy_reply_mode is not None:
+                reply_mode = policy_reply_mode
+            session_ended = policy_session_ended
+        socratic_prompt = _strip_source_mentions(
+            socratic_prompt,
+            source_material_label=grounding_bundle.primary_source_label,
+            source_material_name=source_context.material_name if source_context is not None else None,
+            citations=grounding_bundle.citations,
+        )
+        if session_ended:
+            raw_gap_payloads = []
+    else:
+        socratic_prompt = " ".join(socratic_prompt.split()).strip() or (
+            "What step in your current reasoning needs the most evidence?"
+        )
 
     generated_capture_gap_count = len(raw_gap_payloads)
     if generated_capture_gap_count > 0 and not CAPTURE_GAP_CREATION_ENABLED:
@@ -2996,6 +3050,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         context_topic_id=context_topic.topic_id if context_topic is not None else None,
         grounding_topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
         topic_grounded=topic_grounded,
+        fallback_reason=fallback_reason,
         reply_mode=reply_mode,
         session_ended=session_ended,
         grounding_citation_count=len(grounding_bundle.citations),
@@ -3019,6 +3074,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         source_context=source_context,
         source_material_url=grounding_bundle.primary_source_url,
         source_material_label=grounding_bundle.primary_source_label,
+        agent_backend=agent_backend_used,
+        fallback_reason=fallback_reason,
     )
 
 

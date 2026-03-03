@@ -1,0 +1,69 @@
+{
+  "gaps": {
+    "moving even integers in a linked list": {
+      "attempts": 3,
+      "mastery": 0.35,
+      "last_seen": "2026-03-04T03:54:46",
+      "gap_description": "rearrange the linked list",
+      "knows": [
+        "Python function",
+        "determine if a number is even or odd",
+        "even integers",
+        "linked list",
+        "mod 2 operation",
+        "mod operation"
+      ],
+      "confused_about": "rearrange the linked list",
+      "evidence": [
+        {
+          "time": "2026-03-04T03:51:19",
+          "delta": -0.05,
+          "confused_about": "how to move even integers"
+        },
+        {
+          "time": "2026-03-04T03:51:40",
+          "delta": -0.05,
+          "confused_about": "how to use mod to identify even numbers"
+        },
+        {
+          "time": "2026-03-04T03:54:46",
+          "delta": -0.05,
+          "confused_about": "rearrange the linked list"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T03:51:17",
+      "user_text": "Timestamp: 2026-03-03T19:51:15.495806Z Thread id: d7fda253-b2dd-47ff-be76-3d3f20edbc64 Turn index: 0 Vision summary: Write a Python function to move even integers to the back of a linked list. Detected tags: python, linkedlist, even numbers, function Previous prompt: none Learner response: none OCR text: 1. (moveEvenItemsToBackLL) Write a Python function move_even_items_to_back_ll() that moves all the even integers to the back of the linked list. The function prototype is given as follows: def move_even_items_to_back(ll: LinkedList): Some sample inputs and outputs sessions are given below: If the linked list is 2, 3, 4, 7, 15, 18: The resulting Linked List after moving even integers to the back of the Linked List is: 3 7 15 2 4 18 Grounding sources: topic:Linked Lists/Linked_List_TUT_reindex.pdf, course-doc:Linked_List_TUT_reindex.pdf Grounding context: [topic:Linked Lists/Linked_List_TUT_reindex.pdf] Tutorial \u2013 Linked Lists 1. (moveEvenItemsToBackLL) Write a Python function move_even_items_to_back_ll() that moves all the even integers to the back of the linked list. The function prototype is given as follows: def move_even_items_to_back(ll: LinkedList): Some sample inputs and outputs sessions are given below: If the linked list is 2, 3, 4, 7, 15, 18: The resulting Linked List after moving even integers to the back of the Linked List is: 3 7 15 2 4 18 If the linked list is 2, 7, 18, 3, 4, 15: The resulting Linked List after moving even integers to the back of the Linked List is: 7 3 15 2 18 4 If the current linked list is 1, 3, 5: The resulting Linked List after moving even integers to the back of the Linked List is: 1 3 5 If the current linked list is 2 4 6: The resulting Linked List after moving even integers to the back of the Linked List is: 2 4 6 2. (moveMaxToFront) Write a Python function move_max_to_front() that traverses a linked list of integers at most once, then moves the node with the largest stored value to the front of the list. The function prototype is given as follows: def move_max_to_front( --- [topic:Linked Lists/Linked_List_TUT_reindex.pdf] Tutorial \u2013 Linked Lists 1. (moveEvenItemsToBackLL) Write a Python function move_even_items_to_back_ll() that moves all the even integers to the back of the linked list. The function prototype is given as follows: def move_even_items_to_back(ll: LinkedList): Some sample inputs and outputs sessions are given below: If the linked list is 2, 3, 4, 7, 15, 18: The resulting Linked List after moving even integers to the back of the Linked List is: 3 7 15 2 4 18 If the linked list is 2, 7, 18, 3, 4, 15: The resulting Linked List after moving even integers to the back of the Linked List is: 7 3 15 2 18 4 If the current linked list is 1, 3, 5: The resulting Linked List after moving even integers to the back of the Linked List is: 1 3 5 If the current linked list is 2 4 6: The resulting Linked List after moving even integers to the back of the Linked List is: 2 4 6 2. (moveMaxToFront) Write a Python function move_max_to_front() that traverses a linked list of integers at most once, then moves the node with the largest stored value to the front of the list. The function prototype is given as follows: def move_max_to_front( [course-doc:Linked_List_TUT_reindex.pdf] Tutorial \u2013 Linked Lists 1. (moveEvenItemsToBackLL) Write a Python function move_even_items_to_back_ll() that moves all the even integers to the back of the linked list. The function prototype is given as follows: def move_even_items_to_back(ll: LinkedList): Some sample inputs and outputs sessions are given below: If the linked list is 2, 3, 4, 7, 15, 18: The resulting Linked List after moving even integers to the back of the Linked List is: 3 7 15 2 4 18 If the linked list is 2, 7, 18, 3, 4, 15: The resulting Linked List after moving even integers to the back of the Linked List is: 7 3 15 2 18 4 If the current linked list is 1, 3, 5: The resulting Linked List after moving even integers to the back of the Linked List is: 1 3 5 If the current linked list is 2 4 6: The resulting Linked List after moving even integers to the back of the Linked List is: 2 4 6 2. (moveMaxToFront) Write a Python function move_max_to_front() that traverses a linked list of integers at most once, then moves the node with the largest stored value to the front of the list. The function prototype is given as follows: def move_max_to_front( --- [course-doc:Linked_List_TUT_reindex.pdf] Tutorial \u2013 Linked Lists 1. (moveEvenItemsToBackLL) Write a Python function move_even_items_to_back_ll() that moves all the even integers to the back of the linked list. The function prototype is given as follows: def move_even_items_to_back(ll: LinkedList): Some sample inputs and outputs sessions are given below: If the linked list is 2, 3, 4, 7, 15, 18: The resulting Linked List after moving even integers to the back of the Linked List is: 3 7 15 2 4 18 If the linked list is 2, 7, 18, 3, 4, 15: The resulting Linked List after moving even integers to the back of the Linked List is: 7 3 15 2 18 4 If the current linked list is 1, 3, 5: The resulting Linked List after moving even integers to the back of the Linked List is: 1 3 5 If the current linked list is 2 4 6: The resulting Linked List after moving even integers to the back of the Linked List is: 2 4 6 2. (moveMaxToFront) Write a Python function move_max_to_front() that traverses a linked list of integers at most once, then moves the node with the largest stored value to the front of the list. The function prototype is given as follows: def move_max_to_front(",
+      "assistant_reply": "What approach might you use to identify and move even integers in a linked list?",
+      "draft_reply": "What approach might you use to identify and move even integers in a linked list?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T03:51:39",
+      "user_text": "mod 2 maybe?",
+      "assistant_reply": "Great start! How would you use the mod operation to determine if a number is even?",
+      "draft_reply": "Great start! How would you use the mod operation to determine if a number is even?",
+      "had_screenshot": true,
+      "topic_at_turn": "moving even integers in a linked list",
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T03:54:44",
+      "user_text": "mod 2 and with remainder as 0 or 1 we can test if a number is even or odd",
+      "assistant_reply": "Correct! How can you apply this concept to rearrange the linked list?",
+      "draft_reply": "Exactly! If a number mod 2 equals 0, it's even. How might you use this to rearrange the linked list?",
+      "had_screenshot": true,
+      "topic_at_turn": "moving even integers in a linked list",
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

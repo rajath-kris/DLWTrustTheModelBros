@@ -1,0 +1,61 @@
+{
+  "gaps": {
+    "Laplace transform": {
+      "attempts": 2,
+      "mastery": 0.4,
+      "last_seen": "2026-03-04T03:44:13",
+      "gap_description": "role of initial conditions",
+      "knows": [
+        "Laplace transform",
+        "differential equation",
+        "initial conditions appear in Laplace transform"
+      ],
+      "confused_about": "role of initial conditions",
+      "evidence": [
+        {
+          "time": "2026-03-04T03:44:07",
+          "delta": -0.05,
+          "confused_about": "role of initial conditions"
+        },
+        {
+          "time": "2026-03-04T03:44:13",
+          "delta": -0.05,
+          "confused_about": "role of initial conditions"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T03:44:06",
+      "user_text": "I am trying to understand why initial conditions appear in Laplace transform.",
+      "assistant_reply": "What do you think the role of initial conditions is when transforming a differential equation using the Laplace transform?",
+      "draft_reply": "What do you think the role of initial conditions is when transforming a differential equation using the Laplace transform?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T03:44:12",
+      "user_text": "I think I ignored derivative terms and got stuck.",
+      "assistant_reply": "Considering derivatives, how do initial conditions help transform a differential equation into an algebraic equation using the Laplace transform?",
+      "draft_reply": "Considering derivatives, how do initial conditions help transform a differential equation into an algebraic equation using the Laplace transform?",
+      "had_screenshot": true,
+      "topic_at_turn": "Laplace transform",
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T03:44:17",
+      "user_text": "thanks, I got it now",
+      "assistant_reply": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "draft_reply": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "had_screenshot": true,
+      "topic_at_turn": "Laplace transform",
+      "reply_mode": "closure"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

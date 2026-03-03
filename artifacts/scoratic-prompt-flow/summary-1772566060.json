@@ -1,0 +1,46 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772565983",
+  "prompt_count": 4,
+  "steps_completed": 2,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:26:33.982176Z",
+      "latency_ms": 10037,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "76bcbd52-ffdd-4142-969c-38469b2f279a",
+      "thread_id": "scoratic-flow-1772565983",
+      "turn_index": 1,
+      "socratic_prompt": "When dealing with Laplace transforms, initial conditions appear in the s-domain because they are part of the process of transforming a differential equation from the time domain to the s-domain. The Laplace transform is particularly useful for solving linear differential equations with constant coefficients, and it allows you to incorporate initial conditions directly into the algebraic equation in the s-domain. Here's a brief explanation of why initial conditions are included: 1. **Laplace Tran",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "OSError: broken data stream when reading image file"
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:26:40.604627Z",
+      "latency_ms": 6622,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "32329552-b88c-49b5-a575-e9cd6a50b85e",
+      "thread_id": "scoratic-flow-1772565983",
+      "turn_index": 2,
+      "socratic_prompt": "It seems like you're dealing with an issue related to Laplace transforms and initial conditions, and there might be some confusion about how to handle them in the s-domain. When you apply the Laplace transform to a differential equation, the initial conditions are incorporated into the transformed equation. This is because the Laplace transform of a derivative includes terms that account for initial conditions. For example, if you have a function \\( f(t) \\) and its Laplace transform is \\( F(s) \\",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "OSError: broken data stream when reading image file"
+    }
+  ],
+  "errors": [
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:27:40.607199Z",
+      "latency_ms": 60002,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "error": "TimeoutError: timed out"
+    }
+  ]
+}

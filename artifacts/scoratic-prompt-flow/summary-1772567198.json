@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772567185",
+  "prompt_count": 3,
+  "steps_completed": 3,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:46:29.163133Z",
+      "latency_ms": 3871,
+      "input_prompt": "I am trying to understand why initial conditions appear in Laplace transform.",
+      "capture_id": "316003d0-be3b-452a-bbe5-4f1ad63ff016",
+      "thread_id": "scoratic-flow-1772567185",
+      "turn_index": 1,
+      "socratic_prompt": "Nice progress, your point \"I am trying to understand why initial conditions appear in Laplace transform.\" is close. You are on the right path, so let's deepen it by stress-testing the key assumption around \"I am trying to understand why initial conditions appear in Laplace transform.\". Let's explore this. How do initial conditions affect the solution of differential equations when using the Laplace transform?",
+      "reply_mode": "right_path_intuition",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:46:34.910423Z",
+      "latency_ms": 5747,
+      "input_prompt": "I think I ignored derivative terms and got stuck.",
+      "capture_id": "b24e7650-2cd0-4414-bf6d-b3e8d24b8596",
+      "thread_id": "scoratic-flow-1772567185",
+      "turn_index": 2,
+      "socratic_prompt": "Thanks for sharing that thought, \"I think I ignored derivative terms and got stuck.\". Let's reconnect with Linked Lists. Which exact step from this problem do you want to fix first?",
+      "reply_mode": "off_topic_redirect",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:46:38.372324Z",
+      "latency_ms": 3461,
+      "input_prompt": "thanks, I got it now",
+      "capture_id": "4e2bec75-5bc5-42f0-8636-b04c294e8da3",
+      "thread_id": "scoratic-flow-1772567185",
+      "turn_index": 3,
+      "socratic_prompt": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "reply_mode": "session_complete",
+      "session_ended": true,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    }
+  ],
+  "errors": []
+}

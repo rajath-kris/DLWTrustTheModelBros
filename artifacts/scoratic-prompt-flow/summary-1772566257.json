@@ -1,0 +1,66 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:8000",
+  "thread_id": "scoratic-flow-1772566240",
+  "prompt_count": 4,
+  "steps_completed": 4,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:30:44.698893Z",
+      "latency_ms": 4331,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "6fcee353-c70f-4304-9425-7bd77f98f9d3",
+      "thread_id": "scoratic-flow-1772566240",
+      "turn_index": 1,
+      "socratic_prompt": "When transforming a differential equation to the s-domain using the Laplace transform, how do the initial conditions of the system affect the transformed equation?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:30:48.006168Z",
+      "latency_ms": 3307,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "2190d11e-ea6e-447d-926e-1ccf04451fcc",
+      "thread_id": "scoratic-flow-1772566240",
+      "turn_index": 2,
+      "socratic_prompt": "How do the initial conditions of a differential equation appear in the Laplace transform, and why can't they be ignored when transforming the equation to the s-domain?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    },
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:30:51.558761Z",
+      "latency_ms": 3552,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "capture_id": "ef30b5d4-a58e-4959-83d1-a07c59efa273",
+      "thread_id": "scoratic-flow-1772566240",
+      "turn_index": 3,
+      "socratic_prompt": "How do initial conditions affect the solution of a differential equation when using the Laplace transform, and what role do they play in determining the complete response in the s-domain?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    },
+    {
+      "step": 4,
+      "timestamp_utc": "2026-03-03T19:30:57.348559Z",
+      "latency_ms": 5789,
+      "input_prompt": "Got it now, this makes sense and I can continue.",
+      "capture_id": "af7b09df-718b-422b-951d-ff0193b1e858",
+      "thread_id": "scoratic-flow-1772566240",
+      "turn_index": 4,
+      "socratic_prompt": "When applying the Laplace transform to solve a differential equation, how do you determine the inverse Laplace transform to find the time-domain solution, and what role do partial fraction decomposition play in this process?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    }
+  ],
+  "errors": []
+}

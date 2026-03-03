@@ -56,6 +56,8 @@ class AnalysisResult:
     source_material_label: str = ""
     session_ended: bool = False
     reply_mode: str = ""
+    agent_backend: str = ""
+    fallback_reason: str = ""
     error_message: str = ""
     error_hint: str = ""
     error_category: str = ""
@@ -405,6 +407,8 @@ class SentinelController(QObject):
                 source_material_url = str(result.get("source_material_url", "")).strip()
                 source_material_label = str(result.get("source_material_label", "")).strip()
                 reply_mode = " ".join(str(result.get("reply_mode", "")).split()).strip().lower()
+                agent_backend = " ".join(str(result.get("agent_backend", "")).split()).strip().lower()
+                fallback_reason = str(result.get("fallback_reason", "")).strip()
                 session_ended = self._coerce_bool(result.get("session_ended"), default=False)
                 capture_id = str(result.get("capture_id", "")).strip()
                 topic_label = self._derive_topic_label(
@@ -433,6 +437,8 @@ class SentinelController(QObject):
                         source_material_label=source_material_label,
                         session_ended=session_ended,
                         reply_mode=reply_mode,
+                        agent_backend=agent_backend,
+                        fallback_reason=fallback_reason,
                     )
                 )
             except requests.Timeout:
@@ -556,6 +562,18 @@ class SentinelController(QObject):
             self._active_turn_index = max(0, int(result.turn_index))
             self._active_topic_label = (result.topic_label or "").strip() or self._active_topic_label
             self._last_prompt_text = (result.prompt_raw or result.prompt).strip()
+            self._log_event(
+                "bridge_prompt_received",
+                request_id=result.request_id,
+                thread_id=self._active_thread_id,
+                turn_index=self._active_turn_index,
+                reply_mode=result.reply_mode or None,
+                session_ended=result.session_ended,
+                agent_backend=result.agent_backend or None,
+                fallback_reason=result.fallback_reason or None,
+                prompt_length=len(self._last_prompt_text),
+                prompt_preview=self._preview_text(self._last_prompt_text, max_len=220),
+            )
             if result.source_warning.strip():
                 self._log_event(
                     "source_warning_received",
@@ -681,6 +699,8 @@ class SentinelController(QObject):
                 thread_id=completed_thread_id,
                 turn_index=completed_turn_index,
                 reply_mode=result.reply_mode or "session_complete",
+                agent_backend=result.agent_backend or None,
+                fallback_reason=result.fallback_reason or None,
             )
             self._log_event(
                 "request_success",
@@ -691,6 +711,8 @@ class SentinelController(QObject):
                 turn_index=completed_turn_index,
                 reply_mode=result.reply_mode or "session_complete",
                 session_ended=True,
+                agent_backend=result.agent_backend or None,
+                fallback_reason=result.fallback_reason or None,
             )
             if was_turn_analysis:
                 self._log_event(
@@ -702,6 +724,8 @@ class SentinelController(QObject):
                     turn_index=completed_turn_index,
                     reply_mode=result.reply_mode or "session_complete",
                     session_ended=True,
+                    agent_backend=result.agent_backend or None,
+                    fallback_reason=result.fallback_reason or None,
                 )
             self._reset_turn_state()
             return
@@ -726,6 +750,8 @@ class SentinelController(QObject):
             turn_index=self._active_turn_index,
             reply_mode=result.reply_mode or None,
             session_ended=False,
+            agent_backend=result.agent_backend or None,
+            fallback_reason=result.fallback_reason or None,
         )
         if was_turn_analysis:
             self._log_event(
@@ -737,6 +763,8 @@ class SentinelController(QObject):
                 turn_index=self._active_turn_index,
                 reply_mode=result.reply_mode or None,
                 session_ended=False,
+                agent_backend=result.agent_backend or None,
+                fallback_reason=result.fallback_reason or None,
             )
 
     def _cancel_thinking_hold(self) -> None:

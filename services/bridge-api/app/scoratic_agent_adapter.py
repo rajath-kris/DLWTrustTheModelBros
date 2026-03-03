@@ -13,7 +13,7 @@ from .grounding import tokenize
 
 
 @dataclass
-class FriendAgentResult:
+class ScoraticAgentResult:
     reply: str
     current_topic: str | None
     reply_mode: str | None
@@ -21,7 +21,7 @@ class FriendAgentResult:
     notes_path: str | None
 
 
-class FriendAgentAdapter:
+class ScoraticAgentAdapter:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._lock = threading.Lock()
@@ -30,8 +30,6 @@ class FriendAgentAdapter:
         self._load_error: str | None = None
         self._script_path = self._resolve_script_path()
 
-        if self._settings.agent_backend != "friend":
-            return
         try:
             self._session_class = self._load_session_class(self._script_path)
         except Exception as exc:  # noqa: BLE001
@@ -40,11 +38,11 @@ class FriendAgentAdapter:
 
     @property
     def enabled(self) -> bool:
-        return self._settings.agent_backend == "friend" and self._session_class is not None
+        return self._session_class is not None
 
     @property
     def configured(self) -> bool:
-        return self._settings.agent_backend == "friend"
+        return True
 
     @property
     def load_error(self) -> str | None:
@@ -61,9 +59,9 @@ class FriendAgentAdapter:
         user_text: str,
         notes_path: str | None,
         image_bytes: bytes | None = None,
-    ) -> FriendAgentResult:
+    ) -> ScoraticAgentResult:
         if not self.enabled:
-            raise RuntimeError("Friend agent is not enabled.")
+            raise RuntimeError("Scoratic agent is not enabled.")
 
         with self._lock:
             session = self._get_or_create_session(thread_id=thread_id, notes_path=notes_path)
@@ -87,7 +85,7 @@ class FriendAgentAdapter:
                 if mode is not None:
                     reply_mode = str(mode).strip() or None
 
-        return FriendAgentResult(
+        return ScoraticAgentResult(
             reply=reply,
             current_topic=current_topic,
             reply_mode=reply_mode,
@@ -97,7 +95,7 @@ class FriendAgentAdapter:
 
     def _get_or_create_session(self, *, thread_id: str, notes_path: str | None):
         if self._session_class is None:
-            raise RuntimeError("Friend agent session class was not loaded.")
+            raise RuntimeError("Scoratic agent session class was not loaded.")
 
         resolved_notes = self._resolve_notes_path(notes_path)
         cache_key = self._cache_key(thread_id)
@@ -111,18 +109,18 @@ class FriendAgentAdapter:
             "notes_path": resolved_notes,
             "state_file": str(self._state_file_for_thread(thread_id)),
         }
-        if self._settings.friend_agent_model:
-            kwargs["model"] = self._settings.friend_agent_model
-        if self._settings.friend_agent_aux_model:
-            kwargs["aux_model"] = self._settings.friend_agent_aux_model
+        if self._settings.scoratic_agent_model:
+            kwargs["model"] = self._settings.scoratic_agent_model
+            # Keep one effective model path by mirroring aux_model when supported.
+            kwargs["aux_model"] = self._settings.scoratic_agent_model
 
         session = self._session_class(**kwargs)
         self._sessions[cache_key] = (resolved_notes, session)
         return session
 
     def _resolve_script_path(self) -> Path:
-        if self._settings.friend_agent_script_path:
-            return Path(self._settings.friend_agent_script_path).expanduser().resolve()
+        if self._settings.scoratic_agent_script_path:
+            return Path(self._settings.scoratic_agent_script_path).expanduser().resolve()
 
         candidates = [
             PROJECT_ROOT.parent / "aayush code" / "sentinel_brain (1).py",
@@ -137,15 +135,15 @@ class FriendAgentAdapter:
     def _resolve_notes_path(self, notes_path: str | None) -> str:
         if notes_path:
             return str(Path(notes_path).expanduser().resolve())
-        if self._settings.friend_agent_notes_path:
-            return str(Path(self._settings.friend_agent_notes_path).expanduser().resolve())
+        if self._settings.scoratic_agent_notes_path:
+            return str(Path(self._settings.scoratic_agent_notes_path).expanduser().resolve())
         return "lecture_notes.pdf"
 
     def _load_session_class(self, script_path: Path):
         if not script_path.exists():
-            raise FileNotFoundError(f"Friend agent script not found: {script_path}")
+            raise FileNotFoundError(f"Scoratic agent script not found: {script_path}")
 
-        spec = importlib.util.spec_from_file_location("sentinel_friend_agent", str(script_path))
+        spec = importlib.util.spec_from_file_location("sentinel_scoratic_agent", str(script_path))
         if spec is None or spec.loader is None:
             raise RuntimeError(f"Unable to load module spec from {script_path}")
 
@@ -168,9 +166,9 @@ class FriendAgentAdapter:
         module._tokenize = _tokenize_with_math  # type: ignore[attr-defined]
 
     def _state_file_for_thread(self, thread_id: str) -> Path:
-        self._settings.friend_agent_state_dir.mkdir(parents=True, exist_ok=True)
+        self._settings.scoratic_agent_state_dir.mkdir(parents=True, exist_ok=True)
         safe = self._cache_key(thread_id)
-        return self._settings.friend_agent_state_dir / f"{safe}.json"
+        return self._settings.scoratic_agent_state_dir / f"{safe}.json"
 
     def _cache_key(self, thread_id: str) -> str:
         cleaned = re.sub(r"[^a-zA-Z0-9_-]", "-", thread_id.strip())
@@ -184,7 +182,7 @@ class FriendAgentAdapter:
             from PIL import Image
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(
-                "Pillow is required for screenshot-backed friend-agent calls."
+                "Pillow is required for screenshot-backed scoratic-agent calls."
             ) from exc
 
         with Image.open(io.BytesIO(image_bytes)) as image:

@@ -1,0 +1,37 @@
+{
+  "gaps": {
+    "modulus operator": {
+      "attempts": 1,
+      "mastery": 0.45,
+      "last_seen": "2026-03-04T03:54:06",
+      "gap_description": "condition placement",
+      "knows": [
+        "mod 2",
+        "remainder check"
+      ],
+      "confused_about": "condition placement",
+      "evidence": [
+        {
+          "time": "2026-03-04T03:54:06",
+          "delta": -0.05,
+          "confused_about": "condition placement"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T03:54:04",
+      "user_text": "mod 2 maybe? I think I divide then maybe use remainder check but I am unsure where exactly the condition should be applied in the algorithm",
+      "assistant_reply": "Using the modulus operator to check for even numbers is a good idea. Where in your algorithm do you think the condition should be applied to ensure it checks each relevant number?",
+      "draft_reply": "Are you considering using the modulus operator to check for even numbers? Where in your algorithm do you think the condition should be applied to ensure it checks each relevant number?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

@@ -147,8 +147,13 @@ Optional overrides via `.env`:
 
 Copy `.env.example` to `.env` (done by `bootstrap.ps1` if missing).
 
-- With `OPENAI_API_KEY`: live OpenAI Vision + Socratic pipeline.
-- Without `OPENAI_API_KEY`: local fallback prompt/gap path still works end-to-end.
+- Primary tutoring backend is the Scoratic script:
+  - `SENTINEL_SCORATIC_SCRIPT_PATH`
+  - `SENTINEL_SCORATIC_NOTES_PATH`
+  - `SENTINEL_SCORATIC_MODEL` (single-model knob, default `gpt-4o`)
+- Fallback tutoring backend is plain OpenAI chat using `OPENAI_MODEL` (`gpt-4o` default) with no custom bridge prompt template.
+- With `OPENAI_API_KEY`: live OpenAI Vision + fallback model are enabled.
+- Without `OPENAI_API_KEY`: bridge still runs, but OpenAI-powered fallback and vision extraction are reduced.
 - Optional `SENTINEL_ACTIVE_TOPIC_ID`: desktop capture payload includes this topic context.
 
 ## Smoke Check
@@ -160,6 +165,24 @@ python .\scripts\smoke_check.py
 ```
 
 This starts the bridge, posts a capture, verifies state increments, and exits.
+
+## Scoratic Prompt Flow Test
+
+Run a deterministic prompt sequence and write prompt/response logs to `artifacts/scoratic-prompt-flow/`:
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+python .\scripts\run-scoratic-prompt-flow.py --bridge-url http://127.0.0.1:8000 --prompts-file .\docs\mock-content\scoratic-prompts.txt
+```
+
+Force fallback path for verification by pointing Scoratic script to a missing file before starting bridge:
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+$env:SENTINEL_SCORATIC_SCRIPT_PATH = "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026\does-not-exist-scoratic.py"
+.\scripts\run-bridge.ps1
+python .\scripts\run-scoratic-prompt-flow.py --bridge-url http://127.0.0.1:8000 --prompts-file .\docs\mock-content\scoratic-prompts.txt
+```
 
 
 ## Topic-Bound Screenshot Flow (Warn + Continue)

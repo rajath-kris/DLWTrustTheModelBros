@@ -1,8 +1,10 @@
 {
-  "managed_pids": [],
+  "managed_pids": [
+    24308
+  ],
   "active_course_id": "cs2040",
   "active_topic_id": "module-linked-lists",
-  "last_action": "stop",
-  "last_action_at": "2026-03-03T03:46:39.530796Z",
+  "last_action": "start",
+  "last_action_at": "2026-03-03T20:03:41.961403Z",
   "last_error": null
 }

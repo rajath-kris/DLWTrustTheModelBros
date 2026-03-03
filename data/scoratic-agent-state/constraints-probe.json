@@ -1,0 +1,65 @@
+{
+  "gaps": {
+    "modulo operation": {
+      "attempts": 3,
+      "mastery": 0.35,
+      "last_seen": "2026-03-04T04:02:27",
+      "gap_description": "loop condition",
+      "knows": [
+        "mod 2 checks parity",
+        "remainder 0 means even"
+      ],
+      "confused_about": "loop condition",
+      "evidence": [
+        {
+          "time": "2026-03-04T04:02:17",
+          "delta": -0.05,
+          "confused_about": "remainder when odd"
+        },
+        {
+          "time": "2026-03-04T04:02:21",
+          "delta": -0.05,
+          "confused_about": "difference between division and modulo"
+        },
+        {
+          "time": "2026-03-04T04:02:27",
+          "delta": -0.05,
+          "confused_about": "loop condition"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T04:02:16",
+      "user_text": "I think mod 2 checks parity because remainder 0 means even.",
+      "assistant_reply": "How does the remainder change when a number is odd?",
+      "draft_reply": "How does the remainder change when a number is odd?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T04:02:20",
+      "user_text": "I think dividing by 2 and rounding should always work the same as modulo.",
+      "assistant_reply": "Dividing by 2 and rounding gives you the quotient. How does this differ from what the modulo operation provides?",
+      "draft_reply": "Dividing by 2 and rounding gives you the quotient. How does this differ from what the modulo operation provides?",
+      "had_screenshot": true,
+      "topic_at_turn": "modulo operation",
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T04:02:25",
+      "user_text": "I still cannot place this in the loop condition.",
+      "assistant_reply": "What condition would you use in a loop to check if a number is even using the modulo operation?",
+      "draft_reply": "What condition would you use in a loop to check if a number is even using the modulo operation?",
+      "had_screenshot": true,
+      "topic_at_turn": "modulo operation",
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

@@ -331,6 +331,8 @@ class CaptureResponse(BaseModel):
     source_context: SourceContext | None = None
     source_material_url: str | None = None
     source_material_label: str | None = None
+    agent_backend: Literal["scoratic", "openai-fallback", "bridge-no-source"] = "scoratic"
+    fallback_reason: str | None = None
 
 
 class GapStatusUpdate(BaseModel):

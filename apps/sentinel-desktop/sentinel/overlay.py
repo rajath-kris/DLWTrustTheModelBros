@@ -133,7 +133,9 @@ class OverlayBubble(QWidget):
         self._page_dot_primary_size = 10
         self._page_dot_mini_size = 6
         self._page_dot_widgets: dict[int, QPushButton] = {}
-        self._prompt_text_max_chars = 230
+        # Keep prompt text effectively untruncated for normal tutoring replies.
+        # The card height/word-wrap controls readability; this avoids "num..." clipping.
+        self._prompt_text_max_chars = 1200
         self._prompt_message_min_height = 72
         self._interaction_capture_pixmap: QPixmap | None = None
         self._capture_preview_height = 96

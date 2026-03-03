@@ -1,0 +1,46 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772564918",
+  "prompt_count": 4,
+  "steps_completed": 2,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:08:47.482734Z",
+      "latency_ms": 8826,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "30b79025-fb0f-4046-9326-907bb577265c",
+      "thread_id": "scoratic-flow-1772564918",
+      "turn_index": 1,
+      "socratic_prompt": "Good effort. Let's correct one piece at a time by re-checking the key assumption in your point \"I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.\". Laplace transforms are a powerful tool in engineering and mathematics, particularly useful for solving differential equations. When you transform a differential equation from the time domain to the s-domain using Laplace transforms, initial conditions naturally appear in the transformed equations. This is because the Laplace transform of a derivative includes terms that account for the initial conditions of the funct?",
+      "reply_mode": "gentle_correction",
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "RuntimeError: Scoratic agent is not enabled."
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:08:55.885471Z",
+      "latency_ms": 8402,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "7b09f622-bc03-475d-afb8-78ffaf85a9a3",
+      "thread_id": "scoratic-flow-1772564918",
+      "turn_index": 2,
+      "socratic_prompt": "You're on the right path. Strengthen your intuition by stress-testing the key assumption around your point \"I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial\". When dealing with Laplace transforms, it's important to understand how initial conditions are incorporated into the s-domain representation. The Laplace transform is a powerful tool for solving linear differential equations by transforming them into algebraic equations in the s-domain. Here's why initial conditions appear in the s-domain: 1. **Transformation of Derivatives**: When you take the Laplace transform of a?",
+      "reply_mode": "right_path_intuition",
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "RuntimeError: Scoratic agent is not enabled."
+    }
+  ],
+  "errors": [
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:09:25.894898Z",
+      "latency_ms": 30009,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "error": "TimeoutError: timed out"
+    }
+  ]
+}

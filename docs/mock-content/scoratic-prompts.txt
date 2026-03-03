@@ -1,0 +1,11 @@
+# First-turn screenshot context
+I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.
+
+# Confused learner response
+I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.
+
+# Off-topic learner response
+Can you suggest a good restaurant near campus before we continue this problem?
+
+# Completion response
+Got it now, this makes sense and I can continue.

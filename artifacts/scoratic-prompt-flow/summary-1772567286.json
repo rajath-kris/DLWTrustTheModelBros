@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772567273",
+  "prompt_count": 3,
+  "steps_completed": 3,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:47:57.309847Z",
+      "latency_ms": 3730,
+      "input_prompt": "I am trying to understand why initial conditions appear in Laplace transform.",
+      "capture_id": "e4eb99bd-5776-4103-86c3-1ea99df05f8d",
+      "thread_id": "scoratic-flow-1772567273",
+      "turn_index": 1,
+      "socratic_prompt": "Nice progress, your point \"I am trying to understand why initial conditions appear in Laplace transform.\" is close. You are on the right path, so let's deepen it by stress-testing the key assumption around \"I am trying to understand why initial conditions appear in Laplace transform.\". What do you notice about how the Laplace transform handles derivatives?",
+      "reply_mode": "right_path_intuition",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:48:01.965333Z",
+      "latency_ms": 4655,
+      "input_prompt": "I think I ignored derivative terms and got stuck.",
+      "capture_id": "db5fb101-4ac9-4fcb-914b-418250eeee2e",
+      "thread_id": "scoratic-flow-1772567273",
+      "turn_index": 2,
+      "socratic_prompt": "Good honesty in your attempt, especially \"I think I ignored derivative terms and got stuck.\". You are not far off, we just need to tighten one reasoning link from \"I think I ignored derivative terms and got stuck.\". Consider how the Laplace transform of a derivative involves initial conditions. How does this relate to the original function?",
+      "reply_mode": "gentle_correction",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:48:06.269709Z",
+      "latency_ms": 4304,
+      "input_prompt": "thanks, I got it now",
+      "capture_id": "47ef48a2-af6b-47c1-85ec-ae4a671d9e63",
+      "thread_id": "scoratic-flow-1772567273",
+      "turn_index": 3,
+      "socratic_prompt": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "reply_mode": "session_complete",
+      "session_ended": true,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    }
+  ],
+  "errors": []
+}

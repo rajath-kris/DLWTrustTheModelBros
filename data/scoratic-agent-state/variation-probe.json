@@ -1,0 +1,60 @@
+{
+  "gaps": {
+    "modulus operation to determine even or odd numbers": {
+      "attempts": 2,
+      "mastery": 0.4,
+      "last_seen": "2026-03-04T04:00:09",
+      "gap_description": "where to place the condition in loop",
+      "knows": [
+        "mod 2",
+        "remainder as 0 or 1"
+      ],
+      "confused_about": "where to place the condition in loop",
+      "evidence": [
+        {
+          "time": "2026-03-04T04:00:05",
+          "delta": -0.05,
+          "confused_about": "what remainder 0 indicates"
+        },
+        {
+          "time": "2026-03-04T04:00:09",
+          "delta": -0.05,
+          "confused_about": "where to place the condition in loop"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T04:00:04",
+      "user_text": "mod 2 and with remainder as 0 or 1 we can test if a number is even or odd",
+      "assistant_reply": "You're on the right track about using modulus to determine even or odd numbers. What does a remainder of 0 indicate about the number?",
+      "draft_reply": "You're on the right track about using modulus to determine even or odd numbers. What does a remainder of 0 indicate about the number?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T04:00:08",
+      "user_text": "I used modulo but I still cannot tell where exactly to place the condition in my loop",
+      "assistant_reply": "Where in your loop are you currently checking the condition?",
+      "draft_reply": "Where in your loop are you currently checking the condition?",
+      "had_screenshot": true,
+      "topic_at_turn": "modulus operation to determine even or odd numbers",
+      "reply_mode": "diagnostic"
+    },
+    {
+      "time": "2026-03-04T04:00:12",
+      "user_text": "thanks, got it",
+      "assistant_reply": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "draft_reply": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "had_screenshot": true,
+      "topic_at_turn": "modulus operation to determine even or odd numbers",
+      "reply_mode": "closure"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

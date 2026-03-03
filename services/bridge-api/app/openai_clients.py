@@ -10,14 +10,7 @@ from typing import Any
 import requests
 
 from .config import Settings
-from .models import CaptureRequest, VisionExtraction
-from .prompting import (
-    build_ask_system_prompt,
-    build_ask_user_prompt,
-    build_system_prompt,
-    build_user_prompt,
-)
-
+from .models import VisionExtraction
 
 _RETRIABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 _MAX_RETRIES = 2
@@ -26,16 +19,16 @@ _MAX_RETRY_DELAY_SECONDS = 2.0
 
 
 @dataclass
-class SocraticOutput:
-    socratic_prompt: str
-    gaps: list[dict[str, Any]]
-
-
-@dataclass
 class TopicPickerOutput:
     topic_id: str
     confidence: float
     reason: str | None = None
+
+
+@dataclass
+class OpenAIFallbackOutput:
+    socratic_prompt: str
+    fallback_reason: str | None = None
 
 
 def _extract_json_blob(text: str) -> dict[str, Any] | None:
@@ -60,16 +53,6 @@ def _normalize_text(value: object, max_chars: int = 280) -> str | None:
     return text[:max_chars]
 
 
-def _normalize_gap_type(raw_value: object) -> str | None:
-    value = _normalize_text(raw_value, max_chars=32)
-    if value is None:
-        return None
-    lowered = value.lower()
-    if lowered in {"concept", "reasoning", "misconception"}:
-        return lowered
-    return None
-
-
 def _to_float(raw_value: object, default: float) -> float:
     try:
         return float(raw_value)
@@ -90,39 +73,11 @@ class _OpenAIChatClient:
     def last_failure_reason(self) -> str | None:
         return self._last_failure_reason
 
-    def complete(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        image_bytes: bytes | None = None,
-        temperature: float = 0.3,
-        max_tokens: int = 400,
-    ) -> str | None:
+    def _request(self, payload: dict[str, Any]) -> str | None:
         self._last_failure_reason = None
         if not self.configured:
             self._last_failure_reason = "not_configured"
             return None
-
-        user_content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
-        if image_bytes is not None:
-            encoded_image = base64.b64encode(image_bytes).decode("utf-8")
-            user_content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{encoded_image}"},
-                }
-            )
-
-        payload: dict[str, Any] = {
-            "model": self._settings.openai_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
 
         retry_delay_seconds = _BASE_RETRY_DELAY_SECONDS
         for attempt_index in range(_MAX_RETRIES):
@@ -178,6 +133,50 @@ class _OpenAIChatClient:
                 return None
         self._last_failure_reason = "retry_exhausted"
         return None
+
+    def complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        image_bytes: bytes | None = None,
+        temperature: float = 0.3,
+        max_tokens: int = 400,
+    ) -> str | None:
+        user_content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
+        if image_bytes is not None:
+            encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+            user_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{encoded_image}"},
+                }
+            )
+        payload: dict[str, Any] = {
+            "model": self._settings.openai_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        return self._request(payload)
+
+    def complete_user_only(
+        self,
+        *,
+        user_prompt: str,
+        temperature: float = 0.3,
+        max_tokens: int = 220,
+    ) -> str | None:
+        payload: dict[str, Any] = {
+            "model": self._settings.openai_model,
+            "messages": [{"role": "user", "content": user_prompt}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        return self._request(payload)
 
 
 class OpenAIVisionClient:
@@ -241,144 +240,32 @@ class OpenAIVisionClient:
         return VisionExtraction(raw_text=raw_text, summary=summary, tags=tags[:8])
 
 
-class OpenAISocraticClient:
+class OpenAIPlainFallbackClient:
     def __init__(self, settings: Settings) -> None:
         self._chat_client = _OpenAIChatClient(settings)
-        self.last_backend_warning: str | None = None
+        self.last_failure_reason: str | None = None
 
-    def generate(
-        self,
-        capture: CaptureRequest,
-        extraction: VisionExtraction,
-        syllabus: dict,
-        grounding_context: str | None = None,
-        grounding_sources: list[str] | None = None,
-    ) -> SocraticOutput:
-        self.last_backend_warning = None
-        fallback = self._fallback_output(capture, extraction)
-        content = self._chat_client.complete(
-            system_prompt=build_system_prompt(syllabus, grounding_sources=grounding_sources),
-            user_prompt=build_user_prompt(
-                extraction.raw_text,
-                extraction.summary,
-                extraction.tags,
-                previous_prompt=capture.previous_prompt,
-                user_input_text=capture.user_input_text,
-                thread_id=capture.thread_id,
-                turn_index=capture.turn_index,
-                grounding_context=grounding_context,
-                grounding_sources=grounding_sources,
-            ),
-            max_tokens=420,
+    def generate(self, *, prompt_text: str) -> OpenAIFallbackOutput:
+        content = self._chat_client.complete_user_only(
+            user_prompt=prompt_text,
+            temperature=0.3,
+            max_tokens=220,
         )
         if content is None:
-            self.last_backend_warning = self._chat_client.last_failure_reason or "llm_unavailable"
-            return fallback
-        parsed, parse_warning = self._parse_socratic_output(content, fallback)
-        self.last_backend_warning = parse_warning
-        return parsed
-
-    def ask(
-        self,
-        *,
-        message: str,
-        thread_id: str,
-        turn_index: int,
-        course_id: str,
-        grounding_context: str | None = None,
-        grounding_sources: list[str] | None = None,
-        syllabus: dict | None = None,
-    ) -> str:
-        fallback = (
-            "What assumption are you making right now, and what evidence from your notes supports it?"
-        )
-        system_prompt = build_ask_system_prompt(
-            syllabus=syllabus or {"concepts": []},
-            grounding_sources=grounding_sources,
-        )
-        user_prompt = build_ask_user_prompt(
-            message=message,
-            thread_id=thread_id,
-            turn_index=turn_index,
-            course_id=course_id,
-            grounding_context=grounding_context,
-        )
-        content = self._chat_client.complete(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=0.25,
-            max_tokens=160,
-        )
-        if content is None:
-            return fallback
-        single_line = _normalize_text(content, max_chars=500)
-        return single_line or fallback
-
-    def _parse_socratic_output(self, content: str, fallback: SocraticOutput) -> tuple[SocraticOutput, str | None]:
-        blob = _extract_json_blob(content)
-        if not blob:
-            return fallback, "llm_json_parse_failure"
-
-        prompt = _normalize_text(blob.get("socratic_prompt"), max_chars=500) or fallback.socratic_prompt
-        raw_gaps = blob.get("gaps", [])
-        if not isinstance(raw_gaps, list):
-            return SocraticOutput(socratic_prompt=prompt, gaps=fallback.gaps), "llm_gap_payload_invalid"
-
-        cleaned_gaps: list[dict[str, Any]] = []
-        for gap in raw_gaps:
-            if not isinstance(gap, dict):
-                continue
-            concept = _normalize_text(gap.get("concept"), max_chars=160)
-            if not concept:
-                continue
-            severity = max(0.0, min(1.0, _to_float(gap.get("severity"), 0.5)))
-            confidence = max(0.0, min(1.0, _to_float(gap.get("confidence"), 0.6)))
-            cleaned: dict[str, Any] = {
-                "concept": concept,
-                "severity": severity,
-                "confidence": confidence,
-            }
-            basis_question = _normalize_text(gap.get("basis_question"), max_chars=320)
-            if basis_question is not None:
-                cleaned["basis_question"] = basis_question
-            basis_answer_excerpt = _normalize_text(gap.get("basis_answer_excerpt"), max_chars=320)
-            if basis_answer_excerpt is not None:
-                cleaned["basis_answer_excerpt"] = basis_answer_excerpt
-            gap_type = _normalize_gap_type(gap.get("gap_type"))
-            if gap_type is not None:
-                cleaned["gap_type"] = gap_type
-            cleaned_gaps.append(cleaned)
-        if cleaned_gaps:
-            return SocraticOutput(socratic_prompt=prompt, gaps=cleaned_gaps), None
-        return SocraticOutput(socratic_prompt=prompt, gaps=fallback.gaps), "llm_gap_payload_empty"
-
-    def _fallback_output(self, capture: CaptureRequest, extraction: VisionExtraction) -> SocraticOutput:
-        seed_concept = "Concept interpretation"
-        if extraction.tags:
-            seed_concept = extraction.tags[0].replace("_", " ").title()
-
-        learner_reply = (capture.user_input_text or "").strip()
-        if learner_reply:
-            prompt = "What assumption in your last response is strongest, and which one needs evidence?"
-            basis_answer_excerpt = _normalize_text(learner_reply, max_chars=320)
-        else:
-            prompt = (
-                "What is the first principle behind this section, and how would you explain it "
-                "in one sentence before solving anything?"
+            self.last_failure_reason = self._chat_client.last_failure_reason or "llm_unavailable"
+            return OpenAIFallbackOutput(
+                socratic_prompt="What step in your current reasoning needs the most evidence?",
+                fallback_reason=self.last_failure_reason,
             )
-            basis_answer_excerpt = None
-
-        gap: dict[str, Any] = {
-            "concept": seed_concept,
-            "severity": 0.58,
-            "confidence": 0.62,
-            "basis_question": prompt,
-            "gap_type": "reasoning",
-        }
-        if basis_answer_excerpt is not None:
-            gap["basis_answer_excerpt"] = basis_answer_excerpt
-
-        return SocraticOutput(socratic_prompt=prompt, gaps=[gap])
+        cleaned = _normalize_text(content, max_chars=500)
+        if not cleaned:
+            self.last_failure_reason = "empty_response"
+            return OpenAIFallbackOutput(
+                socratic_prompt="What step in your current reasoning needs the most evidence?",
+                fallback_reason=self.last_failure_reason,
+            )
+        self.last_failure_reason = None
+        return OpenAIFallbackOutput(socratic_prompt=cleaned, fallback_reason=None)
 
 
 class OpenAITopicPickerClient:

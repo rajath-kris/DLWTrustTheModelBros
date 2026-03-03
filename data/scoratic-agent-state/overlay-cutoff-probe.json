@@ -1,0 +1,36 @@
+{
+  "gaps": {
+    "modulus": {
+      "attempts": 1,
+      "mastery": 0.45,
+      "last_seen": "2026-03-04T03:53:49",
+      "gap_description": "purpose of modulus",
+      "knows": [
+        "mod 2"
+      ],
+      "confused_about": "purpose of modulus",
+      "evidence": [
+        {
+          "time": "2026-03-04T03:53:49",
+          "delta": -0.05,
+          "confused_about": "purpose of modulus"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T03:53:48",
+      "user_text": "mod 2 maybe?",
+      "assistant_reply": "What do you think the purpose of using modulus in this context might be?",
+      "draft_reply": "What do you think the purpose of using modulus in this context might be?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

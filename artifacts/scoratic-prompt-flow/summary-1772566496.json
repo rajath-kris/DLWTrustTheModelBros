@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772566493",
+  "prompt_count": 4,
+  "steps_completed": 0,
+  "results": [],
+  "errors": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:34:56.061277Z",
+      "latency_ms": 2073,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "error": "URLError: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>"
+    }
+  ]
+}

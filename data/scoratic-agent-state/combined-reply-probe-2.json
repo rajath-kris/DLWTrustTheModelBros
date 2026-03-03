@@ -1,0 +1,37 @@
+{
+  "gaps": {
+    "modular arithmetic": {
+      "attempts": 1,
+      "mastery": 0.45,
+      "last_seen": "2026-03-04T03:56:50",
+      "gap_description": "condition application",
+      "knows": [
+        "divide",
+        "remainder check"
+      ],
+      "confused_about": "condition application",
+      "evidence": [
+        {
+          "time": "2026-03-04T03:56:50",
+          "delta": -0.05,
+          "confused_about": "condition application"
+        }
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "time": "2026-03-04T03:56:49",
+      "user_text": "mod 2 maybe? I think I divide then maybe use remainder check but I am unsure where exactly the condition should be applied in the algorithm",
+      "assistant_reply": "Good start, what do you already understand about the key concepts in this screenshot?",
+      "draft_reply": "What specific condition are you trying to check with the remainder? Are you determining if a number is even or odd?",
+      "had_screenshot": true,
+      "topic_at_turn": null,
+      "reply_mode": "diagnostic"
+    }
+  ],
+  "meta": {
+    "running_summary": "",
+    "last_summary_turn": 0
+  }
+}

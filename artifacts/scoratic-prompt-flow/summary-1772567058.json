@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:18002",
+  "thread_id": "scoratic-flow-1772567042",
+  "prompt_count": 3,
+  "steps_completed": 3,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:44:07.430523Z",
+      "latency_ms": 4742,
+      "input_prompt": "I am trying to understand why initial conditions appear in Laplace transform.",
+      "capture_id": "4fb6f5a3-47bf-4662-bf92-691175ac6f7f",
+      "thread_id": "scoratic-flow-1772567042",
+      "turn_index": 1,
+      "socratic_prompt": "Nice progress, your point \"I am trying to understand why initial conditions appear in Laplace transform.\" is close. You are on the right path, so let's deepen it by stress-testing the key assumption around \"I am trying to understand why initial conditions appear in Laplace transform.\". What do you think the role of initial conditions is when transforming a differential equation using the Laplace transform?",
+      "reply_mode": "right_path_intuition",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:44:13.788154Z",
+      "latency_ms": 6357,
+      "input_prompt": "I think I ignored derivative terms and got stuck.",
+      "capture_id": "2d10514f-06f5-4f68-b5da-8ff9e20d3330",
+      "thread_id": "scoratic-flow-1772567042",
+      "turn_index": 2,
+      "socratic_prompt": "Good honesty in your attempt, especially \"I think I ignored derivative terms and got stuck.\". You are not far off, we just need to tighten one reasoning link from \"I think I ignored derivative terms and got stuck.\". Considering derivatives, how do initial conditions help transform a differential equation into an algebraic equation using the Laplace transform?",
+      "reply_mode": "gentle_correction",
+      "session_ended": false,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    },
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:44:18.021034Z",
+      "latency_ms": 4232,
+      "input_prompt": "thanks, I got it now",
+      "capture_id": "3b678e45-b929-49b2-82bb-3e2404825206",
+      "thread_id": "scoratic-flow-1772567042",
+      "turn_index": 3,
+      "socratic_prompt": "Nice work, you made solid progress on this question. We can stop here for now.",
+      "reply_mode": "session_complete",
+      "session_ended": true,
+      "agent_backend": "scoratic",
+      "fallback_reason": null
+    }
+  ],
+  "errors": []
+}

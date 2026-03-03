@@ -1,0 +1,46 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772565033",
+  "prompt_count": 4,
+  "steps_completed": 2,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:10:39.229640Z",
+      "latency_ms": 6175,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "1bfc5d33-7691-4cc2-b7aa-668bbcab0b44",
+      "thread_id": "scoratic-flow-1772565033",
+      "turn_index": 1,
+      "socratic_prompt": "Laplace transforms are a powerful tool in engineering and mathematics, particularly for solving differential equations. When you transform a differential equation from the time domain to the s-domain using Laplace transforms, initial conditions naturally appear in the transformed equations. Here's why: 1. **Laplace Transform Definition**: The Laplace transform of a function \\( f(t) \\) is defined as: \\[ \\mathcal{L}\\{f(t)\\} = F(s) = \\int_{0}^{\\infty} e^{-st} f(t) \\, dt \\] This transformation conve",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "RuntimeError: Scoratic agent is not enabled."
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:10:45.414951Z",
+      "latency_ms": 6185,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "1ed4bf63-7bcb-46f8-8469-a1f443560cd9",
+      "thread_id": "scoratic-flow-1772565033",
+      "turn_index": 2,
+      "socratic_prompt": "It seems like you're trying to solve a problem involving Laplace transforms and differential equations, but you're encountering an issue where your solution doesn't match the tutorial. Let's go through some key points to help you understand where the discrepancy might be: 1. **Laplace Transform Basics**: The Laplace transform is a method used to transform a time-domain function into an s-domain function. This is particularly useful for solving linear differential equations. 2. **Initial Conditio",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "RuntimeError: Scoratic agent is not enabled."
+    }
+  ],
+  "errors": [
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:11:15.442300Z",
+      "latency_ms": 30027,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "error": "TimeoutError: timed out"
+    }
+  ]
+}

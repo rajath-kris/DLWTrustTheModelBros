@@ -1,0 +1,46 @@
+{
+  "ok": false,
+  "bridge_url": "http://127.0.0.1:18000",
+  "thread_id": "scoratic-flow-1772565888",
+  "prompt_count": 4,
+  "steps_completed": 2,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:24:53.056472Z",
+      "latency_ms": 4395,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "57e6d878-f71a-4654-8b44-e4b96c08e506",
+      "thread_id": "scoratic-flow-1772565888",
+      "turn_index": 1,
+      "socratic_prompt": "When dealing with Laplace transforms, initial conditions appear in the s-domain because they are part of the transformation process from the time domain to the s-domain. The Laplace transform is particularly useful for solving linear differential equations with given initial conditions. Here's why initial conditions are important in the s-domain: 1. **Differential Equations**: Many physical systems are described by differential equations. When you apply the Laplace transform to a differential eq",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x0000017970120A90>"
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:24:58.381218Z",
+      "latency_ms": 5324,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "45c396cc-011f-42f5-96e0-bb3d6ebd945c",
+      "thread_id": "scoratic-flow-1772565888",
+      "turn_index": 2,
+      "socratic_prompt": "It seems like you're working with Laplace transforms and are encountering some issues with initial conditions and derivative terms. When you apply the Laplace transform to a differential equation, initial conditions are crucial because they help determine the constants in the solution. Here's a brief explanation of why initial conditions matter and how they are typically handled: 1. **Laplace Transform Basics**: The Laplace transform converts a time-domain function into an s-domain function. Thi",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": "openai-fallback",
+      "fallback_reason": "UnidentifiedImageError: cannot identify image file <_io.BytesIO object at 0x00000179709548B0>"
+    }
+  ],
+  "errors": [
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:25:58.408923Z",
+      "latency_ms": 60027,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "error": "TimeoutError: timed out"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "ok": true,
+  "bridge_url": "http://127.0.0.1:8000",
+  "thread_id": "scoratic-flow-1772565735",
+  "prompt_count": 4,
+  "steps_completed": 4,
+  "results": [
+    {
+      "step": 1,
+      "timestamp_utc": "2026-03-03T19:22:19.274758Z",
+      "latency_ms": 3358,
+      "input_prompt": "I captured a slide about Laplace transforms and I am not sure why initial conditions appear in the s-domain.",
+      "capture_id": "a36b8012-d19f-4be3-ac55-cf9f3ad057c8",
+      "thread_id": "scoratic-flow-1772565735",
+      "turn_index": 1,
+      "socratic_prompt": "How do initial conditions in the time domain influence the transformed function in the s-domain when using the Laplace Transform?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    },
+    {
+      "step": 2,
+      "timestamp_utc": "2026-03-03T19:22:24.249974Z",
+      "latency_ms": 4975,
+      "input_prompt": "I think I can just divide by s and ignore the derivative terms, but now the answer does not match the tutorial.",
+      "capture_id": "cc67c39d-e9a4-49b6-a9e8-ba413c13a45e",
+      "thread_id": "scoratic-flow-1772565735",
+      "turn_index": 2,
+      "socratic_prompt": "How do the initial conditions in the time domain affect the terms in the Laplace Transform, particularly the ones involving derivatives?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    },
+    {
+      "step": 3,
+      "timestamp_utc": "2026-03-03T19:22:28.286615Z",
+      "latency_ms": 4036,
+      "input_prompt": "Can you suggest a good restaurant near campus before we continue this problem?",
+      "capture_id": "fe00d2b6-1ec3-49eb-99ce-9490bdb27270",
+      "thread_id": "scoratic-flow-1772565735",
+      "turn_index": 3,
+      "socratic_prompt": "How might the initial conditions in the time domain influence the Laplace Transform of a system's response, especially when dealing with higher-order derivatives?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    },
+    {
+      "step": 4,
+      "timestamp_utc": "2026-03-03T19:22:32.106045Z",
+      "latency_ms": 3819,
+      "input_prompt": "Got it now, this makes sense and I can continue.",
+      "capture_id": "e7856219-d9b2-4232-b144-7be9f3823998",
+      "thread_id": "scoratic-flow-1772565735",
+      "turn_index": 4,
+      "socratic_prompt": "How do you determine the effect of initial conditions on the poles and zeros of a system's Laplace Transform, and why is this important for understanding system behavior?",
+      "reply_mode": null,
+      "session_ended": false,
+      "agent_backend": null,
+      "fallback_reason": null
+    }
+  ],
+  "errors": []
+}
