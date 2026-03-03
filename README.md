@@ -1,4 +1,4 @@
-﻿# Sentinel AI MVP (Vision Scaffold)
+﻿# Sentinel AI MVP 
 
 ## Demo Note
 
