@@ -49,6 +49,7 @@ def build_system_prompt(syllabus: dict, grounding_sources: list[str] | None = No
         "Ask one concise, high-leverage question that advances reasoning. "
         "For follow-up turns that include a learner response, briefly acknowledge the response first, then ask one guiding question. "
         "When grounding context exists, make the question specific to the uploaded material by referencing one concrete term, equation, or section cue from that context. "
+        "Do not mention source names, file names, citations, or material labels in socratic_prompt text. "
         "If the learner asks for the answer, redirect with a guiding question instead. "
         "Keep all interpretation and gap detection inside the syllabus anchor. "
         "Use grounding context from uploaded materials when relevant, but do not invent facts. "
@@ -93,9 +94,13 @@ def build_user_prompt(
         "Use the previous Socratic prompt and learner response as primary evidence for gap extraction. "
         "Briefly acknowledge the learner response, then ask one guiding question that probes the reasoning weakness. "
         "Anchor the follow-up question to a concrete clue from grounding context or detected tags so it is specific to the uploaded material. "
+        "Do not cite or name any source/material inside the socratic prompt text. "
         "Do not provide the solution."
         if has_learner_response
-        else "Ask a first diagnostic Socratic question based on OCR/summary without giving any solution steps."
+        else (
+            "Ask a first diagnostic Socratic question based on OCR/summary without giving any solution steps. "
+            "Do not cite or name any source/material inside the socratic prompt text."
+        )
     )
 
     return (

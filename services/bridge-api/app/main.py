@@ -398,31 +398,6 @@ def _focus_label(topic_name: str | None, extraction: VisionExtraction) -> str:
     return "this capture"
 
 
-def _material_label(
-    *,
-    source_material_label: str | None,
-    source_material_name: str | None,
-) -> str | None:
-    return _optional_text(source_material_label, max_chars=96) or _optional_text(source_material_name, max_chars=96)
-
-
-def _material_anchor_phrase(
-    *,
-    source_material_label: str | None,
-    source_material_name: str | None,
-    topic_name: str | None,
-    extraction: VisionExtraction,
-) -> str:
-    material_name = _material_label(
-        source_material_label=source_material_label,
-        source_material_name=source_material_name,
-    )
-    if material_name:
-        return f"in your uploaded material '{material_name}'"
-    focus = _focus_label(topic_name, extraction)
-    return f"in your uploaded {focus} material"
-
-
 def _learner_focus_excerpt(user_text: str) -> str | None:
     compact = _optional_text(user_text, max_chars=110)
     if not compact:
@@ -436,23 +411,16 @@ def _apply_reply_policy(
     payload: CaptureRequest,
     extraction: VisionExtraction,
     topic_name: str | None,
-    source_material_label: str | None,
-    source_material_name: str | None,
 ) -> tuple[str, ReplyMode | None, bool]:
     learner_reply = " ".join((payload.user_input_text or "").split()).strip()
     if not learner_reply:
         return generated_prompt, None, False
 
-    anchor_phrase = _material_anchor_phrase(
-        source_material_label=source_material_label,
-        source_material_name=source_material_name,
-        topic_name=topic_name,
-        extraction=extraction,
-    )
+    focus = _focus_label(topic_name, extraction)
     learner_excerpt = _learner_focus_excerpt(learner_reply)
 
     if _has_completion_intent(learner_reply):
-        return f"Great, that sounds understood {anchor_phrase}. We'll end this turn here.", "session_complete", True
+        return "Great, that sounds understood. We'll end this turn here.", "session_complete", True
 
     if _needs_guidance(learner_reply):
         guidance_question = _single_question(
@@ -461,7 +429,7 @@ def _apply_reply_policy(
         )
         excerpt_clause = f" in your point {learner_excerpt}" if learner_excerpt else ""
         prompt = (
-            f"Good effort {anchor_phrase}. Let's correct one piece at a time by re-checking the key assumption"
+            "Good effort. Let's correct one piece at a time by re-checking the key assumption"
             f"{excerpt_clause}. "
             f"{guidance_question}"
         )
@@ -473,10 +441,9 @@ def _apply_reply_policy(
         extraction=extraction,
         topic_name=topic_name,
     ):
-        focus = _focus_label(topic_name, extraction)
         prompt = (
-            f"That seems unrelated to {anchor_phrase}. Let's refocus on {focus}. "
-            "Which step in this uploaded material is blocking you right now?"
+            f"That seems unrelated to {focus}. Let's refocus on this topic. "
+            "Which step is blocking you right now?"
         )
         return prompt, "off_topic_redirect", False
 
@@ -486,7 +453,7 @@ def _apply_reply_policy(
     )
     excerpt_clause = f" around your point {learner_excerpt}" if learner_excerpt else ""
     prompt = (
-        f"You're on the right path {anchor_phrase}. Strengthen your intuition by stress-testing the key assumption"
+        "You're on the right path. Strengthen your intuition by stress-testing the key assumption"
         f"{excerpt_clause}. "
         f"{intuition_question}"
     )
@@ -775,6 +742,65 @@ def _count_citations_with_prefix(citations: list[str], prefix: str) -> int:
     return sum(1 for citation in citations if citation.startswith(prefix))
 
 
+def _citation_label(citation: str) -> str | None:
+    compact = " ".join((citation or "").split()).strip()
+    if not compact:
+        return None
+    _, _, value = compact.partition(":")
+    tail = value or compact
+    if "/" in tail:
+        tail = tail.rsplit("/", 1)[-1]
+    cleaned = " ".join(tail.split()).strip("[](){}<>\"' ")
+    return cleaned or None
+
+
+def _source_label_candidates(
+    *,
+    source_material_label: str | None,
+    source_material_name: str | None,
+    citations: list[str],
+) -> list[str]:
+    candidates: list[str] = []
+    for raw in [source_material_label, source_material_name]:
+        label = " ".join((raw or "").split()).strip()
+        if label:
+            candidates.append(label)
+    for citation in citations:
+        label = _citation_label(citation)
+        if label:
+            candidates.append(label)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for label in sorted(candidates, key=len, reverse=True):
+        key = label.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(label)
+    return deduped
+
+
+def _strip_source_mentions(
+    prompt_text: str,
+    *,
+    source_material_label: str | None,
+    source_material_name: str | None,
+    citations: list[str],
+) -> str:
+    cleaned = prompt_text or ""
+    if not cleaned:
+        return cleaned
+    cleaned = re.sub(r"\[(?:topic|course-doc):[^\]]+\]\s*", "", cleaned, flags=re.IGNORECASE)
+    for label in _source_label_candidates(
+        source_material_label=source_material_label,
+        source_material_name=source_material_name,
+        citations=citations,
+    ):
+        cleaned = re.sub(re.escape(label), "the material", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or prompt_text
+
+
 def _score_chunk(query_tokens: set[str], chunk: str) -> int:
     if not query_tokens:
         return 0
@@ -842,12 +868,14 @@ def _collect_topic_grounding(topic_id: str | None, query_text: str, limit: int =
         (source_label for _, _, _, source_url, source_label in selected if source_url and source_label),
         None,
     )
+    primary_source_score = int(selected[0][0]) if selected else 0
     return GroundingBundle(
         context_text="\n\n---\n\n".join(context_parts),
         citations=citations,
         warnings=_dedupe_text_items(warnings),
         primary_source_url=primary_source_url,
         primary_source_label=primary_source_label,
+        primary_source_score=primary_source_score,
     )
 
 
@@ -970,12 +998,14 @@ def _collect_course_doc_grounding(
         (source_label for _, _, _, source_url, source_label in selected if source_url and source_label),
         None,
     )
+    primary_source_score = int(selected[0][0]) if selected else 0
     return GroundingBundle(
         context_text="\n\n---\n\n".join(context_parts),
         citations=citations,
         warnings=_dedupe_text_items(warnings),
         primary_source_url=primary_source_url,
         primary_source_label=primary_source_label,
+        primary_source_score=primary_source_score,
     )
 
 
@@ -1010,14 +1040,32 @@ def _build_grounding_bundle(
 
     combined_citations = _dedupe_text_items([*topic_bundle.citations, *course_bundle.citations])
     combined_warnings = _dedupe_text_items([*topic_bundle.warnings, *course_bundle.warnings])
-    combined_primary_source_url = topic_bundle.primary_source_url or course_bundle.primary_source_url
-    combined_primary_source_label = topic_bundle.primary_source_label or course_bundle.primary_source_label
+
+    primary_bundle = topic_bundle
+    if course_bundle.primary_source_score > topic_bundle.primary_source_score:
+        primary_bundle = course_bundle
+    elif (
+        topic_bundle.primary_source_score == 0
+        and course_bundle.primary_source_score == 0
+        and not topic_bundle.primary_source_url
+    ):
+        primary_bundle = course_bundle
+    if not primary_bundle.primary_source_url:
+        if topic_bundle.primary_source_url and topic_bundle.primary_source_score >= course_bundle.primary_source_score:
+            primary_bundle = topic_bundle
+        elif course_bundle.primary_source_url:
+            primary_bundle = course_bundle
+
+    combined_primary_source_url = primary_bundle.primary_source_url
+    combined_primary_source_label = primary_bundle.primary_source_label
+    combined_primary_source_score = primary_bundle.primary_source_score
     return GroundingBundle(
         context_text=combined_context,
         citations=combined_citations,
         warnings=combined_warnings,
         primary_source_url=combined_primary_source_url,
         primary_source_label=combined_primary_source_label,
+        primary_source_score=combined_primary_source_score,
     )
 
 
@@ -2788,13 +2836,23 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             socratic_prompt = socratic.socratic_prompt
             raw_gap_payloads = socratic.gaps
 
+    socratic_prompt = _strip_source_mentions(
+        socratic_prompt,
+        source_material_label=grounding_bundle.primary_source_label,
+        source_material_name=source_context.material_name if source_context is not None else None,
+        citations=grounding_bundle.citations,
+    )
     socratic_prompt, reply_mode, session_ended = _apply_reply_policy(
         generated_prompt=socratic_prompt,
         payload=payload,
         extraction=extraction,
         topic_name=context_topic.topic_name if context_topic is not None else None,
+    )
+    socratic_prompt = _strip_source_mentions(
+        socratic_prompt,
         source_material_label=grounding_bundle.primary_source_label,
         source_material_name=source_context.material_name if source_context is not None else None,
+        citations=grounding_bundle.citations,
     )
     if session_ended:
         raw_gap_payloads = []

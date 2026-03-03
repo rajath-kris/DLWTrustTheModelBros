@@ -1,0 +1,4 @@
+A stack follows LIFO order with push and pop operations.
+A queue follows FIFO order with enqueue and dequeue operations.
+Stacks are used in function call management and expression evaluation.
+Queues are used in BFS and scheduling systems.

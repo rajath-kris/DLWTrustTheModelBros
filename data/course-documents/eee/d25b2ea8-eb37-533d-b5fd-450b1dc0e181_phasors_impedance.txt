@@ -1,0 +1,4 @@
+In AC steady state, sinusoidal signals can be represented as phasors.
+Impedance generalizes resistance: Z_R = R, Z_L = j*omega*L, Z_C = 1/(j*omega*C).
+Series impedances add directly.
+Power factor indicates phase difference between voltage and current.

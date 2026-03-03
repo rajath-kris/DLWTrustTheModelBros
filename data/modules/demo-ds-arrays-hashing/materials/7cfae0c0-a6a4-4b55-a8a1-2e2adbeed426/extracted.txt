@@ -1,0 +1,4 @@
+Arrays store elements in contiguous memory and allow O(1) indexed access.
+Hash tables map keys to buckets via a hash function and typically support O(1) average lookup.
+Collision handling can use chaining or open addressing.
+Load factor affects performance and rehashing policy.

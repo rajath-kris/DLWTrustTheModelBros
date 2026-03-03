@@ -166,6 +166,7 @@ class GroundingBundle:
     warnings: list[str]
     primary_source_url: str | None = None
     primary_source_label: str | None = None
+    primary_source_score: int = 0
 
 
 def tokenize(text: str) -> list[str]:

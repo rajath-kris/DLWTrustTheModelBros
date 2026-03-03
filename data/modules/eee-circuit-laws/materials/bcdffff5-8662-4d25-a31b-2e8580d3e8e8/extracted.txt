@@ -1,0 +1,4 @@
+Kirchhoff's Current Law (KCL): algebraic sum of currents at a node is zero.
+Kirchhoff's Voltage Law (KVL): algebraic sum of voltages around a loop is zero.
+Ohm's Law: V = I * R.
+Nodal and mesh analysis apply these laws systematically.

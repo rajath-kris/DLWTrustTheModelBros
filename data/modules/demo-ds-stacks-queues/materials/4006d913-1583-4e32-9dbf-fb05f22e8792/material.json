@@ -1,0 +1,14 @@
+{
+  "material_id": "4006d913-1583-4e32-9dbf-fb05f22e8792",
+  "topic_id": "demo-ds-stacks-queues",
+  "material_name": "Stacks and Queues Fundamentals",
+  "material_type": "txt",
+  "original_filename": "stacks_queues_fundamentals.txt",
+  "source_path": "demo-ds-stacks-queues/materials/4006d913-1583-4e32-9dbf-fb05f22e8792/source.txt",
+  "extracted_path": "demo-ds-stacks-queues/materials/4006d913-1583-4e32-9dbf-fb05f22e8792/extracted.txt",
+  "tokens_path": "demo-ds-stacks-queues/materials/4006d913-1583-4e32-9dbf-fb05f22e8792/tokens.json",
+  "tokens_count": 22,
+  "parse_warning": null,
+  "created_at": "2026-03-03T03:49:03.229703Z",
+  "updated_at": "2026-03-03T03:49:03.229703Z"
+}

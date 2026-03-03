@@ -1,0 +1,4 @@
+A PN junction diode allows significant current in forward bias and very small current in reverse bias.
+Forward voltage for silicon diodes is approximately 0.7 V in many practical models.
+Reverse breakdown occurs when reverse voltage exceeds a device-specific threshold.
+Rectifier circuits use diode conduction directionality.

@@ -1,0 +1,4 @@
+A singly linked list stores nodes with data and next pointers.
+Insertion at head is O(1).
+Searching for a value is O(n) in the worst case.
+Doubly linked lists add prev pointers to support O(1) backward navigation.

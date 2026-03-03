@@ -675,6 +675,144 @@
           "updated_at": "2026-03-03T03:41:57.558011Z"
         }
       }
+    },
+    "demo-ds-arrays-hashing": {
+      "topic_id": "demo-ds-arrays-hashing",
+      "topic_name": "Arrays and Hashing",
+      "course_id": "demo-ds",
+      "created_at": "2026-03-03T03:49:03.143169Z",
+      "updated_at": "2026-03-03T03:50:40.718833Z",
+      "materials": {
+        "7cfae0c0-a6a4-4b55-a8a1-2e2adbeed426": {
+          "material_id": "7cfae0c0-a6a4-4b55-a8a1-2e2adbeed426",
+          "topic_id": "demo-ds-arrays-hashing",
+          "material_name": "Arrays and Hashing Quick Notes",
+          "material_type": "txt",
+          "original_filename": "arrays_hashing_notes.txt",
+          "source_path": "demo-ds-arrays-hashing/materials/7cfae0c0-a6a4-4b55-a8a1-2e2adbeed426/source.txt",
+          "extracted_path": "demo-ds-arrays-hashing/materials/7cfae0c0-a6a4-4b55-a8a1-2e2adbeed426/extracted.txt",
+          "tokens_path": "demo-ds-arrays-hashing/materials/7cfae0c0-a6a4-4b55-a8a1-2e2adbeed426/tokens.json",
+          "tokens_count": 34,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:49:03.163868Z",
+          "updated_at": "2026-03-03T03:49:03.163868Z"
+        }
+      }
+    },
+    "demo-ds-linked-lists": {
+      "topic_id": "demo-ds-linked-lists",
+      "topic_name": "Linked Lists",
+      "course_id": "demo-ds",
+      "created_at": "2026-03-03T03:49:03.178416Z",
+      "updated_at": "2026-03-03T03:50:40.731759Z",
+      "materials": {
+        "765209c4-b487-4932-ba1e-d80b039c4f30": {
+          "material_id": "765209c4-b487-4932-ba1e-d80b039c4f30",
+          "topic_id": "demo-ds-linked-lists",
+          "material_name": "Linked Lists Core Concepts",
+          "material_type": "txt",
+          "original_filename": "linked_lists_core.txt",
+          "source_path": "demo-ds-linked-lists/materials/765209c4-b487-4932-ba1e-d80b039c4f30/source.txt",
+          "extracted_path": "demo-ds-linked-lists/materials/765209c4-b487-4932-ba1e-d80b039c4f30/extracted.txt",
+          "tokens_path": "demo-ds-linked-lists/materials/765209c4-b487-4932-ba1e-d80b039c4f30/tokens.json",
+          "tokens_count": 24,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:49:03.195650Z",
+          "updated_at": "2026-03-03T03:49:03.195650Z"
+        }
+      }
+    },
+    "demo-ds-stacks-queues": {
+      "topic_id": "demo-ds-stacks-queues",
+      "topic_name": "Stacks and Queues",
+      "course_id": "demo-ds",
+      "created_at": "2026-03-03T03:49:03.210053Z",
+      "updated_at": "2026-03-03T03:50:40.744327Z",
+      "materials": {
+        "4006d913-1583-4e32-9dbf-fb05f22e8792": {
+          "material_id": "4006d913-1583-4e32-9dbf-fb05f22e8792",
+          "topic_id": "demo-ds-stacks-queues",
+          "material_name": "Stacks and Queues Fundamentals",
+          "material_type": "txt",
+          "original_filename": "stacks_queues_fundamentals.txt",
+          "source_path": "demo-ds-stacks-queues/materials/4006d913-1583-4e32-9dbf-fb05f22e8792/source.txt",
+          "extracted_path": "demo-ds-stacks-queues/materials/4006d913-1583-4e32-9dbf-fb05f22e8792/extracted.txt",
+          "tokens_path": "demo-ds-stacks-queues/materials/4006d913-1583-4e32-9dbf-fb05f22e8792/tokens.json",
+          "tokens_count": 22,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:49:03.229703Z",
+          "updated_at": "2026-03-03T03:49:03.229703Z"
+        }
+      }
+    },
+    "eee-circuit-laws": {
+      "topic_id": "eee-circuit-laws",
+      "topic_name": "Circuit Laws",
+      "course_id": "eee",
+      "created_at": "2026-03-03T03:49:03.241387Z",
+      "updated_at": "2026-03-03T03:50:40.758261Z",
+      "materials": {
+        "bcdffff5-8662-4d25-a31b-2e8580d3e8e8": {
+          "material_id": "bcdffff5-8662-4d25-a31b-2e8580d3e8e8",
+          "topic_id": "eee-circuit-laws",
+          "material_name": "KCL and KVL Notes",
+          "material_type": "txt",
+          "original_filename": "kcl_kvl_notes.txt",
+          "source_path": "eee-circuit-laws/materials/bcdffff5-8662-4d25-a31b-2e8580d3e8e8/source.txt",
+          "extracted_path": "eee-circuit-laws/materials/bcdffff5-8662-4d25-a31b-2e8580d3e8e8/extracted.txt",
+          "tokens_path": "eee-circuit-laws/materials/bcdffff5-8662-4d25-a31b-2e8580d3e8e8/tokens.json",
+          "tokens_count": 26,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:49:03.261959Z",
+          "updated_at": "2026-03-03T03:49:03.261959Z"
+        }
+      }
+    },
+    "eee-ac-analysis": {
+      "topic_id": "eee-ac-analysis",
+      "topic_name": "AC Analysis",
+      "course_id": "eee",
+      "created_at": "2026-03-03T03:49:03.277366Z",
+      "updated_at": "2026-03-03T03:50:40.770067Z",
+      "materials": {
+        "fb472dd8-c6d3-4c54-9b5e-c9e516c8cecc": {
+          "material_id": "fb472dd8-c6d3-4c54-9b5e-c9e516c8cecc",
+          "topic_id": "eee-ac-analysis",
+          "material_name": "Phasors and Impedance",
+          "material_type": "txt",
+          "original_filename": "phasors_impedance.txt",
+          "source_path": "eee-ac-analysis/materials/fb472dd8-c6d3-4c54-9b5e-c9e516c8cecc/source.txt",
+          "extracted_path": "eee-ac-analysis/materials/fb472dd8-c6d3-4c54-9b5e-c9e516c8cecc/extracted.txt",
+          "tokens_path": "eee-ac-analysis/materials/fb472dd8-c6d3-4c54-9b5e-c9e516c8cecc/tokens.json",
+          "tokens_count": 30,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:49:03.295050Z",
+          "updated_at": "2026-03-03T03:49:03.295050Z"
+        }
+      }
+    },
+    "eee-semiconductor-basics": {
+      "topic_id": "eee-semiconductor-basics",
+      "topic_name": "Semiconductor Basics",
+      "course_id": "eee",
+      "created_at": "2026-03-03T03:49:03.312329Z",
+      "updated_at": "2026-03-03T03:50:40.781814Z",
+      "materials": {
+        "97a25c82-8300-4741-8d48-1fbb12bf43dc": {
+          "material_id": "97a25c82-8300-4741-8d48-1fbb12bf43dc",
+          "topic_id": "eee-semiconductor-basics",
+          "material_name": "PN Junction Essentials",
+          "material_type": "txt",
+          "original_filename": "pn_junction_essentials.txt",
+          "source_path": "eee-semiconductor-basics/materials/97a25c82-8300-4741-8d48-1fbb12bf43dc/source.txt",
+          "extracted_path": "eee-semiconductor-basics/materials/97a25c82-8300-4741-8d48-1fbb12bf43dc/extracted.txt",
+          "tokens_path": "eee-semiconductor-basics/materials/97a25c82-8300-4741-8d48-1fbb12bf43dc/tokens.json",
+          "tokens_count": 33,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:49:03.333600Z",
+          "updated_at": "2026-03-03T03:49:03.333600Z"
+        }
+      }
     }
   }
 }
