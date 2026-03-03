@@ -6,6 +6,8 @@ For judging clarity: we could not reliably fit every feature into a strict two-m
 
 [![IMAGE ALT TEXT HERE]([https://img.youtube.com/vi/YOUTUBE_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=YOUTUBE_VIDEO_ID_HERE](https://youtu.be/ZSyA_XS9AMg))
 
+<iframe width="560" height="315" src="https://www.youtube.com/embed/ZSyA_XS9AMg" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
 Minimal monorepo scaffold for the `vision.md` loop:
 
 - `apps/sentinel-desktop`: The Sentinel + Overlay (`Alt+S`, region capture, floating Socratic bubble).
