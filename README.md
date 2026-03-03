@@ -2,24 +2,10 @@
 
 ## Demo Note
 
-For judging clarity: we could not reliably fit every feature into a strict two-minute live demo. The system is still hard to run end-to-end on macOS, and setup/stack orchestration on Windows is also non-trivial. Because of that, we recorded and shared an uncut demo video so reviewers can see all implemented features and full runtime behavior without cuts. We also want to acknowledge that parts of this project were built while some team members who were operating from an active war zone and we would like to appreciate their committment to this hackathon even while in potential danger.
-
-
+For judging clarity: we could not reliably fit every feature into a strict two-minute live demo. The system is still hard to run end-to-end on macOS, and setup/stack orchestration on Windows is also non-trivial. Because of that, we recorded and shared an uncut demo video so reviewers can see all implemented features and full runtime behavior without cuts. We also want to acknowledge that parts of this project were built while some team members who were operating from an active war zone and we would like to appreciate their committment to this hackathon even while in potential danger. The demo video is below ( just click on the embedded image ).
 
 [![Watch the demo](https://img.youtube.com/vi/ZSyA_XS9AMg/hqdefault.jpg)](https://youtu.be/ZSyA_XS9AMg)
 
-Minimal monorepo scaffold for the `vision.md` loop:
-
-- `apps/sentinel-desktop`: The Sentinel + Overlay (`Alt+S`, region capture, floating Socratic bubble).
-- `services/bridge-api`: FastAPI bridge on `127.0.0.1:8000` (capture ingest, gap extraction, readiness state).
-- `apps/mission-control`: The Brain dashboard on `127.0.0.1:5173` (radar + gap tracker + live stream).
-- `shared/schemas`: shared payload/state contract references.
-
-The goal is to let two developers work in parallel with low merge conflict:
-
-- Dev A owns Sentinel (`apps/sentinel-desktop`).
-- Dev B owns Mission Control (`apps/mission-control`).
-- Both integrate through the bridge contract (`services/bridge-api` + `shared/schemas`).
 
 ## New User Setup (Windows PowerShell)
 
