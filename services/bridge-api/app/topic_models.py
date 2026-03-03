@@ -12,11 +12,13 @@ def utc_now_iso() -> str:
 class TopicUpsertRequest(BaseModel):
     topic_id: str = Field(min_length=1)
     topic_name: str = Field(min_length=1)
+    course_id: str | None = Field(default=None)
 
 
 class TopicSummary(BaseModel):
     topic_id: str
     topic_name: str
+    course_id: str = "all"
     material_count: int = 0
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)

@@ -34,10 +34,10 @@ const PIPELINE_NODES: PipelineNodeConfig[] = [
     id: "ai",
     emoji: "🤖",
     borderColor: "#a855f7",
-    label: "Azure AI Vision interprets content",
-    title: "AI: Vision + Socratic Prompting",
+    label: "Agent interprets content",
+    title: "Agent: Vision + Socratic Prompting",
     description:
-      "The cropped image is sent to the bridge API, which uses Azure AI Vision for OCR, captioning, and tagging. A Socratic prompt is generated—guiding questions anchored to your syllabus, not final answers. Structured gaps are extracted for the Brain.",
+      "The cropped image is sent to the bridge API, where the Agent runs OCR, captioning, and tagging before generating a Socratic prompt—guiding questions anchored to your syllabus, not final answers. Structured gaps are extracted for the Brain.",
   },
   {
     id: "brain",
@@ -88,7 +88,7 @@ export function LearningLoopDiagram() {
         <span className="learning-pipeline-badge">App-Agnostic</span>
         <header>
           <h3>The Learning Pipeline</h3>
-          <p>Eye → Trigger → AI → Brain → Insight.</p>
+          <p>Eye → Trigger → Agent → Brain → Insight.</p>
         </header>
         <div className="learning-pipeline-diagram" role="img" aria-label="Learning pipeline flow">
           <div className="learning-pipeline-row">

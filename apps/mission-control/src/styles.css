@@ -154,11 +154,22 @@
 }
 
 .sidebar-course-add {
+  display: block;
+  width: 100%;
   padding: 0.5rem 0.65rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
   font-size: 0.8rem;
   color: var(--muted);
   margin-top: 0.25rem;
   border-top: 1px solid var(--panel-border);
+}
+.sidebar-course-add:hover {
+  background: rgba(160, 160, 176, 0.12);
+  color: var(--text);
 }
 
 .sidebar-nav-new .sidebar-nav-group-label {
@@ -649,34 +660,13 @@
 .schedule-modal-form label { font-size: 0.85rem; }
 .schedule-modal-form input, .schedule-modal-form select { padding: 0.5rem; border-radius: 8px; border: 1px solid var(--panel-border); background: rgba(0,0,0,0.2); color: var(--text); }
 
-/* Study Planner page */
-.planner-page-header { margin-bottom: 0.5rem; }
-.planner-page-title-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-.planner-page-title-row h1 { font-size: 1.5rem; margin: 0; }
-.planner-intro { font-size: 0.9rem; color: var(--muted); margin: 0 0 1rem; }
-.planner-empty { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 2rem; text-align: center; color: var(--muted); }
-.planner-timeline, .planner-projection { margin-bottom: 1.5rem; }
-.planner-timeline h2, .planner-projection h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
-.planner-day-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-.planner-day-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1rem; }
-.planner-day-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.planner-day-date { font-weight: 600; }
-.planner-day-check { font-size: 0.85rem; display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
-.planner-day-topics { list-style: none; margin: 0; padding: 0; }
-.planner-day-topic { font-size: 0.9rem; color: var(--muted); padding: 0.25rem 0; }
-.planner-topic-name { font-weight: 500; color: var(--text); margin-right: 0.5rem; }
-.planner-projection .planner-chart-wrap { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 1rem; }
-.planner-chart-legend { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.75rem; display: flex; gap: 1rem; }
-.planner-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 0.25rem; vertical-align: middle; }
-.planner-legend-with-plan { background: #22c55e; }
-.planner-legend-current { background: #e74c3c; }
-.planner-chart-bars { display: flex; flex-direction: column; gap: 0.5rem; }
-.planner-chart-bar-row { display: grid; grid-template-columns: 32px 1fr 1fr; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
-.planner-chart-label { color: var(--muted); }
-.planner-chart-track { height: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; overflow: hidden; }
-.planner-chart-bar { height: 100%; border-radius: 4px; transition: width 0.2s; }
-.planner-chart-with-plan { background: #22c55e; }
-.planner-chart-current { background: #e74c3c; }
+.mission-upcoming-section { margin-top: 0.75rem; }
+.mission-upcoming-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.mission-upcoming-header .section-heading { margin-bottom: 0; }
+.mission-upcoming-card { padding-top: 0.85rem; }
+.mission-upcoming-overflow { margin-top: 0.65rem; font-size: 0.8rem; color: var(--muted); }
+.mission-home-cta { margin-bottom: 0.75rem; }
+.mission-home-cta-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 
 .docs-page-header { margin-bottom: 1rem; }
 .docs-page-title-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
@@ -690,6 +680,34 @@
 .docs-topic-create-row input { flex: 1; min-width: 160px; }
 .docs-topic-create-row .top-bar-btn { white-space: nowrap; }
 .docs-page-footer { font-size: 0.85rem; color: var(--muted); margin: 1rem 0 0; }
+.courses-page-header { margin-bottom: 1rem; }
+.courses-page-title-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.courses-page-title-row h1 { margin: 0; font-size: 1.5rem; }
+.courses-grid { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.courses-card h3 { margin-top: 0; }
+.courses-form-grid { display: grid; gap: 0.45rem; }
+.courses-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.65rem; }
+.courses-list-item { display: flex; align-items: center; gap: 0.5rem; }
+.courses-course-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.84rem;
+}
+.courses-course-chip.active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.18);
+}
+.courses-topic-create-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.65rem; }
+.courses-topic-create-row .quiz-count-input { flex: 1; }
+.courses-session-meta { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.85rem; }
 .document-hub-item-with-actions .document-hub-item-actions { opacity: 0; }
 .document-hub-item-with-actions:hover .document-hub-item-actions { opacity: 1; }
 .document-hub-item-actions { display: flex; gap: 0.5rem; margin-left: auto; transition: opacity 0.15s; }
@@ -3087,6 +3105,10 @@ h1 {
   }
 
   .gaps-resources-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .courses-grid {
     grid-template-columns: 1fr;
   }
 

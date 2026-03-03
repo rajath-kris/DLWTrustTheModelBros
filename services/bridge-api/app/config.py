@@ -61,6 +61,10 @@ class Settings:
         return PROJECT_ROOT / "data" / "state.json"
 
     @property
+    def sentinel_session_context_file(self) -> Path:
+        return PROJECT_ROOT / "data" / "sentinel-session-context.json"
+
+    @property
     def topics_dir(self) -> Path:
         preferred = PROJECT_ROOT / "data" / "topics"
         legacy = PROJECT_ROOT / "data" / "modules"

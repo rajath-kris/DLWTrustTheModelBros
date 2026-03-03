@@ -340,6 +340,25 @@ class CreateDeadlineRequest(BaseModel):
     associated_gap_ids: list[str] = Field(default_factory=list)
     course_id: str | None = None
 
+
+class CourseCreateRequest(BaseModel):
+    course_id: str = Field(min_length=1, max_length=80)
+    course_name: str = Field(min_length=1, max_length=160)
+
+
+class SentinelSessionContext(BaseModel):
+    course_id: str | None = None
+    course_name: str | None = None
+    topic_id: str | None = None
+    topic_name: str | None = None
+    updated_at: str | None = None
+
+
+class SentinelSessionContextRequest(BaseModel):
+    course_id: str = Field(min_length=1, max_length=80)
+    topic_id: str = Field(min_length=1, max_length=80)
+
+
 class SentinelRuntimeStatus(BaseModel):
     running: bool
     process_count: int = Field(ge=0)

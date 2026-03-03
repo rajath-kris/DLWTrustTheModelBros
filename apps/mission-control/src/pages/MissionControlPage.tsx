@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { differenceInDays, startOfDay } from "date-fns";
 import { useCourse } from "../context/CourseContext";
 import { DeadlineBanner } from "../components/DeadlineBanner";
 import { DocumentHub } from "../components/DocumentHub";
@@ -9,6 +10,7 @@ import { ReadinessRadarTopics } from "../components/ReadinessRadarTopics";
 import { StatCards } from "../components/StatCards";
 import { TopBar } from "../components/TopBar";
 import { TopicMastery } from "../components/TopicMastery";
+import type { MockDeadline } from "../data/courses";
 import type { LearningState } from "../types";
 import { emptyState } from "../api";
 
@@ -29,51 +31,168 @@ function buildStateFromCourseData(courseData: NonNullable<ReturnType<typeof useC
   };
 }
 
+interface UpcomingDeadlineItem {
+  id: string;
+  name: string;
+  due_date: string;
+  readiness_score?: number;
+  courseId: string;
+  courseName: string;
+  accentColor: string;
+}
+
+interface DeadlineSourceCourse {
+  id: string;
+  name: string;
+  accentColor: string;
+  deadlines: MockDeadline[];
+}
+
+function getReadinessColor(readiness: number): string {
+  return readiness < 60 ? "#e74c3c" : readiness < 80 ? "#f59e0b" : "#22c55e";
+}
+
+function getReadinessPercent(readiness: number | undefined): number {
+  if (readiness == null) return 0;
+  const normalized = readiness <= 1 ? readiness * 100 : readiness;
+  return Math.max(0, Math.min(100, Math.round(normalized)));
+}
+
+function buildUpcomingDeadlines(
+  courseId: string,
+  courseData: DeadlineSourceCourse | null,
+  allCoursesSummary: Array<{ data: DeadlineSourceCourse }>
+): UpcomingDeadlineItem[] {
+  const today = startOfDay(new Date()).getTime();
+  const scopedCourses = courseId === "all" ? allCoursesSummary.map(({ data }) => data) : courseData ? [courseData] : [];
+
+  return scopedCourses
+    .flatMap((course) =>
+      course.deadlines.map((deadline) => ({
+        ...deadline,
+        courseId: course.id,
+        courseName: course.name,
+        accentColor: course.accentColor,
+      }))
+    )
+    .filter((deadline) => {
+      const dueTime = new Date(deadline.due_date).getTime();
+      return Number.isFinite(dueTime) && dueTime >= today;
+    })
+    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+}
+
+function UpcomingDeadlinesPanel({
+  deadlines,
+  onOpenSchedule,
+}: {
+  deadlines: UpcomingDeadlineItem[];
+  onOpenSchedule: () => void;
+}) {
+  const visibleDeadlines = deadlines.slice(0, 6);
+
+  return (
+    <section className="dashboard-section mission-upcoming-section" aria-label="Upcoming deadlines">
+      <div className="mission-upcoming-header">
+        <h2 className="section-heading">UPCOMING DEADLINES</h2>
+        <button type="button" className="top-bar-btn" onClick={onOpenSchedule}>
+          Open Schedule
+        </button>
+      </div>
+      <aside className="schedule-upcoming mission-upcoming-card">
+        {visibleDeadlines.length === 0 ? (
+          <p className="schedule-empty">No upcoming deadlines. Add one in Schedule.</p>
+        ) : (
+          <ul className="schedule-upcoming-list">
+            {visibleDeadlines.map((deadline) => {
+              const daysLeft = differenceInDays(new Date(deadline.due_date), new Date());
+              const readiness = getReadinessPercent(deadline.readiness_score);
+              const daysClass =
+                daysLeft <= 3
+                  ? "schedule-upcoming-days-urgent"
+                  : daysLeft <= 7
+                    ? "schedule-upcoming-days-warning"
+                    : "schedule-upcoming-days-ok";
+              return (
+                <li key={`${deadline.courseId}-${deadline.id}`} className="schedule-upcoming-item">
+                  <span className="schedule-upcoming-course" style={{ borderColor: deadline.accentColor }}>
+                    {deadline.courseId.toUpperCase()}
+                  </span>
+                  <span className="schedule-upcoming-name">{deadline.name}</span>
+                  <span className={`schedule-upcoming-days ${daysClass}`}>{daysLeft}d</span>
+                  <div className="schedule-upcoming-readiness-group">
+                    <div className="schedule-upcoming-readiness">
+                      <div
+                        className="schedule-readiness-bar"
+                        style={{
+                          width: `${readiness}%`,
+                          background: getReadinessColor(readiness),
+                        }}
+                      />
+                    </div>
+                    <span className="schedule-upcoming-pct">{readiness}%</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {deadlines.length > visibleDeadlines.length && (
+          <p className="mission-upcoming-overflow">Showing next {visibleDeadlines.length} deadlines.</p>
+        )}
+      </aside>
+    </section>
+  );
+}
+
 export function MissionControlPage() {
   const { courseId, courseData, allCoursesSummary, setCourseId, liveAvailable, liveError } = useCourse();
   const navigate = useNavigate();
   const [deadlineBannerDismissed, setDeadlineBannerDismissed] = useState(false);
+  const upcomingDeadlines = buildUpcomingDeadlines(courseId, courseData, allCoursesSummary);
 
   if (courseId === "all") {
     return (
       <div className="page-shell page-fade">
         <TopBar
           onExportReport={() => console.log("Export Report (placeholder)")}
-          onUploadDocs={() => navigate("/documents")}
+          onUploadDocs={() => navigate("/courses")}
         />
-        <section className="all-courses-view" aria-label="All Courses">
-          <h2 className="section-heading">ALL COURSES</h2>
-          <div className="course-health-cards">
-            {allCoursesSummary.map(({ course, data }) => (
-              <article key={course.id} className="card course-health-card">
-                <div className="course-health-card-header">
-                  <span className="course-health-dot" style={{ background: course.accentColor }} aria-hidden />
-                  <h3>{course.name}</h3>
-                </div>
-                <p className="course-health-mastery">Overall Mastery: {data.stats.masteryPercent}%</p>
-                <p className="course-health-gaps">Active Gaps: {data.stats.activeGaps}</p>
-                <p className="course-health-deadline">
-                  Nearest: {data.stats.nearestDeadlineName} in {data.stats.nearestDeadlineDays}d
-                </p>
-                <button
-                  type="button"
-                  className="top-bar-btn primary"
-                  onClick={() => {
-                    setCourseId(course.id as "cs2040" | "ee2001");
-                    navigate("/");
-                  }}
-                >
-                  Go to Course
-                </button>
-              </article>
-            ))}
+        <section className="dashboard-section card mission-home-cta" aria-label="Courses setup">
+          <h2 className="section-heading">SETUP COURSES TO START SENTINEL</h2>
+          <p className="status-line">
+            Home no longer lists course cards. Use Courses to create courses, add topics, upload docs, and bind Sentinel sessions.
+          </p>
+          <div className="mission-home-cta-actions">
+            <button type="button" className="top-bar-btn primary" onClick={() => navigate("/courses")}>
+              Open Courses
+            </button>
+            {allCoursesSummary.length > 0 && (
+              <button
+                type="button"
+                className="top-bar-btn"
+                onClick={() => {
+                  const firstCourseId = allCoursesSummary[0]?.course.id;
+                  if (!firstCourseId) {
+                    return;
+                  }
+                  setCourseId(firstCourseId);
+                  navigate("/");
+                }}
+              >
+                View First Course Dashboard
+              </button>
+            )}
           </div>
-          <div className="all-courses-stats">
-            <p>Total Sentinel sessions this week: {allCoursesSummary.reduce((s, { data }) => s + data.stats.sentinelSessionsThisWeek, 0)}</p>
-          </div>
-          <section className="dashboard-section">
-            <LearningLoopDiagram />
-          </section>
+        </section>
+        <section className="dashboard-section">
+          <UpcomingDeadlinesPanel
+            deadlines={upcomingDeadlines}
+            onOpenSchedule={() => navigate("/schedule")}
+          />
+        </section>
+        <section className="dashboard-section">
+          <LearningLoopDiagram />
         </section>
       </div>
     );
@@ -115,8 +234,12 @@ export function MissionControlPage() {
         {!liveAvailable && <p className="status-line">{liveError ?? "Live data unavailable. Showing fallback dashboard slices."}</p>}
         <StatCards state={state} deadlines={courseData.deadlines} />
       </section>
+      <UpcomingDeadlinesPanel
+        deadlines={upcomingDeadlines}
+        onOpenSchedule={() => navigate("/schedule")}
+      />
       <section id="readiness-radar" className="overview-section" aria-label="Readiness and mastery">
-        <h2 className="section-heading">OVERVIEW – READINESS & MASTERY</h2>
+        <h2 className="section-heading">OVERVIEW - READINESS & MASTERY</h2>
         <div className="content-grid">
           <article className="card radar-card">
             <header>
@@ -142,7 +265,7 @@ export function MissionControlPage() {
                 <p className="radar-insight radar-focus">You&apos;re on track; keep reviewing to maintain mastery.</p>
               ) : weakestTopic ? (
                 <p className="radar-insight radar-focus">
-                  Focus on <strong>{weakestTopic.name}</strong> — it&apos;s your weakest area and furthest from your target.
+                  Focus on <strong>{weakestTopic.name}</strong> - it&apos;s your weakest area and furthest from your target.
                 </p>
               ) : null}
             </div>
@@ -167,3 +290,4 @@ export function MissionControlPage() {
     </div>
   );
 }
+

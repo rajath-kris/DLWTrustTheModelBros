@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   API_BASE,
+  fetchSentinelSessionContext,
   fetchSentinelRuntimeStatus,
   startSentinelRuntime,
   stopSentinelRuntime,
@@ -10,6 +11,8 @@ import type { SentinelRuntimeStatus } from "../types";
 
 const SEMESTER_WEEK = import.meta.env.VITE_SEMESTER_WEEK ?? "8";
 const RUNTIME_STATUS_INTERVAL_MS = 5_000;
+const SESSION_CONTEXT_REQUIRED_MESSAGE =
+  "Select a course and topic in /courses before activating Sentinel.";
 type RuntimeMutation = "starting" | "stopping" | null;
 const RUNTIME_STOP_URL = `${API_BASE}/api/v1/sentinel/runtime/stop`;
 
@@ -67,6 +70,21 @@ export function TopBar({
     setRuntimeError(null);
     setBridgeOffline(false);
     const running = runtimeStatus.running;
+
+    if (!running) {
+      try {
+        const context = await fetchSentinelSessionContext();
+        if (!context.course_id || !context.topic_id) {
+          setRuntimeError(SESSION_CONTEXT_REQUIRED_MESSAGE);
+          return;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not validate Sentinel session context.";
+        setRuntimeError(`${message} Open /courses and bind a session context.`);
+        return;
+      }
+    }
+
     setMutating(running ? "stopping" : "starting");
     try {
       const actionResponse = running ? await stopSentinelRuntime() : await startSentinelRuntime();

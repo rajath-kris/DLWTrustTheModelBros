@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import threading
 from pathlib import Path
 from typing import Any
@@ -26,9 +27,10 @@ class TopicStore:
         if not self._index_path.exists() or self._index_path.read_text(encoding="utf-8").strip() == "":
             self._write_index_unlocked({"active_topic_id": None, "topics": {}})
 
-    def upsert_topic(self, topic_id: str, topic_name: str) -> TopicSummary:
+    def upsert_topic(self, topic_id: str, topic_name: str, course_id: str = "all") -> TopicSummary:
         cleaned_id = self._sanitize_id(topic_id)
         cleaned_name = self._compact_text(topic_name, max_chars=120) or cleaned_id
+        cleaned_course_id = self._sanitize_course_id(course_id)
         with self._lock:
             index = self._read_index_unlocked()
             topics = index.setdefault("topics", {})
@@ -38,6 +40,7 @@ class TopicStore:
                 existing = {
                     "topic_id": cleaned_id,
                     "topic_name": cleaned_name,
+                    "course_id": cleaned_course_id,
                     "created_at": now,
                     "updated_at": now,
                     "materials": {},
@@ -45,15 +48,25 @@ class TopicStore:
                 topics[cleaned_id] = existing
             else:
                 existing["topic_name"] = cleaned_name
+                existing["course_id"] = self._sanitize_course_id(str(existing.get("course_id") or cleaned_course_id))
                 existing["updated_at"] = now
             self._write_index_unlocked(index)
             return self._topic_summary(existing)
 
-    def list_topics(self) -> list[TopicSummary]:
+    def list_topics(self, course_id: str | None = None) -> list[TopicSummary]:
+        normalized_course_filter = None
+        if course_id is not None:
+            normalized_course_filter = self._sanitize_course_id(course_id)
         with self._lock:
             index = self._read_index_unlocked()
             topics = index.get("topics", {})
             summaries = [self._topic_summary(entry) for entry in topics.values()]
+            if normalized_course_filter is not None:
+                summaries = [
+                    item
+                    for item in summaries
+                    if item.course_id in {normalized_course_filter, "all"}
+                ]
             return sorted(summaries, key=lambda item: item.updated_at, reverse=True)
 
     def get_topic(self, topic_id: str) -> TopicSummary | None:
@@ -86,6 +99,31 @@ class TopicStore:
             if topic_entry is None:
                 return None
             return self._topic_summary(topic_entry)
+
+    def remove_topics_for_course(self, course_id: str) -> int:
+        target_course = self._sanitize_course_id(course_id)
+        removed_topic_ids: list[str] = []
+        with self._lock:
+            index = self._read_index_unlocked()
+            topics = index.get("topics", {})
+            kept_topics: dict[str, Any] = {}
+            for topic_id, topic_entry in topics.items():
+                if self._sanitize_course_id(str(topic_entry.get("course_id") or "all")) == target_course:
+                    removed_topic_ids.append(topic_id)
+                    continue
+                kept_topics[topic_id] = topic_entry
+            if not removed_topic_ids:
+                return 0
+            index["topics"] = kept_topics
+            if index.get("active_topic_id") in removed_topic_ids:
+                index["active_topic_id"] = None
+            self._write_index_unlocked(index)
+
+        for topic_id in removed_topic_ids:
+            topic_dir = self.topics_dir / topic_id
+            if topic_dir.exists():
+                shutil.rmtree(topic_dir, ignore_errors=True)
+        return len(removed_topic_ids)
 
     def add_material(
         self,
@@ -279,6 +317,7 @@ class TopicStore:
         return TopicSummary(
             topic_id=str(topic_entry.get("topic_id") or topic_entry.get("module_id") or ""),
             topic_name=str(topic_entry.get("topic_name") or topic_entry.get("module_name") or ""),
+            course_id=self._sanitize_course_id(str(topic_entry.get("course_id") or "all")),
             material_count=len(topic_entry.get("materials", {})),
             created_at=str(topic_entry.get("created_at", utc_now_iso())),
             updated_at=str(topic_entry.get("updated_at", utc_now_iso())),
@@ -302,6 +341,7 @@ class TopicStore:
             if not topic_id:
                 continue
             topic_name = str(raw_entry.get("topic_name") or raw_entry.get("module_name") or topic_id).strip() or topic_id
+            course_id = self._sanitize_course_id(str(raw_entry.get("course_id") or "all"))
             materials = raw_entry.get("materials")
             if not isinstance(materials, dict):
                 materials = {}
@@ -312,6 +352,7 @@ class TopicStore:
                     material["topic_id"] = str(material.get("module_id") or topic_id)
             raw_entry["topic_id"] = topic_id
             raw_entry["topic_name"] = topic_name
+            raw_entry["course_id"] = course_id
             raw_entry["materials"] = materials
             normalized_topics[topic_id] = raw_entry
 
@@ -342,6 +383,11 @@ class TopicStore:
 
     def _compact_text(self, raw_value: str, max_chars: int) -> str:
         return " ".join((raw_value or "").split())[:max_chars]
+
+    def _sanitize_course_id(self, raw_value: str) -> str:
+        cleaned = re.sub(r"[^a-zA-Z0-9_-]", "-", (raw_value or "").strip().lower())
+        trimmed = cleaned[:80].strip("-")
+        return trimmed or "all"
 
     def _derive_material_type(self, extension: str, material_type: str | None) -> str:
         if material_type and material_type.strip():

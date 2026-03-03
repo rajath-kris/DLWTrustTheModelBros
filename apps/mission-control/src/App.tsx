@@ -4,9 +4,9 @@ import { BrainStateProvider } from "./context/BrainStateContext";
 import { AppSidebar } from "./components/AppSidebar";
 import {
   MissionControlPage,
+  CoursesPage,
   KnowledgeGapsPage,
   SchedulePage,
-  StudyPlannerPage,
   DocumentHubPage,
   SessionHistoryPage,
   QuizPage,
@@ -33,9 +33,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<MissionControlPage />} />
+            <Route path="courses" element={<CoursesPage />} />
             <Route path="gaps" element={<KnowledgeGapsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
-            <Route path="planner" element={<StudyPlannerPage />} />
             <Route path="documents" element={<DocumentHubPage />} />
             <Route path="history" element={<SessionHistoryPage />} />
             <Route path="quiz" element={<QuizPage />} />

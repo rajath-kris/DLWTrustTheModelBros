@@ -96,6 +96,7 @@ export interface CourseDocument {
 export interface TopicSummary {
   topic_id: string;
   topic_name: string;
+  course_id: string;
   material_count: number;
   created_at: string;
   updated_at: string;
@@ -257,4 +258,12 @@ export interface SentinelRuntimeActionResponse {
   stopped_count: number | null;
   failed_count: number | null;
   status: SentinelRuntimeStatus;
+}
+
+export interface SentinelSessionContext {
+  course_id: string | null;
+  course_name: string | null;
+  topic_id: string | null;
+  topic_name: string | null;
+  updated_at: string | null;
 }

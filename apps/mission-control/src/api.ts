@@ -3,8 +3,10 @@ import type {
   BrainOverviewResponse,
   CourseDeadline,
   CourseDocument,
+  CourseSummary,
   GapStatus,
   LearningState,
+  SentinelSessionContext,
   TopicListResponse,
   TopicSummary,
   QuizPrepareRequest,
@@ -118,7 +120,17 @@ export async function fetchTopics(): Promise<TopicListResponse> {
   return (await response.json()) as TopicListResponse;
 }
 
-export async function upsertTopic(topicId: string, topicName: string): Promise<TopicSummary> {
+export async function fetchTopicsForCourse(courseId: string): Promise<TopicListResponse> {
+  const response = await fetch(
+    `${API_BASE}/api/v1/topics?course_id=${encodeURIComponent(courseId)}`
+  );
+  if (!response.ok) {
+    throw new Error(`Topics request failed: ${response.status}`);
+  }
+  return (await response.json()) as TopicListResponse;
+}
+
+export async function upsertTopic(topicId: string, topicName: string, courseId = "all"): Promise<TopicSummary> {
   const response = await fetch(`${API_BASE}/api/v1/topics`, {
     method: "POST",
     headers: {
@@ -127,12 +139,39 @@ export async function upsertTopic(topicId: string, topicName: string): Promise<T
     body: JSON.stringify({
       topic_id: topicId.trim(),
       topic_name: topicName.trim(),
+      course_id: courseId.trim() || "all",
     }),
   });
   if (!response.ok) {
     throw new Error(`Create topic failed: ${response.status}`);
   }
   return (await response.json()) as TopicSummary;
+}
+
+export async function createCourse(courseId: string, courseName: string): Promise<CourseSummary> {
+  const response = await fetch(`${API_BASE}/api/v1/courses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      course_id: courseId.trim(),
+      course_name: courseName.trim(),
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Create course failed: ${response.status}`);
+  }
+  return (await response.json()) as CourseSummary;
+}
+
+export async function deleteCourse(courseId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/v1/courses/${encodeURIComponent(courseId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(`Delete course failed: ${response.status}`);
+  }
 }
 
 export async function fetchActiveTopic(): Promise<ActiveTopicResponse> {
@@ -164,7 +203,16 @@ export async function uploadDocument(
     body: formData,
   });
   if (!response.ok) {
-    throw new Error(`Upload document failed: ${response.status}`);
+    let detail = `Upload document failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload?.detail) {
+        detail = `Upload document failed: ${payload.detail}`;
+      }
+    } catch {
+      // Keep fallback status message.
+    }
+    throw new Error(detail);
   }
   return (await response.json()) as CourseDocument;
 }
@@ -270,4 +318,32 @@ export async function stopSentinelRuntime(): Promise<SentinelRuntimeActionRespon
     throw new Error(`Stop sentinel runtime failed: ${response.status}`);
   }
   return (await response.json()) as SentinelRuntimeActionResponse;
+}
+
+export async function fetchSentinelSessionContext(): Promise<SentinelSessionContext> {
+  const response = await fetch(`${API_BASE}/api/v1/sentinel/session-context`);
+  if (!response.ok) {
+    throw new Error(`Sentinel session context request failed: ${response.status}`);
+  }
+  return (await response.json()) as SentinelSessionContext;
+}
+
+export async function setSentinelSessionContext(
+  courseId: string,
+  topicId: string
+): Promise<SentinelSessionContext> {
+  const response = await fetch(`${API_BASE}/api/v1/sentinel/session-context`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      course_id: courseId.trim(),
+      topic_id: topicId.trim(),
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Set sentinel session context failed: ${response.status}`);
+  }
+  return (await response.json()) as SentinelSessionContext;
 }

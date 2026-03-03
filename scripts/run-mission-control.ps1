@@ -1,6 +1,8 @@
 param(
     [switch]$Install,
-    [string]$BridgeBaseUrl = 'http://127.0.0.1:8000'
+    [string]$BridgeBaseUrl = 'http://127.0.0.1:8000',
+    [string]$DevHost = '127.0.0.1',
+    [int]$Port = 5173
 )
 
 Set-StrictMode -Version Latest
@@ -15,7 +17,7 @@ try {
     if ($Install -or -not (Test-Path (Join-Path $missionDir 'node_modules'))) {
         & $npmExe install
     }
-    & $npmExe run dev
+    & $npmExe run dev -- --host $DevHost --port $Port
 }
 finally {
     try {

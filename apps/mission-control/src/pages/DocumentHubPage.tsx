@@ -31,7 +31,7 @@ function topicIdFromName(topicName: string): string {
 
 export function DocumentHubPage() {
   const { courseId, courseData, allCoursesSummary, courses, liveAvailable, liveError } = useCourse();
-  const { state, uploadCourseDocument, moveCourseDocument, anchorCourseDocument, removeCourseDocument } = useBrainState();
+  const { state, loading, refreshState, uploadCourseDocument, moveCourseDocument, anchorCourseDocument, removeCourseDocument } = useBrainState();
   const uploadClickRef = useRef<(() => void) | null>(null);
 
   const [topics, setTopics] = useState<TopicSummary[]>([]);
@@ -42,10 +42,29 @@ export function DocumentHubPage() {
   const [newTopicName, setNewTopicName] = useState("");
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
   const [topicCreateError, setTopicCreateError] = useState<string | null>(null);
+  const selectedTopicCourseId = (courseId === "all" ? selectedCourseId : courseId) || "all";
+  const visibleTopics = useMemo(
+    () =>
+      topics.filter((topic) =>
+        selectedTopicCourseId === "all"
+          ? true
+          : topic.course_id === "all" || topic.course_id === selectedTopicCourseId
+      ),
+    [topics, selectedTopicCourseId]
+  );
 
   useEffect(() => {
-    setSelectedCourseId(courseId === "all" ? "" : courseId);
+    if (courseId === "all") {
+      return;
+    }
+    setSelectedCourseId(courseId);
   }, [courseId]);
+
+  useEffect(() => {
+    void refreshState().catch(() => {
+      // Background refresh on page mount; provider retry/fallback handles errors.
+    });
+  }, [refreshState]);
 
   useEffect(() => {
     let active = true;
@@ -79,14 +98,23 @@ export function DocumentHubPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedTopicId) {
+    if (visibleTopics.length === 0) {
+      if (selectedTopicId) {
+        setSelectedTopicId("");
+      }
       return;
     }
-    if (topics.some((topic) => topic.topic_id === selectedTopicId)) {
+    if (selectedTopicId && visibleTopics.some((topic) => topic.topic_id === selectedTopicId)) {
       return;
     }
-    setSelectedTopicId("");
-  }, [topics, selectedTopicId]);
+    const preferredTopicId =
+      (suggestedTopicId && visibleTopics.some((topic) => topic.topic_id === suggestedTopicId) ? suggestedTopicId : "") ||
+      visibleTopics[0]?.topic_id ||
+      "";
+    if (preferredTopicId !== selectedTopicId) {
+      setSelectedTopicId(preferredTopicId);
+    }
+  }, [visibleTopics, selectedTopicId, suggestedTopicId]);
 
   const topicNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -136,10 +164,24 @@ export function DocumentHubPage() {
     return options;
   }, [courses, state.courses]);
 
+  useEffect(() => {
+    if (courseId !== "all") {
+      return;
+    }
+    setSelectedCourseId((current) => {
+      if (current && uploadCourseOptions.some((course) => course.id === current)) {
+        return current;
+      }
+      return uploadCourseOptions[0]?.id || "";
+    });
+  }, [courseId, uploadCourseOptions]);
+
   const allLiveDocuments = useMemo<MockDocument[]>(
     () =>
       state.documents
         .filter((doc) => courseId === "all" || doc.course_id === courseId)
+        .slice()
+        .sort((a, b) => Date.parse(b.uploaded_at) - Date.parse(a.uploaded_at))
         .map((doc) => ({
           doc_id: doc.doc_id,
           course_id: doc.course_id,
@@ -173,9 +215,10 @@ export function DocumentHubPage() {
   const count = documentRows?.length ?? 0;
   const courseBadge = courseId === "all" ? "All" : formatCourseLabel(courseId);
   const canUpload = Boolean(selectedTopicId) && (courseId !== "all" || Boolean(selectedCourseId));
+  const showLiveLoadingHint = loading && allLiveDocuments.length === 0;
 
   const uploadRequirementHint =
-    topics.length === 0
+    visibleTopics.length === 0
       ? "No topics available. Create a topic before uploading."
       : courseId === "all" && !selectedCourseId
       ? "Select a course and topic before uploading."
@@ -234,7 +277,11 @@ export function DocumentHubPage() {
     setTopicCreateError(null);
     setIsCreatingTopic(true);
     try {
-      const createdTopic = await upsertTopic(topicIdFromName(cleanedTopicName), cleanedTopicName);
+      const createdTopic = await upsertTopic(
+        topicIdFromName(cleanedTopicName),
+        cleanedTopicName,
+        selectedTopicCourseId
+      );
       setTopics((current) => {
         const next = current.filter((topic) => topic.topic_id !== createdTopic.topic_id);
         return [createdTopic, ...next];
@@ -278,7 +325,7 @@ export function DocumentHubPage() {
             <span>Topic</span>
             <select value={selectedTopicId} onChange={(event) => setSelectedTopicId(event.target.value)} aria-label="Select topic for upload">
               <option value="">Select topic</option>
-              {topics.map((topic) => (
+              {visibleTopics.map((topic) => (
                 <option key={topic.topic_id} value={topic.topic_id}>
                   {topic.topic_name}
                 </option>
@@ -310,6 +357,7 @@ export function DocumentHubPage() {
         </div>
       </header>
 
+      {showLiveLoadingHint && <p className="status-line">Loading live documents...</p>}
       {!liveAvailable && <p className="status-line">{liveError ?? "Live data unavailable. Showing fallback data where possible."}</p>}
       {topicLoadError && <p className="status-line error">{topicLoadError}</p>}
       {topicCreateError && <p className="status-line error">{topicCreateError}</p>}
@@ -334,7 +382,7 @@ export function DocumentHubPage() {
         onSetAnchor={handleSetAnchor}
         onMoveTopic={handleMoveTopic}
         onDeleteDocument={handleDelete}
-        topicOptions={topics}
+        topicOptions={visibleTopics}
       />
 
       <p className="docs-page-footer">

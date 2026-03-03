@@ -75,6 +75,11 @@ class SentinelRuntimeManager:
                 creationflags |= int(getattr(subprocess, "DETACHED_PROCESS", 0))
                 creationflags |= int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 creationflags |= int(getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0))
+            bridge_url = f"http://{self._settings.bridge_host}:{self._settings.bridge_port}"
+            launch_env = os.environ.copy()
+            launch_env["SENTINEL_BRIDGE_URL"] = bridge_url
+            launch_env["BRIDGE_HOST"] = self._settings.bridge_host
+            launch_env["BRIDGE_PORT"] = str(self._settings.bridge_port)
 
             with log_path.open("a", encoding="utf-8") as log_handle:
                 process = subprocess.Popen(
@@ -83,6 +88,7 @@ class SentinelRuntimeManager:
                     stdin=subprocess.DEVNULL,
                     stdout=log_handle,
                     stderr=log_handle,
+                    env=launch_env,
                     creationflags=creationflags,
                     close_fds=True,
                 )

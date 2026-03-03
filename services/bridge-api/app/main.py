@@ -4,6 +4,8 @@ import base64
 import json
 import math
 import re
+import shutil
+from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +22,7 @@ from .models import (
     CaptureEvent,
     CaptureRequest,
     CaptureResponse,
+    CourseCreateRequest,
     CourseDeadline,
     CourseDocument,
     CourseSummary,
@@ -38,6 +41,8 @@ from .models import (
     QuizSubmitRequest,
     QuizSubmitResponse,
     SessionEvent,
+    SentinelSessionContext,
+    SentinelSessionContextRequest,
     SentinelRuntimeActionResponse,
     SentinelRuntimeStatus,
     SourceContext,
@@ -59,6 +64,7 @@ from .openai_clients import OpenAISocraticClient, OpenAIVisionClient
 from .quiz_seeding import QuizSeeder
 from .readiness import calculate_readiness
 from .sentinel_runtime import SentinelRuntimeManager
+from .sentinel_session_context_store import SentinelSessionContextStore
 from .sse import SSEBroker, sse_generator
 from .state_store import StateStore
 
@@ -95,6 +101,7 @@ quiz_seeder = QuizSeeder(settings)
 friend_agent = FriendAgentAdapter(settings)
 topic_store = TopicStore(settings.topics_dir, vision_client)
 runtime_manager = SentinelRuntimeManager(settings)
+session_context_store = SentinelSessionContextStore(settings.sentinel_session_context_file)
 
 MATCH_THRESHOLD = 0.22
 WEAK_MATCH_THRESHOLD = 0.14
@@ -150,6 +157,49 @@ def _course_display_name(course_id: str) -> str:
     if course_id == "all":
         return "All Courses"
     return course_id.upper()
+
+
+def _course_name_lookup_from_state(state: LearningState) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for row in state.courses:
+        normalized_id = _normalize_course_id(row.course_id)
+        cleaned_name = " ".join((row.course_name or "").split()).strip()
+        if not cleaned_name:
+            continue
+        lookup[normalized_id] = cleaned_name
+    return lookup
+
+
+def _topic_belongs_to_course(topic: TopicSummary, course_id: str) -> bool:
+    normalized_course = _normalize_course_id(course_id)
+    topic_course = _normalize_course_id(topic.course_id)
+    return topic_course in {"all", normalized_course}
+
+
+def _state_has_course(state: LearningState, course_id: str) -> bool:
+    normalized_course = _normalize_course_id(course_id)
+    return any(_normalize_course_id(row.course_id) == normalized_course for row in state.courses)
+
+
+def _sanitize_course_name(value: str) -> str:
+    return " ".join((value or "").split()).strip()
+
+
+def _sentinel_session_context_from_payload(payload: dict[str, object]) -> SentinelSessionContext:
+    def _read_text(key: str) -> str | None:
+        raw = payload.get(key)
+        if raw is None:
+            return None
+        compact = " ".join(str(raw).split()).strip()
+        return compact or None
+
+    return SentinelSessionContext(
+        course_id=_read_text("course_id"),
+        course_name=_read_text("course_name"),
+        topic_id=_read_text("topic_id"),
+        topic_name=_read_text("topic_name"),
+        updated_at=_read_text("updated_at"),
+    )
 
 
 def _normalize_concept(raw: str) -> str:
@@ -1299,6 +1349,8 @@ def _prepare_quiz_questions(
 def _recompute_derived(state: LearningState) -> LearningState:
     if state.quizzes is None:
         state.quizzes = []
+    if state.topics is None:
+        state.topics = []
 
     open_gaps = [gap for gap in state.gaps if gap.status != "closed"]
 
@@ -1349,6 +1401,7 @@ def _recompute_derived(state: LearningState) -> LearningState:
             )
         )
 
+    existing_course_names = _course_name_lookup_from_state(state)
     course_ids: set[str] = set()
     for gap in state.gaps:
         course_ids.add(_normalize_course_id(gap.course_id))
@@ -1364,7 +1417,10 @@ def _recompute_derived(state: LearningState) -> LearningState:
         course_ids.add("all")
 
     courses = [
-        CourseSummary(course_id=course_id, course_name=_course_display_name(course_id))
+        CourseSummary(
+            course_id=course_id,
+            course_name=existing_course_names.get(course_id) or _course_display_name(course_id),
+        )
         for course_id in sorted(course_ids)
     ]
 
@@ -1403,6 +1459,132 @@ def _save_state(state: LearningState) -> LearningState:
     derived = _recompute_derived(state)
     store.write(derived)
     return derived
+
+
+def _dominant_course_id(candidates: list[str]) -> str | None:
+    normalized = [_normalize_course_id(value) for value in candidates if value is not None]
+    if not normalized:
+        return None
+    non_all = [value for value in normalized if value != "all"]
+    if non_all:
+        return Counter(non_all).most_common(1)[0][0]
+    return Counter(normalized).most_common(1)[0][0]
+
+
+def _infer_topic_parent_course_id(topic_id: str, state: LearningState) -> str:
+    normalized_topic = _normalize_topic_id(topic_id)
+    if not normalized_topic:
+        return "all"
+
+    state_topic_candidates = [
+        item.course_id
+        for item in state.topics
+        if _normalize_topic_id(item.parent_topic_id) == normalized_topic
+        or _normalize_topic_id(item.topic_id) == normalized_topic
+    ]
+    inferred = _dominant_course_id(state_topic_candidates)
+    if inferred is not None:
+        return inferred
+
+    document_candidates = [
+        item.course_id
+        for item in state.documents
+        if _normalize_topic_id(item.topic_id) == normalized_topic
+    ]
+    inferred = _dominant_course_id(document_candidates)
+    if inferred is not None:
+        return inferred
+
+    question_candidates = [
+        item.course_id
+        for item in state.question_bank
+        if _normalize_topic_id(item.topic_id) == normalized_topic
+        or _normalize_topic_id(item.origin_topic_id) == normalized_topic
+    ]
+    inferred = _dominant_course_id(question_candidates)
+    if inferred is not None:
+        return inferred
+
+    return "all"
+
+
+def _migrate_topic_parent_courses() -> None:
+    topic_index_path = settings.topics_dir / "index.json"
+    if not topic_index_path.exists():
+        return
+
+    try:
+        payload = json.loads(topic_index_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="topic_parent_migration_failed",
+            endpoint_path="/startup",
+            reason=f"Topic index read failure ({type(exc).__name__}).",
+        )
+        return
+
+    if "topics" not in payload and isinstance(payload.get("modules"), dict):
+        payload["topics"] = payload.get("modules", {})
+    payload.setdefault("topics", {})
+
+    state = _recompute_derived(store.read())
+    migrated_count = 0
+    for raw_key, raw_entry in payload.get("topics", {}).items():
+        if not isinstance(raw_entry, dict):
+            continue
+        raw_course_id = " ".join(str(raw_entry.get("course_id") or "").split()).strip()
+        if raw_course_id:
+            continue
+        resolved_topic_id = str(raw_entry.get("topic_id") or raw_entry.get("module_id") or raw_key)
+        inferred_course_id = _infer_topic_parent_course_id(resolved_topic_id, state)
+        raw_entry["course_id"] = inferred_course_id
+        migrated_count += 1
+
+    if migrated_count == 0:
+        return
+
+    payload.pop("modules", None)
+    payload.pop("active_module_id", None)
+    topic_index_tmp = topic_index_path.with_suffix(".tmp")
+    try:
+        topic_index_tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        topic_index_tmp.replace(topic_index_path)
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="topic_parent_migration_failed",
+            endpoint_path="/startup",
+            reason=f"Topic index write failure ({type(exc).__name__}).",
+            migrated_count=migrated_count,
+        )
+        return
+
+    _log_bridge_event(
+        event="topic_parent_migrated",
+        endpoint_path="/startup",
+        migrated_count=migrated_count,
+    )
+
+
+def _backfill_state_topic_parent_courses() -> None:
+    state = store.read()
+    changed = False
+    changed_count = 0
+    for topic in state.topics:
+        if " ".join((topic.course_id or "").split()).strip():
+            topic.course_id = _normalize_course_id(topic.course_id)
+            continue
+        topic.course_id = _infer_topic_parent_course_id(topic.parent_topic_id or topic.topic_id, state)
+        changed = True
+        changed_count += 1
+
+    if not changed:
+        return
+    _save_state(state)
+    _log_bridge_event(
+        event="state_topic_parent_backfilled",
+        endpoint_path="/startup",
+        migrated_count=changed_count,
+    )
 
 
 def _migrate_document_topic_tags() -> None:
@@ -1484,7 +1666,74 @@ def _migrate_document_topic_tags() -> None:
     )
 
 
+def _backfill_topic_materials_from_documents() -> None:
+    state = _recompute_derived(store.read())
+    added_count = 0
+    skipped_count = 0
+    known_material_filenames: dict[str, set[str]] = {}
+
+    for document in state.documents:
+        normalized_topic_id = _normalize_topic_id(document.topic_id)
+        if not normalized_topic_id:
+            skipped_count += 1
+            continue
+        if topic_store.get_topic(normalized_topic_id) is None:
+            skipped_count += 1
+            continue
+
+        doc_path = _course_document_path_from_url(document.file_url)
+        if doc_path is None or not doc_path.exists():
+            skipped_count += 1
+            continue
+
+        existing_names = known_material_filenames.get(normalized_topic_id)
+        if existing_names is None:
+            existing_names = {
+                str(item.original_filename).strip().lower()
+                for item in topic_store.list_materials(normalized_topic_id)
+            }
+            known_material_filenames[normalized_topic_id] = existing_names
+
+        stored_name = doc_path.name
+        original_filename = stored_name.split("_", 1)[1] if "_" in stored_name else stored_name
+        if not original_filename:
+            original_filename = stored_name
+
+        dedupe_names = {stored_name.strip().lower(), original_filename.strip().lower()}
+        if existing_names.intersection(dedupe_names):
+            continue
+
+        try:
+            raw_bytes = doc_path.read_bytes()
+            material_name = _sanitize_course_name(document.name) or original_filename
+            material_type = _sanitize_course_name(document.type).lower() or Path(original_filename).suffix.lower().lstrip(".") or "other"
+            material = topic_store.add_material(
+                topic_id=normalized_topic_id,
+                material_name=material_name,
+                material_type=material_type,
+                original_filename=original_filename,
+                file_bytes=raw_bytes,
+            )
+            existing_names.add(str(material.original_filename).strip().lower())
+            added_count += 1
+        except Exception:
+            skipped_count += 1
+
+    if added_count == 0:
+        return
+
+    _log_bridge_event(
+        event="topic_material_backfill_completed",
+        endpoint_path="/startup",
+        indexed_count=added_count,
+        skipped_count=skipped_count,
+    )
+
+
+_migrate_topic_parent_courses()
+_backfill_state_topic_parent_courses()
 _migrate_document_topic_tags()
+_backfill_topic_materials_from_documents()
 _backfill_document_topic_seeds()
 _log_bridge_event(
     event="ask_endpoint_removed",
@@ -1566,6 +1815,52 @@ def stop_sentinel_runtime() -> SentinelRuntimeActionResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.get("/api/v1/sentinel/session-context", response_model=SentinelSessionContext)
+def get_sentinel_session_context() -> SentinelSessionContext:
+    return _sentinel_session_context_from_payload(session_context_store.get())
+
+
+@app.post("/api/v1/sentinel/session-context", response_model=SentinelSessionContext)
+def set_sentinel_session_context(request: SentinelSessionContextRequest) -> SentinelSessionContext:
+    normalized_course_id = _normalize_course_id(request.course_id)
+    if normalized_course_id == "all":
+        raise HTTPException(status_code=400, detail="Sentinel session course must be a specific course, not 'all'.")
+
+    state = _recompute_derived(store.read())
+    if not _state_has_course(state, normalized_course_id):
+        raise HTTPException(status_code=404, detail=f"Course not found: {normalized_course_id}")
+
+    topic = topic_store.get_topic(request.topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {request.topic_id}")
+    if not _topic_belongs_to_course(topic, normalized_course_id):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Topic '{topic.topic_id}' belongs to course '{topic.course_id}' "
+                f"and cannot be used for course '{normalized_course_id}'."
+            ),
+        )
+
+    topic_store.set_active_topic(topic.topic_id)
+    course_name_lookup = _course_name_lookup_from_state(state)
+    course_name = course_name_lookup.get(normalized_course_id) or _course_display_name(normalized_course_id)
+    persisted = session_context_store.set(
+        course_id=normalized_course_id,
+        course_name=course_name,
+        topic_id=topic.topic_id,
+        topic_name=topic.topic_name,
+        updated_at=utc_now_iso(),
+    )
+    _log_bridge_event(
+        event="sentinel_session_context_set",
+        endpoint_path="/api/v1/sentinel/session-context",
+        course_id=normalized_course_id,
+        topic_id=topic.topic_id,
+    )
+    return _sentinel_session_context_from_payload(persisted)
+
+
 @app.get("/api/v1/state")
 def get_state() -> dict:
     return _state_payload()
@@ -1599,16 +1894,22 @@ async def stream_events() -> StreamingResponse:
 def upsert_topic(request: TopicUpsertRequest) -> TopicSummary:
     topic_id = request.topic_id.strip()
     topic_name = request.topic_name.strip()
+    normalized_course_id = _normalize_course_id(request.course_id)
     if not topic_id:
         raise HTTPException(status_code=400, detail="topic_id must not be empty.")
     if not topic_name:
         raise HTTPException(status_code=400, detail="topic_name must not be empty.")
-    return topic_store.upsert_topic(topic_id, topic_name)
+    if normalized_course_id != "all":
+        state = _recompute_derived(store.read())
+        if not _state_has_course(state, normalized_course_id):
+            raise HTTPException(status_code=404, detail=f"Course not found: {normalized_course_id}")
+    return topic_store.upsert_topic(topic_id, topic_name, normalized_course_id)
 
 
 @app.get("/api/v1/topics", response_model=TopicListResponse)
-def list_topics() -> TopicListResponse:
-    topics = topic_store.list_topics()
+def list_topics(course_id: str | None = Query(default=None)) -> TopicListResponse:
+    normalized_course = _normalize_course_id(course_id) if course_id is not None else None
+    topics = topic_store.list_topics(normalized_course)
     active_topic = topic_store.get_active_topic()
     return TopicListResponse(
         topics=topics,
@@ -1685,7 +1986,17 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     capture_path = Path(settings.captures_dir) / filename
     capture_path.write_bytes(image_bytes)
 
-    course_id = _normalize_course_id(payload.course_id)
+    session_context = _sentinel_session_context_from_payload(session_context_store.get())
+    raw_payload_course = " ".join((payload.course_id or "").split()).strip()
+    if raw_payload_course:
+        course_id = _normalize_course_id(raw_payload_course)
+        course_context_source = "payload"
+    elif session_context.course_id:
+        course_id = _normalize_course_id(session_context.course_id)
+        course_context_source = "session_context"
+    else:
+        course_id = "all"
+        course_context_source = "default"
     existing_state = store.read()
 
     syllabus = _load_syllabus()
@@ -1693,8 +2004,33 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     capture_text = " ".join(
         part for part in [extraction.raw_text.strip(), extraction.summary.strip()] if part
     ).strip()
-    requested_topic_id = _normalize_topic_id(payload.topic_id)
-    requested_topic = _resolve_requested_topic(payload.topic_id)
+    raw_payload_topic = " ".join((payload.topic_id or "").split()).strip()
+    if raw_payload_topic:
+        requested_topic_raw = raw_payload_topic
+        topic_context_source = "payload"
+    elif session_context.topic_id:
+        requested_topic_raw = session_context.topic_id
+        topic_context_source = "session_context"
+    else:
+        requested_topic_raw = ""
+        topic_context_source = "inference"
+    requested_topic_id = _normalize_topic_id(requested_topic_raw)
+    requested_topic = _resolve_requested_topic(requested_topic_raw)
+    topic_scope_warning: str | None = None
+    if requested_topic is not None and not _topic_belongs_to_course(requested_topic, course_id):
+        if raw_payload_topic:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Topic '{requested_topic.topic_id}' belongs to course '{requested_topic.course_id}' "
+                    f"and cannot be used for course '{course_id}'."
+                ),
+            )
+        topic_scope_warning = (
+            f"Session topic '{requested_topic.topic_id}' does not match course '{course_id}'; using inferred topic."
+        )
+        requested_topic = None
+        topic_context_source = "session_context_mismatch"
     topic_signal_text = _build_topic_signal_text(payload, extraction)
     grounding_query_text = _build_grounding_query_text(payload, extraction)
     inferred_topic, inferred_score, topic_candidate_count, inferred_runner_up_score = _infer_best_topic_for_signal(
@@ -1730,19 +2066,19 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     topic_grounded = context_topic is not None and source_context.matched
 
     grounding_topic = None
-    if requested_topic is not None and topic_grounded:
+    if requested_topic is not None:
         grounding_topic = requested_topic
-    elif inferred_topic is not None and topic_grounded and inferred_score >= TOPIC_INFERENCE_MIN_SCORE:
+    elif inferred_topic is not None and inferred_score >= TOPIC_INFERENCE_MIN_SCORE:
         grounding_topic = inferred_topic
-    if grounding_topic is None:
-        grounding_bundle = GroundingBundle(context_text="", citations=[], warnings=[])
     else:
-        grounding_bundle = _build_grounding_bundle(
-            state=existing_state,
-            topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
-            course_id=course_id,
-            query_text=grounding_query_text,
-        )
+        grounding_topic = context_topic
+
+    grounding_bundle = _build_grounding_bundle(
+        state=existing_state,
+        topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
+        course_id=course_id,
+        query_text=grounding_query_text,
+    )
     for warning in grounding_bundle.warnings:
         _log_bridge_event(
             event="grounding_warning",
@@ -1759,15 +2095,17 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             topic_warning,
             f"Requested topic '{requested_topic_id}' was not found; using inferred/broader grounding.",
         )
+    if topic_scope_warning:
+        topic_warning = _merge_warning_messages(topic_warning, topic_scope_warning)
     source_warning = _merge_warning_messages(topic_warning, grounding_bundle.warnings)
     agent_backend_used = "bridge"
     socratic_prompt: str
     raw_gap_payloads: list[dict[str, object]]
 
-    if not topic_grounded or not grounding_bundle.citations:
+    if not grounding_bundle.citations:
         source_warning = _merge_warning_messages(
             source_warning,
-            ["Capture did not match uploaded topic material."],
+            ["Capture did not match uploaded topic material or course document snippets."],
         )
         socratic_prompt = NO_SOURCE_CAPTURE_PROMPT
         raw_gap_payloads = []
@@ -1842,7 +2180,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             socratic_prompt = socratic.socratic_prompt
             raw_gap_payloads = socratic.gaps
 
-    gap_topic_id = source_context.topic_id if source_context is not None and source_context.matched else None
+    gap_topic_id = context_topic.topic_id if context_topic is not None else None
     gap_material_id = source_context.material_id if source_context is not None and source_context.matched else None
 
     new_gaps: list[KnowledgeGap] = []
@@ -1913,6 +2251,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         endpoint_path="/api/v1/captures",
         capture_id=capture_id,
         course_id=course_id,
+        effective_course_id=course_id,
+        effective_topic_id=gap_topic_id,
+        course_context_source=course_context_source,
+        topic_context_source=topic_context_source,
         topic_id=gap_topic_id,
         agent_backend=agent_backend_used,
         source_resolution_mode=source_resolution_mode,
@@ -2151,6 +2493,137 @@ async def update_gap_status(gap_id: str, request: GapStatusUpdate) -> dict:
     return {"ok": True, "gap_id": gap_id, "status": request.status}
 
 
+@app.post("/api/v1/courses", response_model=CourseSummary)
+async def create_course(request: CourseCreateRequest) -> CourseSummary:
+    normalized_course_id = _normalize_course_id(request.course_id)
+    if normalized_course_id == "all":
+        raise HTTPException(status_code=400, detail="course_id 'all' is reserved.")
+
+    course_name = _sanitize_course_name(request.course_name)
+    if not course_name:
+        raise HTTPException(status_code=400, detail="course_name must not be empty.")
+
+    state = _recompute_derived(store.read())
+    if _state_has_course(state, normalized_course_id):
+        raise HTTPException(status_code=409, detail=f"Course already exists: {normalized_course_id}")
+
+    state.courses = [
+        item for item in state.courses if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    created = CourseSummary(course_id=normalized_course_id, course_name=course_name)
+    state.courses.append(created)
+    state = _save_state(state)
+    await _publish_state(state)
+    _log_bridge_event(
+        event="course_created",
+        endpoint_path="/api/v1/courses",
+        course_id=normalized_course_id,
+    )
+    return created
+
+
+@app.delete("/api/v1/courses/{course_id}")
+async def delete_course(course_id: str) -> dict:
+    normalized_course_id = _normalize_course_id(course_id)
+    if normalized_course_id == "all":
+        raise HTTPException(status_code=400, detail="course_id 'all' cannot be deleted.")
+
+    state = _recompute_derived(store.read())
+    if not _state_has_course(state, normalized_course_id):
+        raise HTTPException(status_code=404, detail=f"Course not found: {normalized_course_id}")
+
+    removed_counts: dict[str, int] = {}
+
+    captures_before = len(state.captures)
+    state.captures = [
+        item for item in state.captures if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["captures"] = captures_before - len(state.captures)
+
+    gaps_before = len(state.gaps)
+    state.gaps = [item for item in state.gaps if _normalize_course_id(item.course_id) != normalized_course_id]
+    removed_counts["gaps"] = gaps_before - len(state.gaps)
+
+    topic_mastery_before = len(state.topic_mastery)
+    state.topic_mastery = [
+        item for item in state.topic_mastery if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["topic_mastery"] = topic_mastery_before - len(state.topic_mastery)
+
+    study_actions_before = len(state.study_actions)
+    state.study_actions = [
+        item for item in state.study_actions if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["study_actions"] = study_actions_before - len(state.study_actions)
+
+    documents_before = len(state.documents)
+    state.documents = [
+        item for item in state.documents if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["documents"] = documents_before - len(state.documents)
+
+    deadlines_before = len(state.deadlines)
+    state.deadlines = [
+        item for item in state.deadlines if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["deadlines"] = deadlines_before - len(state.deadlines)
+
+    sessions_before = len(state.sessions)
+    state.sessions = [
+        item for item in state.sessions if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["sessions"] = sessions_before - len(state.sessions)
+
+    quizzes_before = len(state.quizzes)
+    state.quizzes = [item for item in state.quizzes if _normalize_course_id(item.course_id) != normalized_course_id]
+    removed_counts["quizzes"] = quizzes_before - len(state.quizzes)
+
+    qbank_before = len(state.question_bank)
+    state.question_bank = [
+        item for item in state.question_bank if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["question_bank"] = qbank_before - len(state.question_bank)
+
+    topic_catalog_before = len(state.topics)
+    state.topics = [item for item in state.topics if _normalize_course_id(item.course_id) != normalized_course_id]
+    removed_counts["state_topics"] = topic_catalog_before - len(state.topics)
+
+    courses_before = len(state.courses)
+    state.courses = [
+        item for item in state.courses if _normalize_course_id(item.course_id) != normalized_course_id
+    ]
+    removed_counts["courses"] = courses_before - len(state.courses)
+
+    removed_counts["topic_store_topics"] = topic_store.remove_topics_for_course(normalized_course_id)
+
+    course_dir = settings.documents_dir / normalized_course_id
+    if course_dir.exists():
+        shutil.rmtree(course_dir, ignore_errors=True)
+        removed_counts["document_directory_removed"] = 1
+    else:
+        removed_counts["document_directory_removed"] = 0
+
+    active_context = _sentinel_session_context_from_payload(session_context_store.get())
+    if _normalize_course_id(active_context.course_id) == normalized_course_id:
+        session_context_store.clear()
+        _log_bridge_event(
+            event="sentinel_session_context_cleared",
+            endpoint_path="/api/v1/courses/{course_id}",
+            course_id=normalized_course_id,
+            reason="deleted_course_was_active_context",
+        )
+
+    state = _save_state(state)
+    await _publish_state(state)
+    _log_bridge_event(
+        event="course_deleted",
+        endpoint_path="/api/v1/courses/{course_id}",
+        course_id=normalized_course_id,
+        removed_counts=removed_counts,
+    )
+    return {"ok": True, "course_id": normalized_course_id, "removed_counts": removed_counts}
+
+
 @app.get("/api/v1/courses/{course_id}/deadlines")
 def list_course_deadlines(course_id: str) -> dict:
     normalized = _normalize_course_id(course_id)
@@ -2219,6 +2692,21 @@ async def upload_course_document(
             reason=f"topic_id '{normalized_topic_id}' was not found.",
         )
         raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
+    if not _topic_belongs_to_course(topic, normalized):
+        _log_bridge_event(
+            event="document_upload_validation_failed",
+            endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+            course_id=normalized,
+            topic_id=normalized_topic_id,
+            reason=f"topic_id '{normalized_topic_id}' is scoped to '{topic.course_id}', not '{normalized}'.",
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Topic '{normalized_topic_id}' belongs to course '{topic.course_id}' "
+                f"and cannot be used for course '{normalized}'."
+            ),
+        )
 
     raw_bytes = await file.read(settings.material_upload_max_bytes + 1)
     if len(raw_bytes) > settings.material_upload_max_bytes:
@@ -2251,6 +2739,33 @@ async def upload_course_document(
 
     state = store.read()
     state.documents.append(document)
+
+    try:
+        indexed_material = topic_store.add_material(
+            topic_id=topic.topic_id,
+            material_name=display_name,
+            material_type=doc_type,
+            original_filename=safe_name,
+            file_bytes=raw_bytes,
+        )
+        _log_bridge_event(
+            event="topic_material_indexed",
+            endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+            course_id=normalized,
+            topic_id=document.topic_id,
+            doc_id=document.doc_id,
+            material_id=indexed_material.material_id,
+            parse_warning=indexed_material.parse_warning,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="topic_material_index_failed",
+            endpoint_path="/api/v1/courses/{course_id}/documents/upload",
+            course_id=normalized,
+            topic_id=document.topic_id,
+            doc_id=document.doc_id,
+            reason=f"{type(exc).__name__}: {exc}",
+        )
 
     topics_added = 0
     questions_added = 0
@@ -2304,6 +2819,14 @@ async def retag_course_document(course_id: str, doc_id: str, request: DocumentRe
     topic = topic_store.get_topic(normalized_topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
+    if not _topic_belongs_to_course(topic, normalized):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Topic '{normalized_topic_id}' belongs to course '{topic.course_id}' "
+                f"and cannot be used for course '{normalized}'."
+            ),
+        )
 
     state = store.read()
     target = next(

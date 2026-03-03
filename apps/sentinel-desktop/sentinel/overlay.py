@@ -83,8 +83,8 @@ class OverlayBubble(QWidget):
         font_family: str | None = None,
         fade_in_ms: int = 220,
         fade_text_stagger_ms: int = 60,
-        thinking_min_width: int = 220,
-        thinking_max_width: int = 280,
+        thinking_min_width: int = 188,
+        thinking_max_width: int = 240,
     ) -> None:
         super().__init__()
         self._min_width = max(220, min_width)
@@ -101,6 +101,8 @@ class OverlayBubble(QWidget):
         self._screen_margin = 12
         self._launcher_margin = 16
         self._launcher_size = 46
+        self._launcher_vertical_anchor_ratio = 0.33
+        self._prompt_max_height_ratio = 0.58
 
         self._state: OverlayState = OverlayState.LAUNCHER
         self._anchor_region: CaptureRegion | None = None
@@ -242,7 +244,7 @@ class OverlayBubble(QWidget):
 
         self._message_shell = QFrame(self._card)
         self._message_shell.setObjectName("MessageShell")
-        self._message_shell.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._message_shell.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         message_shell_layout = QHBoxLayout()
         message_shell_layout.setContentsMargins(0, 0, 0, 0)
         message_shell_layout.setSpacing(6)
@@ -734,7 +736,7 @@ class OverlayBubble(QWidget):
         )
         if self._state == OverlayState.PROMPT:
             height = self._resolve_prompt_height(height, available_height)
-        origin = self._launcher_origin()
+        origin = self._launcher_origin(bubble_height=height)
         target_rect = QRect(origin.x(), origin.y(), width, height)
 
         collapsed = self._launcher_button.isVisible() and not self._card.isVisible()
@@ -764,15 +766,20 @@ class OverlayBubble(QWidget):
             return screens[0].availableGeometry()
         return QRect(0, 0, 1280, 720)
 
-    def _launcher_origin(self) -> QPoint:
+    def _launcher_origin(self, bubble_height: int | None = None) -> QPoint:
         geometry = self._primary_available_geometry()
+        target_height = self._launcher_size if bubble_height is None else max(1, int(bubble_height))
+        min_y = geometry.top() + self._launcher_margin
+        max_y = geometry.top() + geometry.height() - target_height - self._launcher_margin
+        anchor_y = geometry.top() + int(geometry.height() * self._launcher_vertical_anchor_ratio)
+        y = self._clamp(anchor_y, min_y, max_y)
         return QPoint(
             geometry.left() + self._launcher_margin,
-            geometry.top() + self._launcher_margin,
+            y,
         )
 
     def _launcher_rect(self) -> QRect:
-        origin = self._launcher_origin()
+        origin = self._launcher_origin(bubble_height=self._launcher_size)
         return QRect(origin.x(), origin.y(), self._launcher_size, self._launcher_size)
 
     def _upsert_interaction_page(
@@ -1074,7 +1081,7 @@ class OverlayBubble(QWidget):
             available_height=available_height,
         )
         height = self._resolve_prompt_height(measured_height, available_height)
-        origin = self._launcher_origin()
+        origin = self._launcher_origin(bubble_height=height)
         self._apply_window_geometry(
             x=origin.x(),
             y=origin.y(),
@@ -1088,7 +1095,17 @@ class OverlayBubble(QWidget):
         natural_width = max(1, card_hint.width(), card_min_hint.width())
         width = min(max_width, max(min_width, natural_width))
         natural_height = max(1, card_hint.height(), card_min_hint.height())
-        height = min(natural_height, available_height)
+        card_layout = self._card.layout()
+        if card_layout is not None and card_layout.hasHeightForWidth():
+            natural_height = max(natural_height, card_layout.heightForWidth(width))
+
+        height_cap = available_height
+        if self._state == OverlayState.PROMPT:
+            screen_height = max(1, self._primary_available_geometry().height())
+            prompt_cap = max(220, int(screen_height * self._prompt_max_height_ratio))
+            height_cap = min(height_cap, prompt_cap)
+
+        height = min(natural_height, height_cap)
         return width, height
 
     def _resolve_prompt_height(self, candidate_height: int, available_height: int) -> int:
@@ -1682,7 +1699,7 @@ class OverlayBubble(QWidget):
             }
 
             QFrame#ResponseCard {
-                background: rgba(8, 11, 15, 166);
+                background: rgba(8, 11, 15, 228);
                 border: none;
                 border-radius: 16px;
             }

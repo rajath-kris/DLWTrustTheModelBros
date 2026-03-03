@@ -96,11 +96,10 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["topic_id", "course_id", "topic_id", "name", "normalized_name", "source_doc_ids", "created_at", "updated_at"],
+        "required": ["topic_id", "course_id", "name", "normalized_name", "source_doc_ids", "created_at", "updated_at"],
         "properties": {
           "topic_id": { "type": "string" },
-          "course_id": { "type": "string" },
-          "topic_id": { "type": "string" },
+          "course_id": { "type": "string", "minLength": 1 },
           "name": { "type": "string" },
           "normalized_name": { "type": "string" },
           "source_doc_ids": {
