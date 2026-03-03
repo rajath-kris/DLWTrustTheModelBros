@@ -13,28 +13,85 @@ The goal is to let two developers work in parallel with low merge conflict:
 - Dev B owns Mission Control (`apps/mission-control`).
 - Both integrate through the bridge contract (`services/bridge-api` + `shared/schemas`).
 
-## Quick Start
+## New User Setup (Windows PowerShell)
 
-From repo root:
+Prerequisites:
+
+- Python 3.11+ installed and available as `python`
+- Node.js 20+ and `npm`
+- Git
+
+1. Get the code and switch to `main`:
 
 ```powershell
+cd "C:\1Reju\Coding\HACKATHONS"
+git clone https://github.com/rajath-kris/DLWTrustTheModelBros.git "Deep Learning Week 2026"
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+git branch --show-current
+git checkout main
+```
+
+2. Bootstrap all dependencies and virtual environments:
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
 .\scripts\bootstrap.ps1
 ```
 
-Then run in separate terminals:
+3. Configure environment:
 
 ```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+Copy-Item .env.example .env -Force
+```
+
+Set `OPENAI_API_KEY` in `.env` for live OpenAI behavior.  
+Without API key, the local fallback path still works for end-to-end testing.
+
+4. Start the full stack (bridge + Mission Control + Sentinel desktop):
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+.\scripts\run-demo-stack.ps1 -Action restart
+.\scripts\run-demo-stack.ps1 -Action status
+```
+
+5. Seed demo courses/topics/materials/question bank (includes `EEE`):
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+.\services\bridge-api\.venv\Scripts\python.exe .\scripts\seed_demo_courses.py
+```
+
+6. Verify the app:
+
+- Open Mission Control at the `mission_control_url` shown by `run-demo-stack -Action status`.
+- Open course pages and confirm seeded topics/documents exist (for example `EEE`).
+- Press `Alt+S`, capture a region, and confirm prompt + state update.
+
+7. Stop everything when done:
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
+.\scripts\run-demo-stack.ps1 -Action stop
+```
+
+Notes:
+
+- If port `8000` is busy, the stack can auto-fallback to `18000`.
+- If port `5173` is busy, the stack can auto-fallback to `15173`.
+- Always use `.\scripts\run-demo-stack.ps1 -Action status` to see active URLs.
+
+## Manual Start (Alternative)
+
+If you prefer separate terminals instead of `run-demo-stack`:
+
+```powershell
+cd "C:\1Reju\Coding\HACKATHONS\Deep Learning Week 2026"
 .\scripts\run-bridge.ps1
 .\scripts\run-mission-control.ps1
 .\scripts\run-sentinel.ps1
 ```
-
-Manual user test:
-
-1. Press `Alt+S`.
-2. Drag a screen region.
-3. Verify overlay shows `Analyzing capture...` then a Socratic prompt.
-4. Verify Mission Control updates.
 
 ## Parallel Workflow
 
