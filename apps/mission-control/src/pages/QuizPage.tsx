@@ -13,6 +13,7 @@ import type {
 } from "../types";
 
 const ALL_TOPICS = "All Topics";
+const ALL_TOPICS_ID = "__all_topics__";
 const ALL_SOURCES: QuizSourceType[] = ["pyq", "tutorial", "sentinel"];
 
 const SOURCE_LABEL: Record<QuizSourceType, string> = {
@@ -68,6 +69,8 @@ const QuizIcons = {
 type QuizSession = {
   sessionId: string;
   topic: string;
+  topicId: string | null;
+  courseId: string;
   questions: QuestionBankItem[];
   currentIndex: number;
   answers: Record<string, string>;
@@ -76,47 +79,6 @@ type QuizSession = {
 
 function normalized(value: string): string {
   return value.trim().toLowerCase();
-}
-
-function topicTokens(value: string): Set<string> {
-  return new Set(
-    normalized(value)
-      .split(/[^a-z0-9]+/g)
-      .map((token) => token.trim())
-      .filter((token) => token.length > 0)
-  );
-}
-
-function topicMatchesFilter(questionTopic: string, selectedTopic: string): boolean {
-  const requested = normalized(selectedTopic);
-  if (requested === normalized(ALL_TOPICS)) {
-    return true;
-  }
-
-  const candidate = normalized(questionTopic);
-  if (!candidate) {
-    return false;
-  }
-  if (candidate === requested) {
-    return true;
-  }
-  if (candidate.includes(requested) || requested.includes(candidate)) {
-    return true;
-  }
-
-  const requestedTokens = topicTokens(requested);
-  const candidateTokens = topicTokens(candidate);
-  if (requestedTokens.size === 0 || candidateTokens.size === 0) {
-    return false;
-  }
-  let overlap = 0;
-  for (const token of requestedTokens) {
-    if (candidateTokens.has(token)) {
-      overlap += 1;
-    }
-  }
-  const minSize = Math.max(1, Math.min(requestedTokens.size, candidateTokens.size));
-  return overlap / minSize >= 0.6;
 }
 
 function scorePercent(result: QuizSubmitResponse): number {
@@ -148,7 +110,7 @@ export function QuizPage() {
   const { state, loading, error: stateError, liveAvailable, prepareQuiz, submitQuiz } = useBrainState();
   /** Quiz runs in current course context; no course selector in UI. */
   const activeCourseId = courseId === "all" ? null : courseId;
-  const [selectedTopic, setSelectedTopic] = useState<string>(ALL_TOPICS);
+  const [selectedTopicKey, setSelectedTopicKey] = useState<string>(ALL_TOPICS_ID);
   const [selectedSources, setSelectedSources] = useState<QuizSourceType[]>([...ALL_SOURCES]);
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [session, setSession] = useState<QuizSession | null>(null);
@@ -225,47 +187,45 @@ export function QuizPage() {
   }, [activeCourseId]);
 
   const topicOptions = useMemo(() => {
-    const topicSet = new Set<string>([ALL_TOPICS]);
+    const options: Array<{ id: string; label: string }> = [{ id: ALL_TOPICS_ID, label: ALL_TOPICS }];
+    const seenIds = new Set<string>([ALL_TOPICS_ID]);
     for (const topic of topics) {
-      const topicName = topic.topic_name.trim();
-      if (!topicName) {
+      const id = topic.topic_id.trim();
+      const label = topic.topic_name.trim();
+      if (!id || !label || seenIds.has(id)) {
         continue;
       }
-      topicSet.add(topicName);
+      seenIds.add(id);
+      options.push({ id, label });
     }
-    for (const item of scopedQuestions) {
-      const topicName = item.topic.trim();
-      if (!topicName) {
-        continue;
-      }
-      topicSet.add(topicName);
-    }
-    return Array.from(topicSet.values());
-  }, [topics, scopedQuestions]);
+    return options;
+  }, [topics]);
 
   const selectedTopicId = useMemo(() => {
-    if (normalized(selectedTopic) === normalized(ALL_TOPICS)) {
-      return null;
-    }
-    const match = topics.find((topic) => normalized(topic.topic_name) === normalized(selectedTopic));
-    return match?.topic_id ?? null;
-  }, [selectedTopic, topics]);
+    return selectedTopicKey === ALL_TOPICS_ID ? null : selectedTopicKey;
+  }, [selectedTopicKey]);
+
+  const selectedTopicLabel = useMemo(() => {
+    const match = topicOptions.find((option) => option.id === selectedTopicKey);
+    return match?.label ?? ALL_TOPICS;
+  }, [selectedTopicKey, topicOptions]);
 
   useEffect(() => {
-    if (!topicOptions.includes(selectedTopic)) {
-      setSelectedTopic(topicOptions[0] ?? ALL_TOPICS);
+    const valid = topicOptions.some((option) => option.id === selectedTopicKey);
+    if (!valid) {
+      setSelectedTopicKey(ALL_TOPICS_ID);
     }
-  }, [selectedTopic, topicOptions]);
+  }, [selectedTopicKey, topicOptions]);
 
   const eligibleQuestions = useMemo(() => {
-    const topicFiltered = scopedQuestions.filter((item) => {
-      if (selectedTopicId && normalized(item.topic_id || "") === normalized(selectedTopicId)) {
-        return true;
-      }
-      return topicMatchesFilter(item.topic, selectedTopic);
-    });
-    return topicFiltered.filter((item) => selectedSources.includes(item.source));
-  }, [scopedQuestions, selectedTopic, selectedTopicId, selectedSources]);
+    const sourceFiltered = scopedQuestions.filter((item) => selectedSources.includes(item.source));
+    if (!selectedTopicId) {
+      return sourceFiltered;
+    }
+    return sourceFiltered.filter(
+      (item) => normalized(item.topic_id || "") === normalized(selectedTopicId)
+    );
+  }, [scopedQuestions, selectedTopicId, selectedSources]);
 
   useEffect(() => {
     const max = Math.max(1, Math.min(25, eligibleQuestions.length));
@@ -330,7 +290,8 @@ export function QuizPage() {
     if (item.course_id && item.course_id !== "all") {
       setCourseId(item.course_id);
     }
-    setSelectedTopic(item.topic);
+    const match = topics.find((topic) => normalized(topic.topic_name) === normalized(item.topic));
+    setSelectedTopicKey(match?.topic_id ?? ALL_TOPICS_ID);
     setSelectedSources(item.sources.length > 0 ? [...item.sources] : [...ALL_SOURCES]);
     setQuestionCount(Math.min(25, item.total_questions));
     setSession(null);
@@ -363,14 +324,14 @@ export function QuizPage() {
     try {
       const desiredCount = Math.max(1, Math.min(25, questionCount));
       const prepared = await prepareQuiz({
-        topic: selectedTopic,
+        topic: selectedTopicLabel,
         sources: selectedSources,
         question_count: desiredCount,
         course_id: activeCourseId,
         topic_id: selectedTopicId ?? undefined,
       });
       if (!prepared.questions.length) {
-        if (normalized(selectedTopic) !== normalized(ALL_TOPICS)) {
+        if (selectedTopicId !== null) {
           const fallbackPrepared = await prepareQuiz({
             topic: ALL_TOPICS,
             sources: selectedSources,
@@ -378,12 +339,14 @@ export function QuizPage() {
             course_id: activeCourseId,
           });
           if (fallbackPrepared.questions.length > 0) {
-            setSelectedTopic(ALL_TOPICS);
+            setSelectedTopicKey(ALL_TOPICS_ID);
             setResult(null);
             setSelectionSummary(fallbackPrepared.selection_summary);
             setSession({
               sessionId: fallbackPrepared.session_id,
               topic: fallbackPrepared.topic,
+              topicId: null,
+              courseId: activeCourseId,
               questions: fallbackPrepared.questions,
               currentIndex: 0,
               answers: {},
@@ -403,6 +366,8 @@ export function QuizPage() {
       setSession({
         sessionId: prepared.session_id,
         topic: prepared.topic,
+        topicId: selectedTopicId,
+        courseId: activeCourseId,
         questions: prepared.questions,
         currentIndex: 0,
         answers: {},
@@ -459,9 +424,9 @@ export function QuizPage() {
           question_id: item.question_id,
           user_answer: session.answers[item.question_id] ?? "",
         })),
-        course_id: session.questions[0]?.course_id ?? activeCourseId ?? courseId,
+        course_id: session.courseId,
         session_id: session.sessionId,
-        topic_id: selectedTopicId ?? undefined,
+        topic_id: session.topicId ?? undefined,
       });
       setResult(response);
       setSession(null);
@@ -503,13 +468,13 @@ export function QuizPage() {
             <select
               id="quiz-topic"
               className="quiz-topic-select"
-              value={selectedTopic}
-              onChange={(event) => setSelectedTopic(event.target.value)}
+              value={selectedTopicKey}
+              onChange={(event) => setSelectedTopicKey(event.target.value)}
               aria-label="Select quiz topic"
             >
               {topicOptions.map((topic) => (
-                <option key={topic} value={topic}>
-                  {topic}
+                <option key={topic.id} value={topic.id}>
+                  {topic.label}
                 </option>
               ))}
             </select>

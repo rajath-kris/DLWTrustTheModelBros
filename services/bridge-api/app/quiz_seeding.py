@@ -61,7 +61,7 @@ def extract_topic_candidates(text: str, filename: str, limit: int = MAX_TOPICS_P
         if heading_match:
             candidates.append(heading_match.group(1))
             continue
-        bullet_match = re.match(r"^(?:[-*â€¢]\s+)([A-Za-z][A-Za-z0-9&/(),:+\-\s]{3,90})$", compact)
+        bullet_match = re.match(r"^(?:[-*\u2022]\s+)([A-Za-z][A-Za-z0-9&/(),:+\-\s]{3,90})$", compact)
         if bullet_match:
             candidates.append(bullet_match.group(1))
 
@@ -134,7 +134,7 @@ def _fallback_questions(
     return [
         QuestionBankItem(
             topic=topic,
-            source="sentinel",
+            source="tutorial",
             concept=concept,
             question=f"Which option best reflects the notes' core focus for {topic}?",
             options=q1_options,
@@ -149,7 +149,7 @@ def _fallback_questions(
         ),
         QuestionBankItem(
             topic=topic,
-            source="sentinel",
+            source="tutorial",
             concept=concept,
             question=f"When solving a problem on {topic}, what is the best first step?",
             options=q2_options,
@@ -212,7 +212,7 @@ def _parse_generated_questions(
         parsed.append(
             QuestionBankItem(
                 topic=topic,
-                source="sentinel",
+                source="tutorial",
                 concept=concept,
                 question=question,
                 options=options,

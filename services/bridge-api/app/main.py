@@ -32,6 +32,7 @@ from .models import (
     KnowledgeGap,
     LearningState,
     QuestionBankItem,
+    ReplyMode,
     QuizPrepareRequest,
     QuizPrepareResponse,
     QuizQuestionResult,
@@ -49,6 +50,7 @@ from .models import (
     StudyAction,
     TopicUpdate,
     TopicMasteryItem,
+    VisionExtraction,
     utc_now_iso,
 )
 from .topic_models import (
@@ -133,6 +135,81 @@ NO_SOURCE_CAPTURE_PROMPT = (
     "Please capture content from your uploaded topics so I can ground the guidance."
 )
 CAPTURE_GAP_CREATION_ENABLED = False
+COMPLETION_INTENT_PATTERNS = [
+    re.compile(pattern, flags=re.IGNORECASE)
+    for pattern in [
+        r"\b(got it|gotcha)\b",
+        r"\b(understood|understand now|i understand)\b",
+        r"\b(understoof)\b",
+        r"\b(makes sense|that makes sense)\b",
+        r"\b(thanks|thank you)\b",
+        r"\b(i(?:'m| am)?\s*done|all good now)\b",
+    ]
+]
+NEEDS_GUIDANCE_PATTERNS = [
+    re.compile(pattern, flags=re.IGNORECASE)
+    for pattern in [
+        r"\b(confused|unclear|unsure|not sure)\b",
+        r"\b(stuck|lost|no idea)\b",
+        r"\b(i (?:do not|don't) know)\b",
+        r"\b(i (?:might be|am) wrong)\b",
+    ]
+]
+OFF_TOPIC_HINT_TOKENS = {
+    "weather",
+    "rain",
+    "restaurant",
+    "movie",
+    "song",
+    "football",
+    "nba",
+    "cricket",
+    "holiday",
+    "flight",
+    "travel",
+    "dating",
+    "netflix",
+    "stocks",
+    "crypto",
+}
+INTENT_STOPWORDS = {
+    "the",
+    "and",
+    "that",
+    "this",
+    "with",
+    "from",
+    "into",
+    "your",
+    "about",
+    "what",
+    "which",
+    "where",
+    "when",
+    "why",
+    "how",
+    "are",
+    "was",
+    "were",
+    "is",
+    "am",
+    "be",
+    "to",
+    "of",
+    "for",
+    "in",
+    "on",
+    "at",
+    "it",
+    "im",
+    "ive",
+    "you",
+    "my",
+    "me",
+    "we",
+    "us",
+    "i",
+}
 
 
 def _load_syllabus() -> dict:
@@ -244,6 +321,130 @@ def _optional_text(value: object, max_chars: int = 280) -> str | None:
     if not text:
         return None
     return text[:max_chars]
+
+
+def _has_completion_intent(user_text: str) -> bool:
+    normalized = " ".join((user_text or "").split()).strip()
+    if not normalized:
+        return False
+    return any(pattern.search(normalized) is not None for pattern in COMPLETION_INTENT_PATTERNS)
+
+
+def _needs_guidance(user_text: str) -> bool:
+    normalized = " ".join((user_text or "").split()).strip()
+    if not normalized:
+        return False
+    return any(pattern.search(normalized) is not None for pattern in NEEDS_GUIDANCE_PATTERNS)
+
+
+def _tokenize_intent_text(value: str) -> set[str]:
+    tokens = set(tokenize(value))
+    return {token for token in tokens if token and token not in INTENT_STOPWORDS}
+
+
+def _is_off_topic(
+    *,
+    user_text: str,
+    previous_prompt: str | None,
+    extraction: VisionExtraction,
+    topic_name: str | None,
+) -> bool:
+    normalized = " ".join((user_text or "").split()).strip()
+    if not normalized:
+        return False
+
+    user_tokens = _tokenize_intent_text(normalized)
+    if len(user_tokens) < 2:
+        return False
+    if user_tokens & OFF_TOPIC_HINT_TOKENS:
+        return True
+
+    context_text = " ".join(
+        part
+        for part in [
+            previous_prompt or "",
+            extraction.summary,
+            extraction.raw_text,
+            " ".join(extraction.tags),
+            topic_name or "",
+        ]
+        if part and str(part).strip()
+    )
+    context_tokens = _tokenize_intent_text(context_text)
+    if not context_tokens:
+        return False
+    return len(user_tokens & context_tokens) == 0
+
+
+def _single_question(text: str | None, fallback: str) -> str:
+    compact = _optional_text(text, max_chars=420) or fallback
+    if "?" in compact:
+        compact = compact.split("?", 1)[0].strip()
+    compact = compact.rstrip(".! ")
+    if not compact:
+        compact = fallback.rstrip("?").strip()
+    if not compact:
+        compact = "Which step should we test next"
+    return f"{compact}?"
+
+
+def _focus_label(topic_name: str | None, extraction: VisionExtraction) -> str:
+    if topic_name:
+        cleaned_topic = " ".join(topic_name.split()).strip()
+        if cleaned_topic:
+            return cleaned_topic
+    if extraction.tags:
+        return extraction.tags[0].replace("_", " ").strip().title() or "this capture"
+    return "this capture"
+
+
+def _apply_reply_policy(
+    *,
+    generated_prompt: str,
+    payload: CaptureRequest,
+    extraction: VisionExtraction,
+    topic_name: str | None,
+) -> tuple[str, ReplyMode | None, bool]:
+    learner_reply = " ".join((payload.user_input_text or "").split()).strip()
+    if not learner_reply:
+        return generated_prompt, None, False
+
+    if _has_completion_intent(learner_reply):
+        return "Great, that sounds understood. We'll end this turn here.", "session_complete", True
+
+    if _needs_guidance(learner_reply):
+        guidance_question = _single_question(
+            generated_prompt,
+            "Which assumption in your last step should we re-check first",
+        )
+        prompt = (
+            "Good effort. Let's correct one piece at a time by re-checking the key assumption. "
+            f"{guidance_question}"
+        )
+        return prompt, "gentle_correction", False
+
+    if _is_off_topic(
+        user_text=learner_reply,
+        previous_prompt=payload.previous_prompt,
+        extraction=extraction,
+        topic_name=topic_name,
+    ):
+        focus = _focus_label(topic_name, extraction)
+        prompt = (
+            f"That seems unrelated to this capture. Let's refocus on {focus}. "
+            "Which step in this capture is blocking you right now?"
+        )
+        return prompt, "off_topic_redirect", False
+
+    intuition_question = _single_question(
+        generated_prompt,
+        "What assumption in your reasoning gives you the strongest confidence",
+    )
+    prompt = (
+        "You're on the right path. Strengthen your intuition by stress-testing the key assumption. "
+        f"{intuition_question}"
+    )
+    return prompt, "right_path_intuition", False
 
 
 def _normalize_gap_type(raw_value: object) -> str | None:
@@ -1075,6 +1276,72 @@ def _document_has_seed_artifacts(state: LearningState, doc_id: str) -> bool:
     return has_topic and has_question
 
 
+def _material_has_seed_questions(state: LearningState, material_id: str) -> bool:
+    return any(item.generated and item.origin_material_id == material_id for item in state.question_bank)
+
+
+def _seed_quiz_scope_from_uploaded_materials(
+    state: LearningState,
+    *,
+    course_id: str,
+    topic_id: str | None,
+    allow_llm: bool = True,
+) -> tuple[int, int, list[str]]:
+    normalized_course = _normalize_course_id(course_id)
+    normalized_topic_id = _normalize_topic_id(topic_id)
+
+    target_topics: list[TopicSummary] = []
+    if normalized_topic_id:
+        requested_topic = topic_store.get_topic(normalized_topic_id)
+        if requested_topic is not None:
+            target_topics = [requested_topic]
+    else:
+        target_topics = topic_store.list_topics(None if normalized_course == "all" else normalized_course)
+
+    topics_added = 0
+    questions_added = 0
+    warnings: list[str] = []
+
+    for topic in target_topics:
+        if normalized_course != "all" and not _topic_belongs_to_course(topic, normalized_course):
+            continue
+        for material in topic_store.list_materials(topic.topic_id):
+            if _material_has_seed_questions(state, material.material_id):
+                continue
+            added_topics, added_questions, seed_warnings = _seed_topic_material_questions(
+                state,
+                topic=topic,
+                material=material,
+                allow_llm=allow_llm,
+            )
+            topics_added += added_topics
+            questions_added += added_questions
+            warnings.extend(seed_warnings)
+
+    for document in state.documents:
+        if normalized_course != "all" and _normalize_course_id(document.course_id) != normalized_course:
+            continue
+        if normalized_topic_id and _normalize_topic_id(document.topic_id) != normalized_topic_id:
+            continue
+        if _document_has_seed_artifacts(state, document.doc_id):
+            continue
+        doc_path = _course_document_path_from_url(document.file_url)
+        if doc_path is None or not doc_path.exists():
+            warnings.append(f"missing_document_file:{document.doc_id}")
+            continue
+        added_topics, added_questions, seed_warnings = _seed_document_topics_and_questions(
+            state,
+            document,
+            doc_path,
+            allow_llm=allow_llm,
+        )
+        topics_added += added_topics
+        questions_added += added_questions
+        warnings.extend(seed_warnings)
+
+    return topics_added, questions_added, warnings
+
+
 def _backfill_document_topic_seeds() -> None:
     state = store.read()
     changed = False
@@ -1497,6 +1764,8 @@ def _recompute_derived(state: LearningState) -> LearningState:
 
     existing_course_names = _course_name_lookup_from_state(state)
     course_ids: set[str] = set()
+    for course in state.courses:
+        course_ids.add(_normalize_course_id(course.course_id))
     for gap in state.gaps:
         course_ids.add(_normalize_course_id(gap.course_id))
     for capture in state.captures:
@@ -1505,6 +1774,14 @@ def _recompute_derived(state: LearningState) -> LearningState:
         course_ids.add(_normalize_course_id(deadline.course_id))
     for document in state.documents:
         course_ids.add(_normalize_course_id(document.course_id))
+    for topic in state.topics:
+        course_ids.add(_normalize_course_id(topic.course_id))
+    for mastery in state.topic_mastery:
+        course_ids.add(_normalize_course_id(mastery.course_id))
+    for quiz in state.quizzes:
+        course_ids.add(_normalize_course_id(quiz.course_id))
+    for question in state.question_bank:
+        course_ids.add(_normalize_course_id(question.course_id))
     for session in state.sessions:
         course_ids.add(_normalize_course_id(session.course_id))
     if not course_ids:
@@ -2371,6 +2648,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     source_warning = _merge_warning_messages(topic_warning, grounding_bundle.warnings)
     agent_backend_used = "bridge"
     socratic_prompt: str
+    reply_mode: ReplyMode | None = None
+    session_ended = False
     raw_gap_payloads: list[dict[str, object]]
 
     if not grounding_bundle.citations:
@@ -2450,6 +2729,15 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
                 )
             socratic_prompt = socratic.socratic_prompt
             raw_gap_payloads = socratic.gaps
+
+    socratic_prompt, reply_mode, session_ended = _apply_reply_policy(
+        generated_prompt=socratic_prompt,
+        payload=payload,
+        extraction=extraction,
+        topic_name=context_topic.topic_name if context_topic is not None else None,
+    )
+    if session_ended:
+        raw_gap_payloads = []
 
     generated_capture_gap_count = len(raw_gap_payloads)
     if generated_capture_gap_count > 0 and not CAPTURE_GAP_CREATION_ENABLED:
@@ -2558,6 +2846,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         context_topic_id=context_topic.topic_id if context_topic is not None else None,
         grounding_topic_id=grounding_topic.topic_id if grounding_topic is not None else None,
         topic_grounded=topic_grounded,
+        reply_mode=reply_mode,
+        session_ended=session_ended,
         grounding_citation_count=len(grounding_bundle.citations),
         topic_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "topic:"),
         course_doc_grounding_count=_count_citations_with_prefix(grounding_bundle.citations, "course-doc:"),
@@ -2569,6 +2859,8 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         thread_id=thread_id,
         turn_index=response_turn_index,
         socratic_prompt=socratic_prompt,
+        reply_mode=reply_mode,
+        session_ended=session_ended,
         gaps=new_gaps,
         readiness_axes=state.readiness_axes,
         topic_label=topic_name,
@@ -2593,6 +2885,10 @@ async def prepare_quiz(request: QuizPrepareRequest) -> QuizPrepareResponse:
     selected_topic_id = _normalize_topic_id(request.topic_id) or None
     if selected_topic is None and selected_topic_id:
         raise HTTPException(status_code=404, detail=f"Topic not found: {selected_topic_id}")
+    if selected_topic is not None and normalized_course_id == "all":
+        selected_topic_course_id = _normalize_course_id(selected_topic.course_id)
+        if selected_topic_course_id != "all":
+            normalized_course_id = selected_topic_course_id
     if (
         normalized_course_id != "all"
         and selected_topic is not None
@@ -2619,9 +2915,48 @@ async def prepare_quiz(request: QuizPrepareRequest) -> QuizPrepareResponse:
         syllabus=syllabus,
     )
     if not selected_questions:
+        seeded_topics, seeded_questions, seed_warnings = _seed_quiz_scope_from_uploaded_materials(
+            state,
+            course_id=normalized_course_id,
+            topic_id=selected_topic_id,
+        )
+        if seeded_topics > 0 or seeded_questions > 0:
+            state = _save_state(state)
+            await _publish_state(state)
+            selected_questions, summary = _prepare_quiz_questions(
+                state=state,
+                course_id=normalized_course_id,
+                topic_id=selected_topic_id,
+                topic=normalized_topic,
+                selected_sources=selected_sources,
+                question_count=request.question_count,
+                syllabus=syllabus,
+            )
+            _log_bridge_event(
+                event="quiz_prepare_seed_retry",
+                endpoint_path="/api/v1/quizzes/prepare",
+                course_id=normalized_course_id,
+                topic_id=selected_topic_id,
+                topic=normalized_topic,
+                topics_added=seeded_topics,
+                questions_added=seeded_questions,
+            )
+        for warning in seed_warnings:
+            _log_bridge_event(
+                event="topic_seed_skipped",
+                endpoint_path="/api/v1/quizzes/prepare",
+                course_id=normalized_course_id,
+                topic_id=selected_topic_id,
+                reason=warning,
+            )
+
+    if not selected_questions:
         raise HTTPException(
             status_code=400,
-            detail="No questions matched the requested course/topic/source filters.",
+            detail=(
+                "No questions matched the requested course/topic/source filters. "
+                "Upload supported material types (pdf/txt/md/docx/pptx/image) or include the Tutorial/Sentinel source."
+            ),
         )
 
     session_id = str(uuid4())
@@ -2662,6 +2997,10 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
     selected_topic_id = _normalize_topic_id(request.topic_id) or None
     if selected_topic is None and selected_topic_id:
         raise HTTPException(status_code=404, detail=f"Topic not found: {selected_topic_id}")
+    if selected_topic is not None and normalized_course_id == "all":
+        selected_topic_course_id = _normalize_course_id(selected_topic.course_id)
+        if selected_topic_course_id != "all":
+            normalized_course_id = selected_topic_course_id
     if (
         normalized_course_id != "all"
         and selected_topic is not None
@@ -2690,7 +3029,7 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
             raise HTTPException(status_code=400, detail=f"Question topic mismatch for {answer.question_id}.")
         if item.source not in selected_sources:
             raise HTTPException(status_code=400, detail=f"Question source mismatch for {answer.question_id}.")
-        if not topic_is_all and _normalize_topic(item.topic).lower() != normalized_topic.lower():
+        if not topic_is_all and not _topic_matches_filter(item.topic, normalized_topic):
             raise HTTPException(status_code=400, detail=f"Question topic mismatch for {answer.question_id}.")
 
         user_answer = " ".join(answer.user_answer.strip().split())

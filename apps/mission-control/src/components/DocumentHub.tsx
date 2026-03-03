@@ -221,7 +221,7 @@ export function DocumentHub({
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.doc,.docx,.txt"
+          accept=".pdf,.docx,.pptx,.txt,.md,.png,.jpg,.jpeg"
           onChange={handleFileInput}
           disabled={!uploadEnabled}
           className="document-hub-input"
