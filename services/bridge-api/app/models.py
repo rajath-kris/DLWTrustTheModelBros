@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 GapStatus = Literal["open", "reviewing", "closed"]
 GapType = Literal["concept", "reasoning", "misconception"]
+ReplyMode = Literal["right_path_intuition", "gentle_correction", "off_topic_redirect", "session_complete"]
 PlatformName = Literal["windows", "macos"]
 SentinelRuntimeLastAction = Literal["none", "start", "stop"]
 SentinelRuntimeAction = Literal["start", "stop"]
