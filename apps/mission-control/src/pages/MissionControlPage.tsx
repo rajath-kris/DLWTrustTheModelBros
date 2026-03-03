@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { differenceInDays, startOfDay } from "date-fns";
 import { useCourse } from "../context/CourseContext";
@@ -11,8 +11,9 @@ import { StatCards } from "../components/StatCards";
 import { TopBar } from "../components/TopBar";
 import { TopicMastery } from "../components/TopicMastery";
 import type { MockDeadline } from "../data/courses";
-import type { LearningState } from "../types";
-import { emptyState } from "../api";
+import type { TopicScore } from "../data/topicRadar";
+import type { LearningState, TopicSummary } from "../types";
+import { emptyState, fetchTopics } from "../api";
 
 function buildStateFromCourseData(courseData: NonNullable<ReturnType<typeof useCourse>["courseData"]>): LearningState {
   const s = courseData.stats;
@@ -56,6 +57,53 @@ function getReadinessPercent(readiness: number | undefined): number {
   if (readiness == null) return 0;
   const normalized = readiness <= 1 ? readiness * 100 : readiness;
   return Math.max(0, Math.min(100, Math.round(normalized)));
+}
+
+function normalizeTopicKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function radarLabelFromTopicName(name: string): string {
+  const compact = name.trim().replace(/\s+/g, " ");
+  if (!compact) {
+    return "Topic";
+  }
+  if (compact.length <= 13) {
+    return compact;
+  }
+  return `${compact.slice(0, 12)}.`;
+}
+
+function buildRadarTopicsFromDocumentHub(
+  topics: TopicSummary[],
+  scoreRows: TopicScore[],
+  fallbackCurrent: number
+): TopicScore[] {
+  if (topics.length === 0) {
+    return scoreRows;
+  }
+
+  const scoresByTopicId = new Map<string, TopicScore>();
+  const scoresByName = new Map<string, TopicScore>();
+  for (const row of scoreRows) {
+    const topicId = (row.topic_id ?? "").trim().toLowerCase();
+    if (topicId) {
+      scoresByTopicId.set(topicId, row);
+    }
+    scoresByName.set(normalizeTopicKey(row.name), row);
+  }
+
+  return topics.map((topic) => {
+    const topicIdKey = topic.topic_id.trim().toLowerCase();
+    const match = scoresByTopicId.get(topicIdKey) ?? scoresByName.get(normalizeTopicKey(topic.topic_name));
+    return {
+      topic_id: topic.topic_id,
+      name: topic.topic_name,
+      label: radarLabelFromTopicName(topic.topic_name),
+      current: Math.max(0, Math.min(1, match?.current ?? fallbackCurrent)),
+      target: Math.max(0, Math.min(1, match?.target ?? 0.8)),
+    };
+  });
 }
 
 function buildUpcomingDeadlines(
@@ -149,8 +197,33 @@ export function MissionControlPage() {
   const { courseId, courseData, allCoursesSummary, liveAvailable, liveError } = useCourse();
   const navigate = useNavigate();
   const [deadlineBannerDismissed, setDeadlineBannerDismissed] = useState(false);
+  const [topicList, setTopicList] = useState<TopicSummary[]>([]);
   const upcomingDeadlines = buildUpcomingDeadlines(courseId, courseData, allCoursesSummary);
   const hasAnyCourse = allCoursesSummary.length >= 1;
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function hydrateTopics() {
+      try {
+        const response = await fetchTopics();
+        if (!mounted) {
+          return;
+        }
+        setTopicList(response.topics);
+      } catch {
+        if (!mounted) {
+          return;
+        }
+        setTopicList([]);
+      }
+    }
+
+    void hydrateTopics();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   if (courseId === "all") {
     return (
@@ -192,13 +265,26 @@ export function MissionControlPage() {
   }
 
   const state = buildStateFromCourseData(courseData);
+  const documentHubTopics = useMemo(
+    () => topicList.filter((topic) => topic.course_id === courseId),
+    [topicList, courseId]
+  );
+  const radarTopics = useMemo(
+    () =>
+      buildRadarTopicsFromDocumentHub(
+        documentHubTopics,
+        courseData.topicScores,
+        Math.max(0, Math.min(1, courseData.stats.masteryPercent / 100))
+      ),
+    [documentHubTopics, courseData.topicScores, courseData.stats.masteryPercent]
+  );
   const weakestTopic =
-    courseData.topicScores.length > 0
-      ? courseData.topicScores.reduce((acc, t) => (t.current < acc.current ? t : acc))
+    radarTopics.length > 0
+      ? radarTopics.reduce((acc, t) => (t.current < acc.current ? t : acc))
       : null;
   const allStrong =
-    courseData.topicScores.length > 0 &&
-    courseData.topicScores.every((t) => t.current >= 0.8);
+    radarTopics.length > 0 &&
+    radarTopics.every((t) => t.current >= 0.8);
 
   return (
     <div className="page-shell page-fade">
@@ -227,7 +313,7 @@ export function MissionControlPage() {
               <h3>Readiness Radar</h3>
               <p>Current Mastery vs Target (Deadline).</p>
             </header>
-            <ReadinessRadarTopics topics={courseData.topicScores} showLive />
+            <ReadinessRadarTopics topics={radarTopics} showLive />
             <dl className="axis-legend axis-legend-swatches">
               <div>
                 <span className="legend-swatch legend-current" aria-hidden />
@@ -240,7 +326,7 @@ export function MissionControlPage() {
             </dl>
             <div className="radar-description">
               <p className="radar-insight">
-                This graph compares your current mastery (blue) to your deadline target (purple) across six topics.
+                This graph compares your current mastery (blue) to your deadline target (purple) across your Document Hub topics.
               </p>
               {allStrong ? (
                 <p className="radar-insight radar-focus">You&apos;re on track; keep reviewing to maintain mastery.</p>
@@ -251,7 +337,7 @@ export function MissionControlPage() {
               ) : null}
             </div>
           </article>
-          <TopicMastery gaps={courseData.gaps} topics={courseData.topicScores} />
+          <TopicMastery gaps={courseData.gaps} topics={radarTopics} />
         </div>
       </section>
       <section className="gaps-resources-section">
@@ -271,4 +357,5 @@ export function MissionControlPage() {
     </div>
   );
 }
+
 

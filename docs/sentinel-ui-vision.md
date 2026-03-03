@@ -155,6 +155,8 @@ Overlay materials are QSS-authored only for this UI baseline. Runtime blur injec
 - Esc paths:
   - Selector Esc cancels immediately.
   - Overlay Esc dismisses immediately.
+- Session completion path:
+  - If learner explicitly signals completion (for example `got it`, `understood`), overlay collapses to launcher and the active turn context resets.
 - Pointer behavior:
   - Action controls use pointer cursor.
   - No hidden drag logic in overlay.

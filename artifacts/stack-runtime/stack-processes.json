@@ -1,28 +1,28 @@
 ﻿{
     "bridge_port":  18000,
     "mission_control_url":  "http://127.0.0.1:5173",
-    "started_at_utc":  "2026-03-03T02:16:57.8601801Z",
+    "started_at_utc":  "2026-03-03T03:36:41.3253782Z",
     "processes":  [
                       {
-                          "err":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651\\bridge.err.log",
-                          "pid":  40844,
+                          "err":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634\\bridge.err.log",
+                          "pid":  26064,
                           "name":  "bridge",
-                          "log":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651\\bridge.log"
+                          "log":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634\\bridge.log"
                       },
                       {
-                          "err":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651\\mission-control.err.log",
-                          "pid":  39920,
+                          "err":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634\\mission-control.err.log",
+                          "pid":  36544,
                           "name":  "mission-control",
-                          "log":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651\\mission-control.log"
+                          "log":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634\\mission-control.log"
                       },
                       {
-                          "err":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651\\sentinel.err.log",
-                          "pid":  35596,
+                          "err":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634\\sentinel.err.log",
+                          "pid":  28932,
                           "name":  "sentinel",
-                          "log":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651\\sentinel.log"
+                          "log":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634\\sentinel.log"
                       }
                   ],
-    "run_dir":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-101651",
+    "run_dir":  "C:\\1Reju\\Coding\\HACKATHONS\\Deep Learning Week 2026\\artifacts\\stack-runtime\\20260303-113634",
     "bridge_url":  "http://127.0.0.1:18000",
     "mission_control_port":  5173
 }

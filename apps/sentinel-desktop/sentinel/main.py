@@ -54,6 +54,8 @@ class AnalysisResult:
     source_warning: str = ""
     source_material_url: str = ""
     source_material_label: str = ""
+    session_ended: bool = False
+    reply_mode: str = ""
     error_message: str = ""
     error_hint: str = ""
     error_category: str = ""
@@ -402,6 +404,8 @@ class SentinelController(QObject):
                 source_warning = str(result.get("source_warning", "")).strip()
                 source_material_url = str(result.get("source_material_url", "")).strip()
                 source_material_label = str(result.get("source_material_label", "")).strip()
+                reply_mode = " ".join(str(result.get("reply_mode", "")).split()).strip().lower()
+                session_ended = self._coerce_bool(result.get("session_ended"), default=False)
                 capture_id = str(result.get("capture_id", "")).strip()
                 topic_label = self._derive_topic_label(
                     str(result.get("topic_label", "")).strip(),
@@ -427,6 +431,8 @@ class SentinelController(QObject):
                         source_warning=source_warning,
                         source_material_url=source_material_url,
                         source_material_label=source_material_label,
+                        session_ended=session_ended,
+                        reply_mode=reply_mode,
                     )
                 )
             except requests.Timeout:
@@ -662,6 +668,44 @@ class SentinelController(QObject):
         )
         self._thinking_visible_request_id = None
         self._thinking_visible_started_at = None
+
+        if result.session_ended:
+            completed_thread_id = self._active_thread_id or result.thread_id
+            completed_turn_index = self._active_turn_index
+            self.overlay.hide_prompt(reason="session_complete")
+            self._log_event(
+                "session_completed",
+                request_id=result.request_id,
+                capture_id=result.capture_id,
+                duration_ms=duration_ms,
+                thread_id=completed_thread_id,
+                turn_index=completed_turn_index,
+                reply_mode=result.reply_mode or "session_complete",
+            )
+            self._log_event(
+                "request_success",
+                request_id=result.request_id,
+                capture_id=result.capture_id,
+                duration_ms=duration_ms,
+                thread_id=completed_thread_id,
+                turn_index=completed_turn_index,
+                reply_mode=result.reply_mode or "session_complete",
+                session_ended=True,
+            )
+            if was_turn_analysis:
+                self._log_event(
+                    "turn_analysis_completed",
+                    request_id=result.request_id,
+                    status="success",
+                    duration_ms=duration_ms,
+                    thread_id=completed_thread_id,
+                    turn_index=completed_turn_index,
+                    reply_mode=result.reply_mode or "session_complete",
+                    session_ended=True,
+                )
+            self._reset_turn_state()
+            return
+
         self.overlay.show_prompt_input_state(
             result.prompt,
             result.region,
@@ -680,6 +724,8 @@ class SentinelController(QObject):
             duration_ms=duration_ms,
             thread_id=self._active_thread_id,
             turn_index=self._active_turn_index,
+            reply_mode=result.reply_mode or None,
+            session_ended=False,
         )
         if was_turn_analysis:
             self._log_event(
@@ -689,6 +735,8 @@ class SentinelController(QObject):
                 duration_ms=duration_ms,
                 thread_id=self._active_thread_id,
                 turn_index=self._active_turn_index,
+                reply_mode=result.reply_mode or None,
+                session_ended=False,
             )
 
     def _cancel_thinking_hold(self) -> None:
@@ -716,6 +764,19 @@ class SentinelController(QObject):
             return max(0, int(value))
         except (TypeError, ValueError):
             return max(0, int(default))
+
+    def _coerce_bool(self, value: Any, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return default
 
     def _fallback_region(self) -> CaptureRegion:
         if self._last_region is not None:

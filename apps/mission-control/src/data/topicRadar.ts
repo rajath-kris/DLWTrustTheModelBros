@@ -24,6 +24,7 @@ export const DEFAULT_TOPIC_ORDER = [
 ];
 
 export interface TopicScore {
+  topic_id?: string;
   name: string;
   label: string;
   current: number;

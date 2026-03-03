@@ -80,6 +80,7 @@ function mapLiveTopicScores(state: LearningState, courseId: string): TopicScore[
   return state.topic_mastery
     .filter((item) => courseId === "all" || item.course_id === courseId)
     .map((item) => ({
+      topic_id: item.topic_id,
       name: item.name,
       label: labelFromTopic(item.name),
       current: clamp01(item.current),

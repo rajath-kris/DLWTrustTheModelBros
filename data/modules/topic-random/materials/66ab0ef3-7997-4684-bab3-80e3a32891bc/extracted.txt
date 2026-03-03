@@ -1,0 +1,1063 @@
+1
+1
+3
+Functions
+Functions
+1. In this lecture, we discuss Functions in C.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+2
+2
+Why Learning Functions?
+• With Sequential, Branching and Looping, you will be 
+able to build programs for simple applications. 
+However, for more complex applications, your 
+programs may be long and certain code may be 
+repeated in the program. 
+• Functions aim to group specific tasks, so that code will 
+not be repeated. It also helps to improve your program 
+readability and efficiency.
+• In this lecture, we discuss the concepts 
+on functions.
+Why Learning Functions?
+1. With Sequential, Branching and Looping, you will be able to build programs for 
+simple applications. However, for more complex applications, your programs 
+may be long and certain code may be repeated in the program. 
+2. Functions aim to group specific tasks, so  that code will not be repeated. It also 
+helps to improve your program readability and efficiency.
+3. In this lecture, we discuss the concepts on functions.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+3
+3
+Functions
+‒Function Definition
+‒Function Prototypes
+‒Function Flow
+‒Parameter Passing: Call by Value
+‒Storage Scope of Variables
+‒Functional Decomposition
+Functions
+1. Here, we start by discu ssing function definition.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+4
+•A  function is a self-contained unit of code to carry 
+out a specific task, e.g. printf(), sqrt().
+•A  function consists of 
+– a header 
+– an opening curly brace 
+– a function body 
+– a closing curly brace
+float findMax(float x, float y)  // header
+{
+// function body
+float maxnum;      
+if (x >= y)
+maxnum = x;
+else
+maxnum = y;
+return maxnum;       
+}
+Example:
+Function Definition
+Function Definition
+1. A function is a self-contained unit of co de to carry out a specific task, e.g. 
+printf(), sqrt().
+2. Each function definition consists of a function header and a function body. 
+3. The function body contains the co de, which specifies the actions of the 
+function, and the local data used by the function. 
+4. An example is illustrated in the findMax() function, which has the function 
+header and function body.
+4Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+5
+Return_type Function_name (Parameter_list)
+• Function_name
+– specifies the name given to the function. Try to give a
+meaningful name to the function.
+• Parameter_list
+– specifies a list of parameters which contains the data that
+are passed in by the calling function.
+• Return_type
+– specifies the type of the data to be returned to the calling
+function.
+Function Header
+Function Header
+1. The function header has the following format: Return_type
+Function_name(Parameter_list)
+2. Function_name specifies the name given to the function. 
+3. Parameter_list specifies a list of parameters which contains the data that are 
+passed in by the calling function. 
+4. Return_type specifies the type of the data to be returned to the calling 
+function.
+5Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+6
+Function Header: Parameter List
+• Parameters define the data passed into the 
+function.
+• A function can have no parameter, one
+parameter or many parameters.
+type parameterName[, type parameterName]
+• Each parameter has:
+– parameter name
+– data type (such as int, char, etc.) of the parameter
+• The function assumes that these parameter 
+inputs will be supplied to the function when they 
+are being called.
+Example:   float findMax(float x, float y)
+Function Header: Parameter List
+1. Parameters define the data passed into the function. 
+2. The Parameter_list can be void or a list of declarations for variables called 
+parameters: type parameterName[, type parameterName]
+4. A function can have no parameter, one parameter or many parameters. 
+5. Each parameter has a parameter name and data type of the parameter (such as 
+int, char, etc.).
+6. The function assumes that these para meter inputs will be supplied to the 
+function when they are being called.
+6Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+• Return Type is the data type returned from the function,
+it can be int, float, char, void, or nothing.
+• The syntax for the return statement is return (expression);
+• void – the function will not return any value.
+• nothing –i fd e f i n e dw i t hno type,t h edefault type is int.
+void hello_n_times(int n)
+{
+int count;
+for (count = 0; count < n; count++)
+printf(“hello\n”);
+/* no return statement */
+}
+successor(int num)   /* i.e. int successor(int num) */ 
+{
+return num + 1; /* has a return statement */
+}
+Function Header: Return_type
+7
+Function Header: Return_type
+1. Return_type is the data type of the value returned by the function, it can be int, 
+float, char, void, etc. 
+2. The return statement is used for functions that return a value. 
+3. The syntax for the return statement is return (expression);
+4. In the function hello_n_times(), when the return type is void, the function will 
+not return any value. It prints a string "Hello" to the screen the number of times 
+specified by the parameter n, which is defined to be of type int.
+5. If nothing is specified for Return_type of a function header, i.e. when a function 
+is defined with no type, for example, in the successor() function, then the 
+default type int is used for that function. It means the function will return an 
+integer value. Another example is the main() function.
+7Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+Function
+Body 
+Return Data   Parameters 
+Return_type Function_name (Parameter_list)
+Function Header:
+Example: float findMax(float x, float y)
+consists of a group of 
+statements which 
+perform the logic of 
+the function 
+Function Body
+8
+Function Body
+1. The function body consists of a group of statements. 
+2. The statements are executed when the function is called. 
+3. The variables declared inside the function body are called local variables and 
+are only known within the function. 
+4. The main purpose of function body is  to perform the logic of the function.
+8Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+9
+•T h e return statement terminates the execution of a
+function and passes the control to the calling function.
+• The return statement may appear in any place or in more
+than one place inside the function body.
+int factorial(int n)
+{
+int temp = 1;      // local variable
+if (n < 0) {
+printf(“error: must be +ve\n”);
+return 0;
+}
+else if (n == 0)
+return 1;
+else
+for ( ; n > 0; n-- )
+temp *= n;
+return temp;
+}
+void hello_n_times(int n)
+{
+int count;
+if (n < 0)
+return;
+else
+for (count = 0; count < n; count++)
+printf("Hello!\n");
+}
+Multiple Return Statements
+return 
+a value
+no return value
+Multiple Return Statements
+1. The return statement terminates the execution of the function and passes the 
+control to the calling function. 
+2. The return statement may appear in any place or in more than one place inside 
+the function body. 
+3. In the program, the function factorial() has return statements in various 
+locations in the function body. If n is less than 0, then an error message is 
+displayed, and the control is returned to the calling function. If n equals to 0, 
+then the function returns a value 1. If n is greater than 0, then the factorial of n
+is evaluated using a for loop, and the result is returned.
+4. A type void function may also have a return statement to terminate the 
+function. This is illustrated in the function hello_n_times. However, it must not 
+have a return expression. If the function does not have a return statement, 
+then the control will be passed back to the calling function when the closing 
+brace of the function body is encountered.
+5. Sometimes, it is not necessary to use th e value returned by a function. This is 
+illustrated in the use of the functions such as printf() and scanf(). The printf()
+statement returns a value of type int that counts the number of characters 
+printed, whereas the scanf() statement returns the number of items that are 
+successfully read. However, if we do not require this information, we do not 
+need to use the return value returned by these functions.
+9Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+10
+Function: Examples
+char findGrade(float marks) {
+char grade;   // variable
+/* function body */
+if (marks >= 50)
+grade = ‘P’;
+else
+grade = ‘F’;
+return grade;
+}
+Compute Grade:
+Function: findGrade()
+1. The function findGrade() expects a parameter of type float and returns a value 
+of type char. 
+2. The parameter marks is only accessible within the function findGrade().
+3. There is one variable grade defined in the function findGrade(). The variable is 
+a local variable and can only be accessed within the function. 
+4. The variable is created when the func tion is called, and destroyed when the 
+function ends. 
+10Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+11
+char findGrade(float marks) {
+char grade;   // variable
+/* function body */
+if (marks >= 50)
+grade = ‘P’;
+else
+grade = ‘F’;
+return grade;
+}
+float areaOfCircle(float radius) {
+const float pi = 3.14;
+float area;
+/* function body */
+area = pi*radius*radius;
+returnarea;
+}
+Compute Circle Area:Compute Grade:
+Function: Examples
+Function: areaOfCircle()
+1. The function areaOfCircle() expects one parameter of type float. It returns a 
+value of type float. 
+2. The parameter radius is only accessible within the function areaOfCircle().
+3. A local variable area is also declared in the function. This variable is only 
+accessible within the function areaOfCircle(). 
+4. It is also created when the function is called, and will be destroyed when the 
+function exits.
+11Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+12
+12
+Functions
+‒Function Definition
+‒Function Prototypes
+‒Function Flow
+‒Parameter Passing: Call by Value
+‒Storage Scope of Variables
+‒Functional Decomposition
+Functions
+1. Here, we discuss function prototypes.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+• We need to declare a function before using it in other functions.
+• Function prototype is  used to declare a function.  It provides the 
+information about 
+1. the return type of the function
+2. the name of the function
+3. the number and types of the arguments
+• The declaration may be the same as the function header but
+terminated by a semicolon.
+• Two ways to declare parameters in the parameter list:
+(1) With parameter name:
+void hello_n_times(int n);
+(2) Without parameter names:
+double distance(double, double);
+Example: 
+float findMax(float x, float y) ;
+Function Prototypes
+13
+Function Prototypes
+1. We need to declare a function before using it in the main() function or other 
+functions. 
+2. A function declaration is called a function prototype. It provides the 
+information about the type of the function, the name of the function, and the 
+number and types of the arguments. 
+3. The declaration is the same as the function header but terminated by a 
+semicolon. For example, void hello_n_times(int n); 
+4. The function prototype can also be declared without giving the parameter 
+names. For example, double distance(double, double); 
+5. Function prototypes enable the compile r to ensure that functions are being 
+called properly. The compiler will check whether the number of arguments and 
+the type of the arguments of the function call match with the parameters used 
+in the function definition. Warning messages will be given if the number of 
+arguments is different. 
+13Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+14
+• The declaration has to be done before the function is called:
+(1) before the main() header
+(2) inside the main() body or
+(3) inside any function which uses it
+Function Prototypes: Where to declare it?
+Function Prototypes: Where to declare it?
+1. A function must be declared before it is actually called. 
+2. It can be declared either before the main() header, inside the main() body or 
+inside any function which uses it. 
+14Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+15
+#include <stdio.h>
+int factorial(int n); // function prototype
+int main( )
+{i n t x ;
+x= factorial(5); // use factorial() here
+}
+int factorial(int n) /* function definition*/
+{
+....
+}
+• The declaration has to be done before the function is called:
+(1) before the main() header
+(2) inside the main() body or
+(3) inside any function which uses it
+Before the main():
+Function Prototypes: Before the main()
+Function Prototype: Before the main()
+1. If the function prototyp e is placed before the main() function and at the 
+beginning of the program, it makes the function available to all the functions in 
+the program.
+2. In this example program, the function factorial() is declared outside the main(). 
+Therefore, it can be used by all the functions in the program. 
+15Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+16
+#include <stdio.h>
+int main()
+{i n t x ;
+int factorial(int); // function prototype
+x= factorial(5); // use factorial() here
+....
+}
+int factorial(int n) // function definition
+{
+....
+}
+Inside the main():
+• The declaration has to be done before the function is called:
+(1) before the main() header
+(2) inside the main() body or
+(3) inside any function which uses it
+Function Prototype: Inside the main()
+Function Prototype: Inside the main()
+1. In the second example program, the function fact() is declared inside the main()
+function. 
+2. This makes the function callable only within the main() function.
+16Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+17
+17
+Functions
+‒Function Definition
+‒Function Prototypes
+‒Function Flow
+‒Parameter Passing: Call by Value
+‒Storage Scope of Variables
+‒Functional Decomposition
+Functions
+1. Here, we discuss function flow.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+18
+Function
+Body 
+Parameters 
+Return_type Function_name (Parameter_list)
+Pass in
+ARGUMENTS
+Function Header:
+Example: float findMax(float x, float y)
+Example: 
+float num1=5, num2=10, max;
+max = findMax(num1, num2);
+• A function is executed when it is called.
+• A function call has the following format: 
+Function_name (Argument_list);  
+Calling Function
+num1,num2
+x=5,y=10
+Calling Function
+1. A function is executed when it is called. 
+2. A function call has the following format: function_name(argument_list);
+3. A function can be called by using th e function name followed by a list of 
+arguments. For example, num1 and num2 in the findMax() function.
+4. Function arguments can be constants, variables or expressions. 
+5. For the function findMax(), as num1=5, num2=10, the values 5 and 10 will be 
+passed to the parameters x and y of the function respectively.
+float findMax(float x, float y) {
+// function body
+float maxnum;      
+if (x >= y)
+maxnum = x;
+else
+maxnum = y;
+return maxnum;       
+}
+18Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+19
+Function
+Body 
+Return Data   Parameters 
+Return_type Function_name (Parameter_list)
+RETURN 
+DATA
+Pass in
+ARGUMENTS
+Function Header:
+Example: float findMax(float x, float y)
+• A function is executed when it is called.
+• A function call has the following format: 
+Function_name (Argument_list);  
+Returning Value
+num1,num2
+x=5,y=10
+10
+Example: 
+float num1=5, num2=10, max;
+max = findMax(num1, num2);
+Returning Value
+1. The function findMax() computes the maximum value of x and y (i.e. 5 and 10 
+respectively), and returns the value of 10 to the calling function.
+2. The returned value is then  assigned to the variable max.
+19Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+20
+#include <stdio.h>
+int fn1(int v1); // fn prototype
+void fn2(float v2); // fn prototype
+int main( )
+{…
+x=fn1(y); // fn call - with return value
+….
+fn2(b); // fn call - no return value
+return 0;
+}
+int fn1 (int v1) // fn definition
+{ int result; …. return result; }
+void fn2 (float v2) // function definition
+{ …. }
+Function Flow
+Function Flow
+1. In the program, the main() function will start the execution. 
+2. When the function fn1() is called, the program transfers the control to the fn1()
+function which then starts execution. As fn1() will return a value to the calling 
+function, the statements in the function body of fn1() will be executed until a 
+return statement is encountered. 
+3. Control is then transferred to the main() function. The value of the variable 
+result will be assigned to the variable x in main(). The next statement after the 
+function call then starts execution. 
+4. When the second function fn2() is called. The control is then transferred to 
+fn2(). The function will execute until the end of the function body. Control will 
+then be transferred to the main() function. 
+20Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+21
+#include <stdio.h>
+char findGrade(float marks);
+int main( )
+{
+char answer;
+answer = findGrade(68.5);  
+printf(“Grade is %c”, answer);
+return 0;
+}
+char findGrade(float marks)  {
+char grade;   // variable
+if (marks >= 50)
+grade = ‘P’;
+else
+grade = ‘F’;
+return grade;
+}
+Compute Grade:
+21
+Function Flow: Example
+Output
+Grade is P
+Function Flow: findGrade()
+1. In the program, the main() function calls the function findGrade(). When the 
+statement: answer = findGrade(68.5); is executed, it calls the function 
+findGrade(). 
+2. Control is then transferred to the function findGrade(). Information is passed 
+between the calling function and the called function through the argument. In 
+this case, the function receives one argument with the value of 68.5. It is 
+assigned to the corresponding parameter in the function definition to compute 
+the grade. 
+3. When the execution of statements in  the function body encounters the return
+statement, the control is then transferred to the main() function, and the 
+statement just after the function call in main() will continue to execute.
+4. The name for parameter needs not be  the same as function argument. 
+However, the number of arguments and the data type of the arguments must 
+be the same as parameters defined in function definition. In the program, the 
+argument 68.5 must correspond to the parameter marks in the function call. 
+5. Note that the function prototype is declared as: float findGrade(float marks); 
+which is placed at the beginning of the program before the main() function.
+21Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+Function Flow: Example
+#include <stdio.h>
+float areaOfCircle(float);
+int main( )
+{
+float answer;
+answer = areaOfCircle(2.5);  
+printf("Area is %.1f”, answer);
+return 0;
+}
+float areaOfCircle(float radius)    {
+const float pi = 3.14;
+float area;
+/* function body */
+area = pi*radius*radius;
+return area;
+}
+Compute Circle Area:
+22
+Output
+Area is 19.6
+Function Flow: areaOfCircle()
+1. In the program, the main() function calls the function areaOfCircle(). When the 
+statement: answer = areaOfCircle(2.5); is executed, it calls the function 
+areaOfCircle(). 
+2. Control is then transferred to the function areaOfCircle(). Information is passed 
+between the calling function and the called function through the argument. In 
+this case, the function receives one argument with the value of 2.5. It is 
+assigned to the corresponding parameter in the function definition to compute 
+the area of the circle. 
+3. When the execution of statements in  the function body encounters the return
+statement, the control is then transferred to the main() function, and the 
+statement just after the function call in main() will continue to execute. 
+4. Note that the function prototype is declared as: float areaOfCircle(float); which
+is placed at the beginning of the program before the main() function.
+22Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+23
+23
+Functions
+‒Function Definition
+‒Function Prototypes
+‒Function Flow
+‒Parameter Passing: Call by Value
+‒Storage Scope of Variables
+‒Functional Decomposition
+Functions
+1. Here, we discuss parameter passing using call by value.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+24
+• Call by Value - Communication between a function and the 
+calling body is done through arguments and the return value
+of a function. 
+• Call by Reference – passing more than one value
+#include <stdio.h>
+int add1(int);
+int main( )
+{
+int num = 5;
+num = add1(num); // num – called argument
+printf("The value of num is: %d", num);
+return 0;
+}
+int add1(int value)       // value – called parameter
+{
+value++;
+return value;
+}
+Output
+The value of num is: 65num
+value
+-> 6
+5 -> 6
+Parameter Passing: Call by Value
+Parameter Passing: Call by Value
+1. Communications between a called function  and the calling function is through 
+arguments. The called function then performs the task based on the received 
+argument values. The called function can also return a value to the calling 
+function. 
+2. Parameter passing between functions may be performed in two ways: call by 
+value and call by reference. In call by value, the parameters must be declared in 
+the function definition as regular variables. The arguments in function calls can 
+be constants, variables or expressions. 
+3. When the function is called, the parameters hold a copy of the arguments 
+locally. Therefore, any changes to the parameters in a function are done on the 
+copy of the arguments. 
+4. This is illustrated in the function add1(). In the main() function, the variable 
+num is assigned with 5. num is used as the argument when calling the function 
+add1().  
+5. The value in num is passed to the parameter value in the function add1(). The 
+variable value is a local variable in the function. Then the variable value is 
+incremented by 1. Finally, the value in the variable value is returned to the 
+calling main() function which then assigns the returned value to the variable 
+num.
+6. In any programs, there are two ways for a called function to return values to the 
+24Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+calling function. The first way is to use the return statement as shown in the function 
+add1(). However, this can only be used when only a single value needs to be returned 
+from a function. 
+7. If two or more values need to be passed back from a called function, we need to use 
+another approach called call by reference using pointers. We will discuss call by reference 
+in the chapter on Pointers.
+28 December 2024
+Dr Hui Siu Cheung, CCDS, NTU 24
+#include <stdio.h>
+#include <math.h>
+double distance (double, double);  // function prototype
+int main()
+{
+double dist;
+double x=2.0, y=4.5, a=3.0, b=5.5;
+dist = distance(2.0, 4.5);      /* 2.0, 4.5 - arguments */
+printf("The dist is %f\n", dist);
+dist = distance(x*y, a*b);     /* x*y, a*b - arguments */
+printf("The dist is %f\n", dist);
+return 0;
+}
+double distance(double x, double y)     /* x,y-parameters */
+{
+return sqrt(x * x + y * y);
+}
+Output
+The dist is 4.924429
+The dist is 18.794946
+Parameter Passing: Example
+25
+Parameter Passing: Example
+1. In the program, it calls the function distance(). When the statement: dist = 
+distance(2.0, 4.5); is executed, it calls the function distance() in main(). The 
+arguments 2.0 and 4.5 in the main() function correspond respectively to the 
+parameters x and y in the function call. 
+2. Control is then transferred to the function distance(). Information is passed 
+between the calling function and the called function through arguments. In this 
+case, the function receives two arguments with values of 2.0 and 4.5. They are 
+assigned to the corresponding parameters in the function definition. 
+3. In addition, we can also use expression  as an argument in the function as 
+shown in the following statement: dist = distance(x*y, a*b); The arguments x*y
+and a*b in the main() function correspond respectively to the parameters x and 
+y in the function call.
+4. When the execution of statements in  the function body encounters the return
+statement, the control is then transferred to the main() function, and the 
+statement just after the function call in main() will continue to execute.
+5. Note that the names for parameters need not be the same as function 
+arguments. However, the number of arguments and the data type of the 
+arguments must be the same as parameters defined in function definition. 
+25Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+26
+#include <stdio.h>
+int max3(int, int, int); / * function prototypes */
+int max2(int, int);
+int main()
+{
+i n tx ,y ,z ;
+printf(“input three integers => ”);
+s c a n f ( “ % d% d% d ” ,& x ,& y ,& z ) ;
+printf(“Maximum of the 3 is %d\n”,max3(x, y, z) );
+return 0;
+}
+intmax3(int i, int j, int k)
+{
+printf(“Find the max in %d, %d and \%d\n”, i, j, k);
+returnmax2(max2(i, j), max2(j, k));
+}
+intmax2(int h, int k)
+{
+printf(“Find the max of %d and %d\n”, h, k);
+r e t u r nh>k?h:k ;
+}
+Output
+input three integers => 749
+Find the max in 7, 4 and 9
+Find the max of 7 and 4
+Find the max of 4 and 9
+Find the max of 7 and 9
+Maximum of the 3 is 9
+Function Calling Another Function
+Function Calling Another Function
+1. A function may be called by main() or another function through call by value. In 
+the program, the function max2() specifies two parameters, h and k, of type int, 
+and receives two function arguments from the calling function. The values of 
+the arguments are then stored in the memory locations of the two parameters, 
+h and k. The function then compares their values, and returns the larger value 
+to the calling function. 
+2. The function max3() specifies three parameters, i, j and k, and receives the 
+function arguments from the calling function, and compares their values to 
+determine the largest value. 
+3. The function max3() calls the function max2() to compare two values at a time 
+and returns the maximum value: return max2(max2(i,j), max2(j,k));
+4. Here, the function max2() is specified in the function max2() itself. The 
+returned value from the called function max2() will be used again as arguments 
+in the same function max2(). The maximum value is then returned to the calling 
+function. 
+26Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+27
+27
+Functions
+‒Function Definition
+‒Function Prototypes
+‒Function Flow
+‒Parameter Passing: Call by Value
+‒Storage Scope of Variables
+‒Functional Decomposition
+Functions
+1. Here, we discuss the storage scope of variables.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+28
+Scope of Variables in a Function
+• Scope of a variable 
+– the section of code that can us e the variable.  In other words, 
+the variable is visible in that section. 
+• Variables declared in a function  is ONLY visible within that 
+function. We call it block scope.
+• Example below: variables radius, pi and area are NOT visible 
+outside this function.
+float areaOfCircle(float radius) { // parameter – block scope
+const float pi = 3.14; // const variable – block scope
+float area; // local variable – block scope
+area = pi*radius*radius;  
+return area;
+}
+Scope of Variables in a Function
+1. The scope of a variable determines the sections of the code that can use the 
+variable. In other words, the variable is visible in that section of code. 
+2. Variables declared in a function is ONLY  visible within that function. We call it 
+block scope.
+3. In the function areaOfCircle(), the variables radius, pi and area are not visible 
+outside the function areaOfCircle().
+28Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+29
+• Local variables: 
+– They are variables defined inside a function. 
+• Global variables: 
+– They are variables defined outside the functions. 
+• Should global variables be used in your programs?
+– Advantages of using global variables:
+• simplest way of communication between functions
+• efficiency
+– Disadvantages of using global variables:
+• less readable program
+• more difficult to debug and modify
+Local and Global Variables
+ Strongly discouraged to use global variables –
+instead you should use parameter passing 
+between functions to achieve the same 
+effect. So that errors will be localized within 
+each function for easy debugging.
+Local and Global Variables
+1. Local variables are variables defined inside a function. They have block scope. 
+They can be accessed only within the function. They cannot be accessed by 
+other functions. Local variables are created when the function is invoked, and 
+destroyed after the complete execution of the function. 
+2. Global variables are variables defined outside the functions. They have file (or 
+program) scope. Thus, global variables are visible to all the functions that are 
+defined following its declaration. 
+3. The advantages of global variables in pr ograms are that global variables are the 
+simplest way of communication between functions and they are efficient. The 
+disadvantages of programs using global variables are that they are less readable 
+and more difficult to debug and modify as any functions in the program can 
+change the value of the global variables. 
+4. Therefore, it is a good programming practice to use local variables, and use 
+parameter passing between functions for communication between functions. In 
+this way, the value of each variable in the function is protected.
+5. It is strongly discouraged to use global variables. Instead you should use 
+parameter passing between functions to achieve the same effect. So that errors 
+can be localized within each function for easy debugging.
+29Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+30
+#include <stdio.h>
+int g_var =5 ; / / global variable – has file scope
+int fn1(int, int);
+float fn2(float);
+int main( ) {
+char reply; // local - these two variables are only
+int num; // known inside main() function - block scope
+…
+}
+int fn1(int x, int y) // local x,y - formal parameters are only
+( // known inside this function – block scope
+float fnum; // local - these two variables are known
+int temp; // in this function only – block scope
+g_var += 10;
+...
+}
+float fn2(float n){
+float temp; // local and block scope
+...
+}
+Local and Global Variables: Example
+Local and Global Variables: Example
+1. In the example program,  the global variable g_var is declared outside the 
+main() function. Global variables will have the file scope. 
+2. The variables fnum and temp are local variables which will have block scope 
+and are only visible inside the function fn1.
+30Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+31
+• Static variables can be defined inside or outside a function using the
+static keyword.
+– The duration of a static variable is fixed.
+– Static variables are created at the start of the program and are
+destroyed only at the end of program execution. That is, they exist
+throughout program execution once they are created.
+•I f a static variable is defined and initialized, it is then initialized once
+when the storage is allocated. If a static variable is defined, but not
+initialized, it will be initialized to zero by the compiler.
+• Static variables are very useful when we need to write functions that
+retain values between functions.
+Static Variables
+• We may use global variables to achieve the same 
+purpose. However, static variables are preferable 
+as they are local variables to the functions, and the 
+shortcomings of global variables can be avoided. 
+Static Variables
+1. A static variable may be defined inside or outside a function's body. The 
+duration of a static variable is fixed. 
+2. Static variables are created at the st art of the program and are destroyed only 
+at the end of program execution. 
+3. We can define static variables inside a function's body by changing an 
+automatic variable using the keyword static. 
+4. If a static variable is defined and initiali zed, it is then initialized once when the 
+storage is allocated. If a static variable is defined, but not initialized, it will be 
+initialized to zero by the compiler. 
+5. The initialization is done when the storag e is allocated. If the static variable is 
+defined inside a function's body, then the variable is only visible by the block 
+containing the variable. 
+6. Static variables are very useful when we need to write functions that retain 
+values between functions. 
+7. We may use global variables to achi eve the same purpose. However, static 
+variables are preferable as they are local variables to the functions, and the 
+shortcomings of global variables can be avoided. 
+31Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+32
+#include <stdio.h>
+void function();
+int main()
+{
+int i;
+for (i=0; i<3; i++) // calling the fn three times
+function();
+return 0;
+}
+void function()
+{
+static int static_var =0 ; / *s t a t i cv a r i a b l e* /
+int local_var =0 ; / *l o c a lv a r i a b l e* /
+++static_var;
+++local_var;
+printf("Static variable: %d\n", static_var);
+printf(“Local variable: %d\n", local_var);
+}
+Output
+Static variable: 1
+Local variable: 1
+Static variable: 2
+Local variable: 1
+Static variable: 3
+Local variable: 1
+Note:
+Local variable –t h e  v a r i a b l e  
+disappears after each 
+function execution.
+Static variable (like global)–
+the variable stays until the
+end of program execution.
+Static Variables
+Static Variables
+1. In the example program,  the static variable static_var is declared and initialized 
+only once when storage is allocated at the start of the program. The value of 
+the static variable is retained for different calls to function(). The value stored in 
+the static variable will remain until the end of program execution. This is 
+different from the local_var variable as it is created and initialized every time 
+when function() is called. However, since the static variable static_var is 
+declared inside function(), it is only visible inside function().
+32Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+33
+33
+Functions
+‒Function Definition
+‒Function Prototypes
+‒Function Flow
+‒Parameter Passing: Call by Value
+‒Storage Scope of Variables
+‒Functional Decomposition
+Functions
+1. Here, we discuss functional decomposition.
+Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+34
+#include <stdio.h>
+#define ...
+int main()
+{
+.....
+} /* line 20 */
+float f1(float h)
+{
+.....
+} /* line 55*/
+......
+void f18()
+{
+......
+} /* line 1560 */
+#include <stdio.h>
+#define ...
+int main()
+{
+.....
+.....
+.....
+.....
+.....
+.....
+.....
+.....
+.....
+.....
+.....
+} /* end. line 2000 */
+Functional Decomposition
+•T h e  main() function contains 
+about 2000 lines of code 
+which is difficult to read and 
+debug.
+• Functional decomposition 
+refers to the top-down 
+stepwise refinement 
+technique that uses the 
+divide-and-conquer strategy 
+to produce smaller functions 
+that are easier to 
+understand. Smaller 
+functions promote software 
+reusability. 
+Functional Decomposition
+1. In the original program, the main() function contains about 2000 lines of code 
+which is difficult to read and debug.
+2. Functional decomposition basically me ans the top-down stepwise refinement 
+technique that uses the divide-and-conquer strategy. It starts with the high level 
+description of the program and decomposes the program into successively 
+smaller components until we arrive at a set of suitably sized functions (or 
+algorithms). We design the code for the individual functions using stepwise 
+refinement. At each level of refinement, we are only concerned with what the 
+lower level functions will do. 
+3. Functional decomposition produces sm aller functions that are easier to 
+understand. Smaller functions promote software reusability. In general, 
+functions should be small, so that they can be developed and tested separately. 
+They should also be independent of each other.
+4. In the example program, it is decomp osed into a number of smaller functions. 
+The main() function will start program execution and call other functions to 
+perform different required operations.
+34Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+35
+Functional Decomposition: Modular Design
+int main() {
+x=f1(…);
+y=f2(…);
+z=f3(…);
+……
+}
+input
+(scanf)
+output
+(printf)
+argument(s)
+return value
+f1(parameters)
+{ return value }
+user
+•C  u s e s  Procedural Programming approach for 
+program development:
+–T h e  main function is responsible for interacting with 
+user to read in or display data, and performing the 
+actions by calling the other functions.
+–T h e  other functions’ input and output are passed 
+using the arguments and return type via the main 
+function.
+• Easier to write and debug programs.
+f2(parameters)
+{ return value }
+f3(parameters)
+{ return value }
+The approach of designing programs as functional modules is called 
+modular design. 
+Menu+options
+Functional Decomposition: Modular Design
+1. Using the functional decomposition and top-down stepwise refinement 
+technique, a problem is broken up into a number of smaller subproblems or 
+functions. We then develop the algorithms for the functions. These functions 
+can then be implemented using a programming language such as C. These 
+functions are also called modules. This approach of designing programs as 
+functional modules is called modular design. The functions or modules should 
+be small and self-contained, so that they can be developed and tested 
+separately. They should also be independent of each other. 
+2. There are a number of advantages for modular design. Modular programs are 
+easier to write and debug, since they can be developed and tested separately. 
+Another advantage is that modular programs can be developed by different 
+programmers as each programmer can work on a single module of the program 
+independently. Moreover, a library of modules can be developed which can 
+then be reused in other programs that require the same implementation. This 
+can reduce program development time and enhances program reliability. 
+Therefore, modular design can simplify program development significantly.
+3. When writing C programs, we use proc edural programming technique, which is 
+different from object-oriented programming paradigm used in Python, Java and 
+C++. 
+4. In procedural programming, a typical structure of a program consists of the 
+35Dr Hui Siu Cheung, CCDS, NTU
+28 December 2024
+main function and other functions for solving a problem. Generally, if the functions are 
+still quite complex, then they can be divided further into smaller functions. And each 
+function should not be longer than a page.
+28 December 2024
+Dr Hui Siu Cheung, CCDS, NTU 35
+36
+Thank you !!!
+28 December 2024
+Dr Hui Siu Cheung, SCSE, NTU 36

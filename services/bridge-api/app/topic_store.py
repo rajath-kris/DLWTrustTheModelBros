@@ -9,13 +9,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .grounding import extract_supported_text
 from .topic_matching import build_material_tokens, score_capture_against_material
 from .topic_models import MaterialSummary, TopicMatchResult, TopicSummary, utc_now_iso
 from .openai_clients import OpenAIVisionClient
 
 
 class TopicStore:
-    _ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".png", ".jpg", ".jpeg"}
+    _ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx", ".pptx", ".png", ".jpg", ".jpeg"}
     _MATCH_THRESHOLD = 0.22
 
     def __init__(self, topics_dir: Path, vision_client: OpenAIVisionClient) -> None:
@@ -286,13 +287,9 @@ class TopicStore:
         extension: str,
         source_path: Path,
     ) -> tuple[str, list[str], str | None]:
-        if extension in {".txt", ".md"}:
-            text = file_bytes.decode("utf-8", errors="replace").strip()
-            warning = None if text else "Uploaded text material is empty after decoding."
-            return text or "No text detected.", [], warning
-
-        if extension == ".pdf":
-            return self._extract_pdf_text(source_path)
+        if extension in {".txt", ".md", ".pdf", ".docx", ".pptx"}:
+            text, warning = extract_supported_text(source_path)
+            return text, [], warning
 
         if extension in {".png", ".jpg", ".jpeg"}:
             extraction = self._vision_client.extract(file_bytes)
@@ -410,5 +407,9 @@ class TopicStore:
             return "pdf"
         if extension in {".txt", ".md"}:
             return "text"
+        if extension == ".docx":
+            return "docx"
+        if extension == ".pptx":
+            return "pptx"
         return "image"
 

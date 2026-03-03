@@ -14,6 +14,43 @@ MAX_TOPICS_PER_DOCUMENT = 6
 MAX_QUESTIONS_PER_TOPIC = 2
 MAX_QUESTIONS_PER_UPLOAD = 12
 TOPIC_EXCERPT_MAX_CHARS = 1800
+FALLBACK_SENTENCE_MAX_CHARS = 180
+LEGACY_GENERIC_SNIPPETS = (
+    "a core principle of",
+    "an unrelated history timeline",
+    "a random syntax list without reasoning",
+    "a hardware purchasing checklist",
+    "when solving a problem on",
+    "memorize an answer pattern without understanding",
+    "skip assumptions and jump to a final answer",
+)
+FALLBACK_STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "into",
+    "your",
+    "about",
+    "when",
+    "where",
+    "which",
+    "using",
+    "their",
+    "there",
+    "these",
+    "those",
+    "should",
+    "could",
+    "would",
+    "while",
+    "what",
+    "why",
+    "how",
+}
 
 
 def _normalize_topic_name(value: str) -> str:
@@ -61,7 +98,7 @@ def extract_topic_candidates(text: str, filename: str, limit: int = MAX_TOPICS_P
         if heading_match:
             candidates.append(heading_match.group(1))
             continue
-        bullet_match = re.match(r"^(?:[-*â€¢]\s+)([A-Za-z][A-Za-z0-9&/(),:+\-\s]{3,90})$", compact)
+        bullet_match = re.match(r"^(?:[-*\u2022]\s+)([A-Za-z][A-Za-z0-9&/(),:+\-\s]{3,90})$", compact)
         if bullet_match:
             candidates.append(bullet_match.group(1))
 
@@ -109,37 +146,125 @@ def _normalize_options(raw_options: object) -> list[str]:
     return normalized
 
 
+def _clean_sentence(value: str, *, max_chars: int = FALLBACK_SENTENCE_MAX_CHARS) -> str | None:
+    compact = " ".join(value.replace("\u2022", " ").split()).strip(" -_:;,.")
+    if len(compact) < 28 or len(compact.split()) < 5:
+        return None
+    if len(compact) <= max_chars:
+        return compact
+    trimmed = compact[: max_chars - 3].rstrip(" ,;:.")
+    return f"{trimmed}..."
+
+
+def _extract_excerpt_sentences(doc_excerpt: str, *, limit: int = 10) -> list[str]:
+    text = doc_excerpt.replace("\r", "\n")
+    raw_parts = re.split(r"(?<=[.!?])\s+|\n+", text)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_parts:
+        sentence = _clean_sentence(raw)
+        if sentence is None:
+            continue
+        key = sentence.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(sentence)
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _tokenize(value: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", value.lower())
+        if len(token) >= 3 and token not in FALLBACK_STOPWORDS
+    }
+
+
+def _sentence_topic_score(sentence: str, *, topic_tokens: set[str]) -> float:
+    if not sentence:
+        return 0.0
+    if not topic_tokens:
+        return float(len(sentence))
+    sentence_tokens = _tokenize(sentence)
+    overlap = len(sentence_tokens & topic_tokens)
+    return float(overlap) * 1000.0 + float(len(sentence_tokens))
+
+
+def _select_fallback_sentences(topic: str, doc_excerpt: str) -> tuple[str, str]:
+    sentences = _extract_excerpt_sentences(doc_excerpt)
+    if not sentences:
+        return (
+            f"The uploaded material frames {topic} as a concept that must be reasoned through, not memorized.",
+            f"The notes for {topic} emphasize using evidence from the problem statement before choosing a method.",
+        )
+
+    topic_tokens = _tokenize(topic)
+    ranked = sorted(
+        sentences,
+        key=lambda sentence: _sentence_topic_score(sentence, topic_tokens=topic_tokens),
+        reverse=True,
+    )
+    primary = ranked[0]
+    secondary = next((candidate for candidate in ranked[1:] if candidate != primary), primary)
+    return primary, secondary
+
+
+def _material_aligned_options(correct: str, *, topic: str) -> list[str]:
+    options = [
+        correct,
+        f"The material says {topic} should be solved by skipping assumptions and jumping to a final answer.",
+        f"The material frames {topic} as unrelated to this topic and not worth analyzing.",
+        f"The material prioritizes memorizing one pattern for {topic} without checking why it works.",
+    ]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for option in options:
+        normalized = option.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(option)
+    return deduped
+
+
+def is_generic_generated_question(item: QuestionBankItem) -> bool:
+    if not item.generated:
+        return False
+    haystack_parts = [item.question, item.concept, item.explanation or "", *item.options]
+    haystack = " ".join(part.lower() for part in haystack_parts if part)
+    return any(snippet in haystack for snippet in LEGACY_GENERIC_SNIPPETS)
+
+
 def _fallback_questions(
     topic: str,
     *,
+    doc_excerpt: str,
     course_id: str,
     parent_topic_id: str,
     doc_id: str | None,
     origin_material_id: str | None,
     origin_topic_id: str,
 ) -> list[QuestionBankItem]:
-    concept = topic
-    q1_options = [
-        f"A core principle of {topic} and how it is applied",
-        f"An unrelated history timeline about {topic}",
-        "A random syntax list without reasoning",
-        "A hardware purchasing checklist",
-    ]
-    q2_options = [
-        "Identify the data/constraints first before choosing a method",
-        "Memorize an answer pattern without understanding",
-        "Skip assumptions and jump to a final answer",
-        "Avoid checking edge cases",
-    ]
+    concept = f"{topic} (uploaded material)"
+    primary_sentence, secondary_sentence = _select_fallback_sentences(topic, doc_excerpt)
+    if secondary_sentence == primary_sentence:
+        secondary_sentence = (
+            f"The uploaded material links {topic} to step-by-step reasoning based on the provided context."
+        )
+    q1_options = _material_aligned_options(primary_sentence, topic=topic)
+    q2_options = _material_aligned_options(secondary_sentence, topic=topic)
     return [
         QuestionBankItem(
             topic=topic,
-            source="sentinel",
+            source="tutorial",
             concept=concept,
-            question=f"Which option best reflects the notes' core focus for {topic}?",
+            question=f"Based on the uploaded material for {topic}, which statement is explicitly supported?",
             options=q1_options,
-            correct_answer=q1_options[0],
-            explanation=f"The notes focus on conceptual understanding and application for {topic}.",
+            correct_answer=primary_sentence,
+            explanation=f"This option quotes the material excerpt tied to {topic}.",
             course_id=course_id,
             topic_id=parent_topic_id,
             origin_doc_id=doc_id,
@@ -149,12 +274,12 @@ def _fallback_questions(
         ),
         QuestionBankItem(
             topic=topic,
-            source="sentinel",
+            source="tutorial",
             concept=concept,
-            question=f"When solving a problem on {topic}, what is the best first step?",
+            question=f"Which additional point also appears in the same uploaded material for {topic}?",
             options=q2_options,
-            correct_answer=q2_options[0],
-            explanation="Start with constraints and structure before executing steps.",
+            correct_answer=secondary_sentence,
+            explanation=f"This choice is another sentence grounded in the same {topic} material.",
             course_id=course_id,
             topic_id=parent_topic_id,
             origin_doc_id=doc_id,
@@ -212,7 +337,7 @@ def _parse_generated_questions(
         parsed.append(
             QuestionBankItem(
                 topic=topic,
-                source="sentinel",
+                source="tutorial",
                 concept=concept,
                 question=question,
                 options=options,
@@ -414,6 +539,7 @@ class QuizSeeder:
     ) -> list[QuestionBankItem]:
         fallback = _fallback_questions(
             topic,
+            doc_excerpt=doc_excerpt,
             course_id=course_id,
             parent_topic_id=parent_topic_id,
             doc_id=doc_id,
@@ -427,12 +553,15 @@ class QuizSeeder:
             "You generate MCQ quiz items from study notes. "
             "Return strict JSON only with shape: "
             '{"questions":[{"concept":"...","question":"...","options":["..."],"correct_answer":"...","explanation":"..."}]}. '
-            "Do not include markdown. Keep questions concise and concept-focused."
+            "Do not include markdown. Keep questions concise and concept-focused. "
+            "Every question and correct answer must be directly supported by the provided excerpt. "
+            "Reuse specific terms from the excerpt and avoid generic placeholders."
         )
         user_prompt = (
             f"Topic: {topic}\n"
             f"Course ID: {course_id}\n"
             f"Topic ID: {parent_topic_id}\n"
+            f"Topic tag (must align): {origin_topic_id}\n"
             f"Generate up to {max_questions} questions from this excerpt:\n"
             f"{doc_excerpt[:TOPIC_EXCERPT_MAX_CHARS]}"
         )

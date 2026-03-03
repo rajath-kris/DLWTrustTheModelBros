@@ -644,6 +644,37 @@
           "updated_at": "2026-03-03T01:58:30.318560Z"
         }
       }
+    },
+    "topic-quick-check": {
+      "topic_id": "topic-quick-check",
+      "topic_name": "Quick",
+      "course_id": "all",
+      "created_at": "2026-03-03T02:41:39.211463Z",
+      "updated_at": "2026-03-03T02:41:39.211463Z",
+      "materials": {}
+    },
+    "topic-random": {
+      "topic_id": "topic-random",
+      "topic_name": "Random",
+      "course_id": "cs1230",
+      "created_at": "2026-03-03T03:41:35.661320Z",
+      "updated_at": "2026-03-03T03:41:57.558011Z",
+      "materials": {
+        "66ab0ef3-7997-4684-bab3-80e3a32891bc": {
+          "material_id": "66ab0ef3-7997-4684-bab3-80e3a32891bc",
+          "topic_id": "topic-random",
+          "material_name": "Chapter_3_-_Functions.pdf",
+          "material_type": "pdf",
+          "original_filename": "Chapter_3_-_Functions.pdf",
+          "source_path": "topic-random/materials/66ab0ef3-7997-4684-bab3-80e3a32891bc/source.pdf",
+          "extracted_path": "topic-random/materials/66ab0ef3-7997-4684-bab3-80e3a32891bc/extracted.txt",
+          "tokens_path": "topic-random/materials/66ab0ef3-7997-4684-bab3-80e3a32891bc/tokens.json",
+          "tokens_count": 662,
+          "parse_warning": null,
+          "created_at": "2026-03-03T03:41:57.558011Z",
+          "updated_at": "2026-03-03T03:41:57.558011Z"
+        }
+      }
     }
   }
 }

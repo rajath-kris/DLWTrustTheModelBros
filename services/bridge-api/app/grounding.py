@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
+import zipfile
 
 
 _WORD_PATTERN = re.compile(r"[^\W_]+(?:_[^\W_]+)?", re.UNICODE)
@@ -221,6 +223,60 @@ def select_top_chunks(query_text: str, chunks: list[str], limit: int = 3) -> lis
     return [chunk for score, chunk in scored[:limit] if score > 0]
 
 
+def _extract_zip_xml_text(
+    path: Path,
+    *,
+    member_prefixes: tuple[str, ...],
+    text_tag_names: set[str],
+    source_label: str,
+) -> tuple[str, str | None]:
+    try:
+        archive = zipfile.ZipFile(path)
+    except Exception as exc:  # noqa: BLE001
+        return "No text detected.", f"{source_label} parse failure: {type(exc).__name__}"
+
+    with archive:
+        xml_members = [
+            name
+            for name in archive.namelist()
+            if name.endswith(".xml") and any(name.startswith(prefix) for prefix in member_prefixes)
+        ]
+        if not xml_members:
+            return "No text detected.", f"{source_label} parsed but no supported XML parts were found."
+
+        parts: list[str] = []
+        parse_failures = 0
+        for member_name in sorted(xml_members):
+            try:
+                xml_bytes = archive.read(member_name)
+                root = ET.fromstring(xml_bytes)
+            except Exception:  # noqa: BLE001
+                parse_failures += 1
+                continue
+
+            fragment_tokens: list[str] = []
+            for node in root.iter():
+                local_name = node.tag.rsplit("}", 1)[-1]
+                if local_name not in text_tag_names:
+                    continue
+                token = (node.text or "").strip()
+                if token:
+                    fragment_tokens.append(token)
+            if fragment_tokens:
+                parts.append(" ".join(fragment_tokens))
+
+        text = "\n".join(parts).strip()
+        if text:
+            warning = None
+            if parse_failures > 0:
+                warning = f"{source_label} partially parsed ({parse_failures} XML part(s) failed)."
+            return text, warning
+
+        if parse_failures > 0:
+            return "No text detected.", f"{source_label} parse failure: no readable XML text nodes were found."
+        return "No text detected.", f"{source_label} parsed but no extractable text was found."
+
+
 def extract_supported_text(path: Path) -> tuple[str, str | None]:
     extension = path.suffix.lower()
     if extension in {".txt", ".md"}:
@@ -251,5 +307,27 @@ def extract_supported_text(path: Path) -> tuple[str, str | None]:
             return "No text detected.", "PDF parsed but no extractable text was found."
         except Exception as exc:  # noqa: BLE001
             return "No text detected.", f"PDF parse failure: {type(exc).__name__}"
+
+    if extension == ".docx":
+        return _extract_zip_xml_text(
+            path,
+            member_prefixes=(
+                "word/document.xml",
+                "word/header",
+                "word/footer",
+                "word/footnotes",
+                "word/endnotes",
+            ),
+            text_tag_names={"t"},
+            source_label="DOCX",
+        )
+
+    if extension == ".pptx":
+        return _extract_zip_xml_text(
+            path,
+            member_prefixes=("ppt/slides/slide",),
+            text_tag_names={"t"},
+            source_label="PPTX",
+        )
 
     return "No text detected.", f"Unsupported document type for grounding: {extension or '(none)'}"

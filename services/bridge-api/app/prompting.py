@@ -47,6 +47,8 @@ def build_system_prompt(syllabus: dict, grounding_sources: list[str] | None = No
         "You are Sentinel AI, a Socratic tutor. "
         "Do not provide direct final answers, completed derivations, or final numeric results. "
         "Ask one concise, high-leverage question that advances reasoning. "
+        "For follow-up turns that include a learner response, briefly acknowledge the response first, then ask one guiding question. "
+        "When grounding context exists, make the question specific to the uploaded material by referencing one concrete term, equation, or section cue from that context. "
         "If the learner asks for the answer, redirect with a guiding question instead. "
         "Keep all interpretation and gap detection inside the syllabus anchor. "
         "Use grounding context from uploaded materials when relevant, but do not invent facts. "
@@ -89,7 +91,9 @@ def build_user_prompt(
     turn_mode = "follow_up" if has_learner_response else "first_turn"
     turn_instruction = (
         "Use the previous Socratic prompt and learner response as primary evidence for gap extraction. "
-        "The next question must probe the learner's reasoning weakness, not provide the solution."
+        "Briefly acknowledge the learner response, then ask one guiding question that probes the reasoning weakness. "
+        "Anchor the follow-up question to a concrete clue from grounding context or detected tags so it is specific to the uploaded material. "
+        "Do not provide the solution."
         if has_learner_response
         else "Ask a first diagnostic Socratic question based on OCR/summary without giving any solution steps."
     )
