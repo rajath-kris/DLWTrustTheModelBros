@@ -1300,6 +1300,38 @@ def _topic_matches_filter(question_topic: str, requested_topic: str) -> bool:
     return (overlap / min_size) >= 0.6
 
 
+def _find_matching_gap_for_quiz_miss(
+    *,
+    state: LearningState,
+    concept: str,
+    course_id: str,
+    topic_id: str | None,
+) -> KnowledgeGap | None:
+    normalized_course = _normalize_course_id(course_id)
+    normalized_topic = _normalize_topic_id(topic_id)
+    normalized_concept = _normalize_concept(concept)
+
+    best_gap: KnowledgeGap | None = None
+    best_score = 0.0
+    for gap in state.gaps:
+        gap_course = _normalize_course_id(gap.course_id)
+        if normalized_course != "all" and gap_course not in {normalized_course, "all"}:
+            continue
+        if normalized_topic:
+            gap_topic = _normalize_topic_id(gap.topic_id)
+            if gap_topic not in {"", normalized_topic}:
+                continue
+        overlap_score = _token_overlap_score(concept, gap.concept)
+        if _normalize_concept(gap.concept) == normalized_concept:
+            overlap_score = 1.0
+        if overlap_score < 0.68:
+            continue
+        if overlap_score > best_score:
+            best_gap = gap
+            best_score = overlap_score
+    return best_gap
+
+
 def _seed_document_topics_and_questions(
     state: LearningState,
     document: CourseDocument,
@@ -3204,6 +3236,7 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
 
     syllabus = _load_syllabus()
     new_gap_ids: list[str] = []
+    updated_gap_ids: list[str] = []
     new_gaps: list[KnowledgeGap] = []
     seen_concepts: set[str] = set()
     for result in question_results:
@@ -3219,6 +3252,40 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
         confidence = _clamp(0.65 + (1.0 - score) * 0.2)
         deadline_score = _deadline_score_for_concept(result.concept or result.topic, syllabus)
         priority_score = _clamp((severity * 0.7) + (deadline_score * 0.3))
+        matched_gap = _find_matching_gap_for_quiz_miss(
+            state=state,
+            concept=concept,
+            course_id=normalized_course_id,
+            topic_id=selected_topic_id,
+        )
+        if matched_gap is not None:
+            merged_severity = _clamp(max(matched_gap.severity, severity))
+            merged_confidence = _clamp(max(matched_gap.confidence, confidence))
+            merged_deadline = _clamp(max(matched_gap.deadline_score, deadline_score))
+            merged_priority = _clamp(
+                max(
+                    matched_gap.priority_score,
+                    priority_score,
+                    (merged_severity * 0.7) + (merged_deadline * 0.3),
+                )
+            )
+            matched_gap.severity = merged_severity
+            matched_gap.confidence = merged_confidence
+            matched_gap.deadline_score = merged_deadline
+            matched_gap.priority_score = merged_priority
+            matched_gap.status = "open"
+            matched_gap.gap_type = matched_gap.gap_type or "concept"
+            matched_gap.basis_question = f"Quiz miss: {result.question_id}"
+            matched_gap.basis_answer_excerpt = (result.user_answer[:320] or None)
+            matched_gap.capture_id = f"quiz-{quiz.quiz_id}"
+            matched_gap.evidence_url = f"quiz://{result.question_id}"
+            if normalized_course_id != "all":
+                matched_gap.course_id = normalized_course_id
+            if selected_topic_id:
+                matched_gap.topic_id = selected_topic_id
+            updated_gap_ids.append(matched_gap.gap_id)
+            continue
+
         gap = KnowledgeGap(
             concept=concept,
             severity=severity,
@@ -3252,6 +3319,7 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
         total_questions=total_questions,
         correct_answers=correct_answers,
         new_gap_count=len(new_gaps),
+        updated_gap_count=len(set(updated_gap_ids)),
     )
 
     return QuizSubmitResponse(
