@@ -2,7 +2,7 @@
 
 ## Demo Note
 
-For judging clarity: we could not reliably fit every feature into a strict two-minute live demo. The system is still hard to run end-to-end on macOS, and setup/stack orchestration on Windows is also non-trivial. Because of that, we recorded and shared an uncut demo video so reviewers can see all implemented features and full runtime behavior without cuts. We also want to acknowledge that parts of this project were built while some team members WHO were operating from an active war zone and we would like to appreciate their committment to this hackathon even while in potential danger.
+For judging clarity: we could not reliably fit every feature into a strict two-minute live demo. The system is still hard to run end-to-end on macOS, and setup/stack orchestration on Windows is also non-trivial. Because of that, we recorded and shared an uncut demo video so reviewers can see all implemented features and full runtime behavior without cuts. We also want to acknowledge that parts of this project were built while some team members who were operating from an active war zone and we would like to appreciate their committment to this hackathon even while in potential danger.
 
 Minimal monorepo scaffold for the `vision.md` loop:
 
