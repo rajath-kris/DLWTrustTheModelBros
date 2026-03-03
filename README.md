@@ -9,6 +9,8 @@ For judging clarity: we could not reliably fit every feature into a strict two-m
 
 https://www.youtube.com/watch?v=ZSyA_XS9AMg
 
+[![Watch the demo](https://img.youtube.com/vi/ZSyA_XS9AMg/hqdefault.jpg)](https://youtu.be/ZSyA_XS9AMg)
+
 Minimal monorepo scaffold for the `vision.md` loop:
 
 - `apps/sentinel-desktop`: The Sentinel + Overlay (`Alt+S`, region capture, floating Socratic bubble).
