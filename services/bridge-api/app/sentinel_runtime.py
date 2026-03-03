@@ -31,11 +31,13 @@ class SentinelRuntimeManager:
                 self._save_metadata(metadata)
             return self._build_status(metadata, detected_pids)
 
-    def start(self) -> SentinelRuntimeActionResponse:
+    def start(self, *, active_course_id: str, active_topic_id: str) -> SentinelRuntimeActionResponse:
         with self._lock:
             metadata = self._load_metadata()
             detected_pids = self._discover_sentinel_pids()
             self._prune_managed_pids(metadata, detected_pids)
+            metadata["active_course_id"] = self._coerce_optional_scope_id(active_course_id)
+            metadata["active_topic_id"] = self._coerce_optional_scope_id(active_topic_id)
 
             if detected_pids:
                 metadata["last_action"] = "start"
@@ -80,6 +82,8 @@ class SentinelRuntimeManager:
             launch_env["SENTINEL_BRIDGE_URL"] = bridge_url
             launch_env["BRIDGE_HOST"] = self._settings.bridge_host
             launch_env["BRIDGE_PORT"] = str(self._settings.bridge_port)
+            launch_env["SENTINEL_ACTIVE_COURSE_ID"] = str(metadata.get("active_course_id") or "")
+            launch_env["SENTINEL_ACTIVE_TOPIC_ID"] = str(metadata.get("active_topic_id") or "")
 
             with log_path.open("a", encoding="utf-8") as log_handle:
                 process = subprocess.Popen(
@@ -213,6 +217,8 @@ class SentinelRuntimeManager:
     def _default_metadata(self) -> dict[str, Any]:
         return {
             "managed_pids": [],
+            "active_course_id": None,
+            "active_topic_id": None,
             "last_action": "none",
             "last_action_at": None,
             "last_error": None,
@@ -228,6 +234,8 @@ class SentinelRuntimeManager:
 
         metadata = self._default_metadata()
         metadata["managed_pids"] = self._coerce_pid_list(payload.get("managed_pids"))
+        metadata["active_course_id"] = self._coerce_optional_scope_id(payload.get("active_course_id"))
+        metadata["active_topic_id"] = self._coerce_optional_scope_id(payload.get("active_topic_id"))
         action = str(payload.get("last_action", "none")).strip().lower()
         metadata["last_action"] = action if action in {"none", "start", "stop"} else "none"
         metadata["last_action_at"] = payload.get("last_action_at")
@@ -237,6 +245,8 @@ class SentinelRuntimeManager:
     def _save_metadata(self, metadata: dict[str, Any]) -> None:
         payload = {
             "managed_pids": self._coerce_pid_list(metadata.get("managed_pids")),
+            "active_course_id": self._coerce_optional_scope_id(metadata.get("active_course_id")),
+            "active_topic_id": self._coerce_optional_scope_id(metadata.get("active_topic_id")),
             "last_action": metadata.get("last_action", "none"),
             "last_action_at": metadata.get("last_action_at"),
             "last_error": metadata.get("last_error"),
@@ -272,6 +282,8 @@ class SentinelRuntimeManager:
             process_count=len(detected_pids),
             detected_pids=detected_pids,
             managed_pids=managed_alive,
+            active_course_id=self._coerce_optional_scope_id(metadata.get("active_course_id")),
+            active_topic_id=self._coerce_optional_scope_id(metadata.get("active_topic_id")),
             last_action=str(metadata.get("last_action", "none")),
             last_action_at=metadata.get("last_action_at"),
             last_error=metadata.get("last_error"),
@@ -323,3 +335,12 @@ class SentinelRuntimeManager:
                 pids.append(pid)
         pids.sort()
         return pids
+
+    @staticmethod
+    def _coerce_optional_scope_id(raw_value: Any) -> str | None:
+        if raw_value is None:
+            return None
+        compact = " ".join(str(raw_value).split()).strip()
+        if not compact:
+            return None
+        return compact

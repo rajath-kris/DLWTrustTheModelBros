@@ -136,6 +136,7 @@ export interface QuestionBankItem {
   course_id: string;
   topic_id?: string | null;
   origin_doc_id?: string | null;
+  origin_material_id?: string | null;
   origin_topic_id?: string | null;
   generated?: boolean;
 }
@@ -246,6 +247,8 @@ export interface SentinelRuntimeStatus {
   process_count: number;
   detected_pids: number[];
   managed_pids: number[];
+  active_course_id: string | null;
+  active_topic_id: string | null;
   last_action: "none" | "start" | "stop";
   last_action_at: string | null;
   last_error: string | null;

@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -128,7 +129,10 @@ class OverlayBubble(QWidget):
         self._interaction_pages: list[InteractionPage] = []
         self._selected_page_index = -1
         self._visible_page_indices: list[int] = []
-        self._max_visible_page_dots = 7
+        self._page_dot_primary_visible = 7
+        self._page_dot_primary_size = 10
+        self._page_dot_mini_size = 6
+        self._page_dot_widgets: dict[int, QPushButton] = {}
         self._prompt_text_max_chars = 230
         self._prompt_message_min_height = 72
         self._interaction_capture_pixmap: QPixmap | None = None
@@ -235,11 +239,30 @@ class OverlayBubble(QWidget):
 
         self._page_rail = QFrame(self._card)
         self._page_rail.setObjectName("PageRail")
-        self._page_rail.setFixedWidth(20)
+        self._page_rail.setFixedWidth(24)
+
+        self._page_rail_scroll = QScrollArea(self._page_rail)
+        self._page_rail_scroll.setObjectName("PageRailScroll")
+        self._page_rail_scroll.setWidgetResizable(True)
+        self._page_rail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._page_rail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._page_rail_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._page_rail_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._page_rail_scroll.viewport().setObjectName("PageRailViewport")
+
+        self._page_dots_container = QWidget(self._page_rail_scroll)
+        self._page_dots_container.setObjectName("PageDotsContainer")
+        self._page_dots_layout = QVBoxLayout()
+        self._page_dots_layout.setContentsMargins(0, 2, 0, 2)
+        self._page_dots_layout.setSpacing(4)
+        self._page_dots_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self._page_dots_container.setLayout(self._page_dots_layout)
+        self._page_rail_scroll.setWidget(self._page_dots_container)
+
         page_rail_layout = QVBoxLayout()
-        page_rail_layout.setContentsMargins(0, 1, 0, 1)
-        page_rail_layout.setSpacing(4)
-        page_rail_layout.addStretch(1)
+        page_rail_layout.setContentsMargins(0, 0, 0, 0)
+        page_rail_layout.setSpacing(0)
+        page_rail_layout.addWidget(self._page_rail_scroll)
         self._page_rail.setLayout(page_rail_layout)
 
         self._message_shell = QFrame(self._card)
@@ -916,54 +939,71 @@ class OverlayBubble(QWidget):
                 turn_index=page.turn_index,
             )
 
-    def _visible_page_window(self) -> list[int]:
-        total = len(self._interaction_pages)
+    def _primary_dot_range(self, total: int, selected: int) -> tuple[int, int]:
         if total <= 0:
-            return []
-        if total <= self._max_visible_page_dots:
-            return list(range(total))
-        selected = self._selected_page_index
-        if selected < 0 or selected >= total:
-            selected = total - 1
-        half = self._max_visible_page_dots // 2
-        start = selected - half
-        end = start + self._max_visible_page_dots
+            return 0, -1
+        if total <= self._page_dot_primary_visible:
+            return 0, total - 1
+
+        current = self._clamp(selected, 0, total - 1)
+        half = self._page_dot_primary_visible // 2
+        start = current - half
+        end = start + self._page_dot_primary_visible - 1
         if start < 0:
             start = 0
-            end = self._max_visible_page_dots
-        if end > total:
-            end = total
-            start = end - self._max_visible_page_dots
-        return list(range(start, end))
+            end = self._page_dot_primary_visible - 1
+        if end >= total:
+            end = total - 1
+            start = max(0, end - self._page_dot_primary_visible + 1)
+        return start, end
 
-    def _refresh_page_dots(self, selected_source: str | None = None) -> None:
-        layout = self._page_rail.layout()
-        if layout is None:
-            return
-        while layout.count() > 1:
-            item = layout.takeAt(0)
+    def _dot_size_for_page(self, index: int, primary_start: int, primary_end: int) -> int:
+        if primary_start <= index <= primary_end:
+            return self._page_dot_primary_size
+        return self._page_dot_mini_size
+
+    def _clear_page_dot_widgets(self) -> None:
+        self._page_dot_widgets.clear()
+        while self._page_dots_layout.count() > 0:
+            item = self._page_dots_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
 
-        self._visible_page_indices = self._visible_page_window()
+    def _refresh_page_dots(self, selected_source: str | None = None) -> None:
+        self._clear_page_dot_widgets()
         in_prompt = self._state == OverlayState.PROMPT
-        self._page_rail.setVisible(in_prompt and bool(self._visible_page_indices))
-        if not in_prompt or not self._visible_page_indices:
+        total = len(self._interaction_pages)
+        self._visible_page_indices = list(range(total))
+        self._page_rail.setVisible(in_prompt and total > 0)
+        if not in_prompt or total <= 0:
             return
 
-        for page_idx in self._visible_page_indices:
-            page = self._interaction_pages[page_idx]
-            dot = QPushButton("", self._page_rail)
+        if self._selected_page_index < 0 or self._selected_page_index >= total:
+            self._selected_page_index = total - 1
+
+        primary_start, primary_end = self._primary_dot_range(total, self._selected_page_index)
+        for page_idx, page in enumerate(self._interaction_pages):
+            is_active = page_idx == self._selected_page_index
+            size = self._dot_size_for_page(page_idx, primary_start, primary_end)
+            if is_active:
+                size = self._page_dot_primary_size
+            variant = "primary" if size == self._page_dot_primary_size else "mini"
+
+            dot = QPushButton("", self._page_dots_container)
             dot.setObjectName("PageDot")
             dot.setCheckable(True)
-            dot.setChecked(page_idx == self._selected_page_index)
+            dot.setChecked(is_active)
             dot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             dot.setCursor(Qt.CursorShape.PointingHandCursor)
-            dot.setFixedSize(10, 10)
+            dot.setProperty("dotVariant", variant)
+            dot.setFixedSize(size, size)
             dot.setToolTip(f"Turn {page.turn_index + 1}")
             dot.clicked.connect(lambda _checked=False, idx=page_idx: self._on_page_dot_clicked(idx))
-            layout.insertWidget(layout.count() - 1, dot, alignment=Qt.AlignmentFlag.AlignHCenter)
+            dot.style().unpolish(dot)
+            dot.style().polish(dot)
+            self._page_dots_layout.addWidget(dot, 0, alignment=Qt.AlignmentFlag.AlignHCenter)
+            self._page_dot_widgets[page_idx] = dot
 
         if selected_source and 0 <= self._selected_page_index < len(self._interaction_pages):
             page = self._interaction_pages[self._selected_page_index]
@@ -976,6 +1016,21 @@ class OverlayBubble(QWidget):
                 turn_index=page.turn_index,
                 source=selected_source,
             )
+        QTimer.singleShot(0, self._center_selected_dot_in_rail)
+
+    def _center_selected_dot_in_rail(self) -> None:
+        if self._state != OverlayState.PROMPT:
+            return
+        dot = self._page_dot_widgets.get(self._selected_page_index)
+        if dot is None:
+            return
+        scroll = self._page_rail_scroll.verticalScrollBar()
+        viewport_h = self._page_rail_scroll.viewport().height()
+        if viewport_h <= 0:
+            return
+        dot_center = dot.y() + (dot.height() // 2)
+        target = dot_center - (viewport_h // 2)
+        scroll.setValue(self._clamp(target, scroll.minimum(), scroll.maximum()))
 
     def _on_page_dot_clicked(self, page_index: int) -> None:
         if self._state != OverlayState.PROMPT:
@@ -1088,6 +1143,7 @@ class OverlayBubble(QWidget):
             width=width,
             height=height,
         )
+        QTimer.singleShot(0, self._center_selected_dot_in_rail)
 
     def _measure_card_target_size(self, min_width: int, max_width: int, available_height: int) -> tuple[int, int]:
         card_hint = self._card.sizeHint()
@@ -1735,21 +1791,79 @@ class OverlayBubble(QWidget):
                 border: none;
             }
 
+            QScrollArea#PageRailScroll {
+                background: transparent;
+                border: none;
+            }
+
+            QWidget#PageRailViewport {
+                background: transparent;
+                border: none;
+            }
+
+            QWidget#PageDotsContainer {
+                background: transparent;
+                border: none;
+            }
+
+            QFrame#PageRail QScrollBar:vertical {
+                background: transparent;
+                width: 4px;
+                margin: 2px 0px;
+            }
+
+            QFrame#PageRail QScrollBar::handle:vertical {
+                background: rgba(186, 205, 225, 92);
+                border-radius: 2px;
+                min-height: 24px;
+            }
+
+            QFrame#PageRail QScrollBar::handle:vertical:hover {
+                background: rgba(206, 222, 239, 136);
+            }
+
+            QFrame#PageRail QScrollBar::add-line:vertical,
+            QFrame#PageRail QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+
+            QFrame#PageRail QScrollBar::add-page:vertical,
+            QFrame#PageRail QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
+
             QPushButton#PageDot {
-                background: rgba(153, 176, 198, 116);
-                border: 1px solid rgba(209, 223, 238, 72);
+                background: transparent;
+                border: 1px solid rgba(204, 221, 239, 150);
                 border-radius: 5px;
                 padding: 0px;
                 margin: 0px;
             }
 
-            QPushButton#PageDot:hover {
-                background: rgba(176, 197, 218, 158);
+            QPushButton#PageDot[dotVariant="primary"]:hover {
+                background: rgba(175, 198, 220, 44);
+                border-color: rgba(223, 236, 250, 196);
             }
 
             QPushButton#PageDot:checked {
                 background: rgba(22, 124, 203, 236);
                 border-color: rgba(116, 184, 236, 196);
+            }
+
+            QPushButton#PageDot[dotVariant="mini"] {
+                background: transparent;
+                border: 1px solid rgba(187, 207, 229, 96);
+                border-radius: 3px;
+            }
+
+            QPushButton#PageDot[dotVariant="mini"]:hover {
+                background: rgba(175, 198, 220, 24);
+                border-color: rgba(209, 226, 243, 136);
+            }
+
+            QPushButton#PageDot[dotVariant="mini"]:checked {
+                background: rgba(22, 124, 203, 188);
+                border-color: rgba(116, 184, 236, 160);
             }
 
             QPushButton#DismissButton {

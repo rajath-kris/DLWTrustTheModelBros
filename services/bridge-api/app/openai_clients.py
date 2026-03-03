@@ -31,6 +31,13 @@ class SocraticOutput:
     gaps: list[dict[str, Any]]
 
 
+@dataclass
+class TopicPickerOutput:
+    topic_id: str
+    confidence: float
+    reason: str | None = None
+
+
 def _extract_json_blob(text: str) -> dict[str, Any] | None:
     try:
         return json.loads(text)
@@ -372,3 +379,83 @@ class OpenAISocraticClient:
             gap["basis_answer_excerpt"] = basis_answer_excerpt
 
         return SocraticOutput(socratic_prompt=prompt, gaps=[gap])
+
+
+class OpenAITopicPickerClient:
+    def __init__(self, settings: Settings) -> None:
+        self._chat_client = _OpenAIChatClient(settings)
+
+    @property
+    def configured(self) -> bool:
+        return self._chat_client.configured
+
+    def pick_topic(
+        self,
+        *,
+        signal_text: str,
+        signal_tags: list[str],
+        topic_options: list[dict[str, str]],
+        min_confidence: float,
+    ) -> TopicPickerOutput | None:
+        if not self._chat_client.configured:
+            return None
+
+        normalized_options: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in topic_options:
+            topic_id = _normalize_text(item.get("topic_id"), max_chars=80)
+            topic_name = _normalize_text(item.get("topic_name"), max_chars=140)
+            if topic_id is None or topic_name is None:
+                continue
+            topic_key = topic_id.strip().lower()
+            if topic_key in seen:
+                continue
+            seen.add(topic_key)
+            normalized_options.append({"topic_id": topic_id, "topic_name": topic_name})
+
+        if not normalized_options:
+            return None
+
+        safe_signal_text = _normalize_text(signal_text, max_chars=2200) or ""
+        compact_tags = [tag for tag in (_normalize_text(item, max_chars=40) for item in signal_tags) if tag]
+        system_prompt = (
+            "You classify a student capture into one existing topic. "
+            "Return strict JSON only with keys: topic_id, confidence, reason. "
+            "topic_id must be one of the provided candidate topic_ids. "
+            "confidence must be a number between 0 and 1."
+        )
+        user_prompt = (
+            "Student capture signal:\n"
+            f"text: {safe_signal_text or '[empty]'}\n"
+            f"tags: {', '.join(compact_tags) if compact_tags else '[none]'}\n"
+            f"candidate_topics: {json.dumps(normalized_options, ensure_ascii=True)}\n"
+            "Pick the best candidate topic_id. If uncertain, use lower confidence."
+        )
+        content = self._chat_client.complete(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.0,
+            max_tokens=180,
+        )
+        if content is None:
+            return None
+
+        blob = _extract_json_blob(content)
+        if not isinstance(blob, dict):
+            return None
+
+        topic_id = _normalize_text(blob.get("topic_id"), max_chars=80)
+        if topic_id is None:
+            return None
+
+        allowed_ids = {item["topic_id"].strip().lower() for item in normalized_options}
+        normalized_topic_id = topic_id.strip().lower()
+        if normalized_topic_id not in allowed_ids:
+            return None
+
+        confidence = max(0.0, min(1.0, _to_float(blob.get("confidence"), 0.0)))
+        if confidence < max(0.0, min(1.0, float(min_confidence))):
+            return None
+
+        reason = _normalize_text(blob.get("reason"), max_chars=260)
+        return TopicPickerOutput(topic_id=topic_id, confidence=confidence, reason=reason)

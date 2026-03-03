@@ -1,0 +1,173 @@
+Content Copyright Nanyang Technological University 1
+Data Structures & Algorithms in Python: Doubly & Circular LinkedLists
+Dr. Owen Noel Newton Fernando
+College of Computing and Data Science (CCDS)
+Content Copyright Nanyang Technological University 22
+Doubly-linked lists
+Here is a doubly-linked list (DLL):
+• Each Link contains a datum, a reference to its successor (if any), and a reference to its 
+predecessor (if any)
+• The header points to the first Link in the list and to the last Link in the list (or contains None’s if 
+the list is empty)
+myDLL
+a b cfirst
+last
+Content Copyright Nanyang Technological University 3
+A DLL’s Link
+Content Copyright Nanyang Technological University 4
+A DLL’s Link (code Explanation)
+This is the constructor for the Link class. It initializes a Link object with data 
+and optional references to the next and previous nodes.
+Parameters:
+datum: The data (or value) to store in this node.
+next: Reference to the next node in the list (default is None).
+previous: Reference to the previous node in the list (default is None).
+Function: Sets the node's data and links to the next and previous nodes. 
+b
+Content Copyright Nanyang Technological University 5
+A DLL’s Link (code Explanation)
+getData(): 
+Returns the data stored in the node.
+Return Value: The data held in self.__data.
+getNext Method():
+Returns the reference to the next node.
+Return Value: The next node in the list (self.__next) or None if there’s no next node
+getPrevious Method():
+Returns the reference to the previous node.
+Return Value: The previous node in the list (self.__previous) or None if there’s no previous 
+node.
+Content Copyright Nanyang Technological University 6
+A DLL’s Link (code Explanation)
+setData(): 
+Updates the data stored in the node.
+Parameters: d - The new data to set in the node.
+setNext():
+Updates the reference to the next node.
+Parameters: link - The new Link object to set as the next node, or None.
+Function:
+Checks if link is either None or an instance of Link. If valid, updates self.__next with link.If 
+invalid, raises an exception with an error message.
+Content Copyright Nanyang Technological University 7
+A DLL’s Link (code Explanation)
+setPrevious():
+Updates the reference to the previous node.
+Parameters: link - The new Link object to set as the previous node, or None.
+Function:
+Checks if link is either None or an instance of Link. If valid, updates self.__previous with 
+link. If invalid, raises an exception with an error message.
+Content Copyright Nanyang Technological University 8
+The DLL class
+Content Copyright Nanyang Technological University 9
+DLL class cont. - Inserting at either end
+The insertFirst method inserts a new node (or link) at the beginning of the 
+doubly linked list.
+a b cfirst
+last
+Content Copyright Nanyang Technological University 10
+DLL class cont. - Inserting at either end
+The insertLast method inserts a new node (or link) at the end of the doubly 
+linked list.
+a b cfirst
+last
+Content Copyright Nanyang Technological University 11
+Delete a Link from DLL
+Content Copyright Nanyang Technological University 1212
+Deleting a Link from a DLL
+• Link insertion or deletion from a DLL involves changing two links
+• Deletion of the first Link or the last Link is a special case
+• Garbage collection will take care of deleted Link objects
+myDLL
+a b c
+Content Copyright Nanyang Technological University 1313
+DLLs compared to SLLs
+• Advantages:
+• Can be traversed in either 
+direction (may be essential for 
+some programs)
+• Some operations, such as deletion 
+and inserting before a link, 
+become easier
+• Disadvantages:
+• Requires more space
+• List manipulations are slower 
+(because more links must be 
+changed)
+• Greater chance of having bugs 
+(because more links must be 
+manipulated)
+Content Copyright Nanyang Technological University 1414
+Circular Linked lists
+Here is a Circular-linked list based on a Singly Linked List(CLL):
+• Each Link contains a datum, a reference to its successor (if any)
+• The header points to the first Link in the list, and the last Link in the list also points to the first 
+Link forming a continuous loop.
+• Circular Linked Lists can be formed using either a Singly Linked List or a Doubly Linked List. 
+myCLL
+a b cfirst
+Content Copyright Nanyang Technological University 1515
+CLLs compared to SLLs
+• Advantages:
+• Constant Traversal: Traversal from 
+any node will eventually return to 
+the starting node, making circular 
+lists ideal for applications needing 
+repeated cycling.
+• Disadvantages:
+• Risk of Infinite Loops: Errors in 
+traversal logic can easily lead to 
+infinite loops due to the circular 
+structure, especially if stop 
+conditions are missed.
+Content Copyright Nanyang Technological University 1616
+Practical Applications - DLL
+Doubly linked lists (DLLs) are useful in applications where bidirectional traversal, flexible 
+insertion, and deletion are essential. Here are some common real-world applications of DLLs:
+Browser History Navigation:
+Browsers use doubly linked lists to manage page navigation history. Each page visit is a 
+node, allowing users to move back and forth between pages seamlessly.
+Undo and Redo Operations:
+In text editors and applications with undo/redo functionality, DLLs store each state change, 
+allowing users to go forward or backward in the edit history efficiently.
+Implementation of LRU Cache (Least Recently Used):
+In memory management, doubly linked lists are used to track recently accessed items. 
+Nodes store cache entries, allowing the system to efficiently add new entries and remove 
+the least recently accessed ones, with both directions accessible.
+Content Copyright Nanyang Technological University 1717
+Practical Applications - CLL
+Practical Applications of Circular Linked Lists:
+Round-Robin Scheduling:
+Operating systems use circular linked lists for round-robin scheduling to cycle through 
+processes, moving to the next in a loop, which ensures each task gets its turn.
+Circular Buffers:
+Circular linked lists are used in circular buffers, which are common in streaming, data 
+buffering, and telecommunications, allowing efficient handling of incoming and outgoing 
+data.
+Content Copyright Nanyang Technological University 18
+Cool trick – finding the midpoint of a linked list (single, double, or circular) 
+making only one pass over the nodes
+Want to find the midpoint of a linked list?
+Content Copyright Nanyang Technological University 19
+Cool trick – finding the midpoint of a linked list
+making only one pass over the nodes
+“slow” pointer
+“fast” pointer
+• Slow pointer moves ahead one link per iteration.
+• Fast pointer moves ahead two links per iteration.
+• By the time the fast pointer makes it to the end, the slow 
+pointer will be at the midpoint.
+Content Copyright Nanyang Technological University 20
+Cool trick – finding the midpoint of a linked list
+making only one pass over the nodes
+“slow” pointer
+“fast” pointer
+Content Copyright Nanyang Technological University 21
+Cool trick – finding the midpoint of a linked list
+continued, with pseudo code
+“slow” pointer
+“fast” pointer
+Pseudo code:
+• Set fast and slow to point to the first Link
+• While fast isn’t None and fast.next isn’t None
+•     set slow to slow.next
+•     set fast to fast.next.next
+• slow is now at the end of the first half of the list

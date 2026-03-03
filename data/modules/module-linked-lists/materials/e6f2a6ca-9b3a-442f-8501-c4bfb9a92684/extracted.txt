@@ -1,0 +1,23 @@
+SC1007 Data Structures and Algorithms 
+Tutorial 4: Analysis of Algorithm 
+Q1 The function subset() below takes two linked lists of integers and determines 
+whether the first is a subset of the second. Assume there are no duplicate 
+numbers in each list. 
+(a) When will the worst case happen?
+(b) In the worst case, how many item comparison operations will be made?
+(c) Give the worst-case time complexity of subset as a function of the 
+lengths of the two lists.
+(d) Write down the worst-case time complexity in asymptotic  notations 
+in terms of the lengths of the two lists. 
+4-1 
+Q2 Find the number of print called in the following functions. Write down its 
+time complexity in Θ notation in terms of N.  
+Hint: For repetition structure, compute the number of inner loops and outer 
+loops. For recursive structure, write down the number of print W(N) in terms of 
+W(N-1). Then use backward  substitutions  or forward  substitutions  to express 
+W(N) in terms of N. You may refer to the series shown in lecture.
+4-2 
+Q3 A sequence, x1, x2, . . ., xn, is said to be cyclically sorted if the smallest number 
+in the sequence is xi for some i, and the sequence, xi, xi+1, . . ., xn, x1, x2, . . 
+., xi−1 is sorted in increasing order. Design an algorithm to find the minimal 
+element in the sequence in O(log n) time. What is the worst-case scenario?

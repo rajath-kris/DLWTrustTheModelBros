@@ -1,8 +1,8 @@
 {
-  "managed_pids": [
-    33744
-  ],
-  "last_action": "start",
-  "last_action_at": "2026-03-02T19:05:01.380130Z",
+  "managed_pids": [],
+  "active_course_id": null,
+  "active_topic_id": null,
+  "last_action": "stop",
+  "last_action_at": "2026-03-03T02:21:00.432973Z",
   "last_error": null
 }

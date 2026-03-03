@@ -1,0 +1,275 @@
+Data Structures & Algorithms in Python: Queues
+Dr. Owen Noel Newton Fernando
+College of Computing and Data Science
+• A stack is a last in, first out (LIFO) data structure
+– Items are removed from a stack in the reverse order from the way they were inserted
+• A queue is a first in, first out (FIFO) data structure
+– Items are removed from a queue in the same order as they were inserted
+ 
+• A deque is a double-ended queue--items can be inserted and removed at 
+either end
+• Stacks and queues are special cases of deques. 
+Content Copyright Nanyang Technological University
+Stacks, Queues, and Deques
+2
+Content Copyright Nanyang Technological University
+ 3
+Queue – First In First Out
+Content Copyright Nanyang Technological University
+• Physical world: movies, banks, kerosene queues.
+4
+Examples of queues
+Source: simplilearn
+Content Copyright Nanyang Technological University
+ 5
+List implementation of queues
+• A queue is a first in, first out (FIFO) data structure
+• This is accomplished by inserting at one end (the rear) and deleting from the 
+other (the front)
+• To insert: put new element in  location 4, and set rear to 4
+• To delete: take element from location 0, and set front to 1 
+17 23 97 44
+0      1      2      3      4      5      6     7
+myQueue:
+rear = 3front = 0
+Content Copyright Nanyang Technological University
+ 6
+List implementation of queues
+• Notice how the queue contents “crawl” to the right as 
+elements are inserted and deleted
+• What could go wrong???
+17 23 97 44 333After 
+insertion:
+23 97 44 333After deletion:
+rear = 4front = 1
+17 23 97 44Initial queue:
+rear = 3front = 0
+Content Copyright Nanyang Technological University
+ 7
+Treating the internal list as circular
+• We can treat the Python list holding the queue 
+elements as circular (joined at the ends)
+• Elements were added to this queue in the order 11, 
+22, 33, 44, 55, and will be removed in the same 
+order
+44 55 11 22 33
+0      1      2      3      4      5      6     7
+myQueue:
+rear = 1 front = 5
+Content Copyright Nanyang Technological University
+ 8
+Full and empty queues
+• If the queue were to become completely full, it would look like 
+this:
+• If we were then to remove all eight elements, making the queue 
+completely empty, it could look like this:
+44 55 66 77 88 11 22 33
+0      1      2      3      4      5      6     7
+myQueue:
+rear = 4 front = 5
+0      1      2      3      4      5      6     7
+myQueue:
+rear = 4 front = 5
+This is a problem!
+Content Copyright Nanyang Technological University
+ 9
+Full and empty queues: solution
+• Solution: Keep an additional variable (we use this approach)
+44 55 66 77 88 11 22 33
+0      1      2      3      4      5      6     7
+myQueue:
+rear = 4 front = 5nitems = 8
+0      1      2      3      4      5      6     7
+myQueue:
+rear = 4 front = 5nitems = 0
+Content Copyright Nanyang Technological University
+ 10
+Two approaches to keeping your data structure code safe
+• Return a special value if 
+overflow/underflow attempted 
+by client code.
+– Easy to implement, but puts a burden 
+on the caller to check the return value 
+of such method calls.
+• Throw or force an exception if 
+overflow/underflow attempted by 
+client code.
+– Having a method that throws an 
+exception forces client to wrap code 
+around every single method invocation 
+to attempt to catch an exception. 
+– Some people feel that exceptions are 
+just glorified goto’s.
+Content Copyright Nanyang Technological University
+A safe Queue implementation
+Content Copyright Nanyang Technological University
+A safe Queue implementation
+Constructor (__init__ method)
+The constructor initializes the queue with:
+maxSize: The maximum number of elements the queue can hold.
+que: A list to hold the queue elements.
+front: The position where items are removed; starts at index 1.
+rear: The position where items are inserted; starts at index 0.
+nitems: A counter to keep track of the number of items in the queue.
+Content Copyright Nanyang Technological University
+A safe Queue implementation
+Insert Method (insert)
+This method adds an item to the end (rear) of the queue:
+First checks if the queue is full using isFull. If it is, an exception is raised.
+Advances rear to the next position using wraparound if necessary (sets rear to 0 if it reaches the end of 
+the queue).
+Stores the new item at the updated rear position and increments nitems by 1.
+Content Copyright Nanyang Technological University
+A safe Queue implementation
+Remove Method (remove)
+This method removes and returns the item at the front of the queue:
+Checks if the queue is empty using isEmpty. If it is, raises an exception.
+Retrieves the item at the front position and then sets that position in que to None to release the 
+reference.
+Advances front to the next position, using wraparound if needed, and decreases nitems by 1.
+Content Copyright Nanyang Technological University
+ 15
+Queue client demonstration
+Content Copyright Nanyang Technological University
+• With a list implementation:
+– you can have both overflow and underflow
+– you should set deleted elements to None
+• Which makes the Queue garbage collection friendly
+16
+Queue implementation details
+Content Copyright Nanyang Technological University
+• A deque is a double-ended queue
+• Insertions and deletions can occur at either end:
+– insertLeft(item)
+• Returns True or False if Deque is already Full
+– insertRight(item)
+• Returns True or False if Deque is already Full
+– removeLeft()
+• Returns either the object on the left or None if Deque is empty
+– removeRight()
+• Returns either the object on the right or None if Deque is empty
+• Implementation is similar to that for queues
+• Both stacks and queues can be implemented in terms of a subset of a deque’s methods.
+17
+Deques
+Content Copyright Nanyang Technological University
+ 18
+List implementation of deques
+• “left” and “right” can move back and forth
+• Array is treated as circular, just like with queues
+insertLeft(23):
+removeRight(): 23 97 44
+right = 3
+left = 1
+97 44 333Initial deque:
+right = 4
+left = 2
+23 97 44 333
+right = 3
+left = 1
+Content Copyright Nanyang Technological University
+ 19
+List implementation of deques
+• Just like queues, when deque is empty or full, “right” is exactly one 
+to the left of “left”. Need an nItems attribute to eliminate 
+ambiguity.
+• The center is a good starting place for a deque
+removeLeft():
+removeLeft():
+right = 3
+left = 4
+97 44 333Initial deque:
+right = 4
+left = 2
+removeRight(): 44 right = 3left = 3
+44 333left = 3
+ right = 4
+Content Copyright Nanyang Technological University
+ 20
+Priority Queues
+• Stack: LIFO
+• Queue: FIFO
+• Priority Queue: least value first out.
+• Can implement with an array, but it can be slow.
+• There are far more efficient data structures for priority queues, but 
+for small amounts of data a list implementation should be fine.
+Content Copyright Nanyang Technological University
+ 21
+Array implementation performance
+A priority queue could be implemented as an unordered Array
+Adding an element would take O(1) time (why?)
+Removing an element would take O(n) time (why?)
+Hence, adding and removing an element takes O(n) time
+This is a very inefficient representation
+A priority queue could be implemented as effectively an ordered Array
+Adding an element would take O(n) time (why?)
+Removing an element would take O(1) time (why?)
+Hence, adding and removing an element takes O(n) time
+Again, this is very inefficient
+Content Copyright Nanyang Technological University
+ 22
+Priority Queue implementation
+Content Copyright Nanyang Technological University
+ 23
+Priority Queue implementation
+Constructor (__init__ method):
+Initializes the priority queue with a specified maximum size (size), an optional priority function 
+(pri), and sets up an empty queue.
+Attributes:
+maxSize: Stores the maximum number of items that the queue can hold.
+que: A list initialized to None values to hold the queue elements.
+pri: A function used to determine the priority of an item. If not provided, defaults to a simple 
+identity function (assumes the item itself is the priority).
+nitems: Tracks the current number of items in the queue, initialized to 0.
+Content Copyright Nanyang Technological University
+ 24
+Priority Queue implementation
+insert Method:
+Inserts an item into the priority queue based on its priority.
+Process:
+First checks if the queue is full. If it is, an exception is raised to indicate "Queue overflow.“
+The method starts from the last inserted item (j = self.__nitems - 1) and moves backwards to find the correct position for 
+the new item based on its priority.
+While there are still items in the queue (indicated by j >= 0) and the priority of the new item is greater than or equal to the 
+priority of the item at index j, it shifts items one position to the right (to maintain order).
+Once the correct position is found, the new item is inserted, and the count of items (__nitems) is incremented by 1.
+Content Copyright Nanyang Technological University
+ 25
+Priority Queue implementation
+remove Method:
+Removes and returns the front item (the item with the highest priority) from the priority queue.
+Process:
+Checks if the queue is empty. If it is, an exception is raised to indicate "Queue underflow."
+The front item is accessed from the list at index self.__nitems which is decremented by 1 first.
+The reference to the removed item is set to None, effectively removing it from the queue.
+Content Copyright Nanyang Technological University
+ 26
+Uses of Queues
+Queues are versatile data structures with various use cases across different domains. Here are some common 
+scenarios where queues are particularly useful:
+1.Task Scheduling:
+1. Operating Systems: Queues manage processes in CPU scheduling and task management, where processes are 
+executed in the order they arrive (FIFO).
+2. Print Spooling: Print jobs are managed in a queue, allowing them to be processed in the order they were 
+submitted.
+2.Breadth-First Search (BFS):
+1. In graph traversal algorithms like BFS, queues are used to explore nodes level by level. Nodes are added to the 
+queue as they are discovered and removed as they are processed.
+3.Data Buffering:
+1. Streaming Data: Queues can buffer data streams (e.g., video/audio streaming), allowing data to be processed as it 
+arrives.
+2. Network Data Packets: Queues help manage incoming network packets, ensuring they are processed in the order 
+they are received.
+4.Event Management:
+1. In GUI applications, events (like user interactions) can be managed using queues, allowing them to be handled in 
+the order they occur.
+Content Copyright Nanyang Technological University
+ 27
+Uses of Queues
+CPUTASK 1TASK 2TASK 3TASK 4TASK 5
+TASK TASK 
+TASK TASK 
+TASK TASK 
+TASK TASK 
+TASK 6
+Queued Tasks

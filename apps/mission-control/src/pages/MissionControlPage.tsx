@@ -146,45 +146,29 @@ function UpcomingDeadlinesPanel({
 }
 
 export function MissionControlPage() {
-  const { courseId, courseData, allCoursesSummary, setCourseId, liveAvailable, liveError } = useCourse();
+  const { courseId, courseData, allCoursesSummary, liveAvailable, liveError } = useCourse();
   const navigate = useNavigate();
   const [deadlineBannerDismissed, setDeadlineBannerDismissed] = useState(false);
   const upcomingDeadlines = buildUpcomingDeadlines(courseId, courseData, allCoursesSummary);
+  const hasAnyCourse = allCoursesSummary.length >= 1;
 
   if (courseId === "all") {
     return (
       <div className="page-shell page-fade">
-        <TopBar
-          onExportReport={() => console.log("Export Report (placeholder)")}
-          onUploadDocs={() => navigate("/courses")}
-        />
-        <section className="dashboard-section card mission-home-cta" aria-label="Courses setup">
-          <h2 className="section-heading">SETUP COURSES TO START SENTINEL</h2>
-          <p className="status-line">
-            Home no longer lists course cards. Use Courses to create courses, add topics, upload docs, and bind Sentinel sessions.
-          </p>
-          <div className="mission-home-cta-actions">
-            <button type="button" className="top-bar-btn primary" onClick={() => navigate("/courses")}>
-              Open Courses
-            </button>
-            {allCoursesSummary.length > 0 && (
-              <button
-                type="button"
-                className="top-bar-btn"
-                onClick={() => {
-                  const firstCourseId = allCoursesSummary[0]?.course.id;
-                  if (!firstCourseId) {
-                    return;
-                  }
-                  setCourseId(firstCourseId);
-                  navigate("/");
-                }}
-              >
-                View First Course Dashboard
+        <TopBar />
+        {!hasAnyCourse && (
+          <section className="dashboard-section card mission-home-cta" aria-label="Courses setup">
+            <h2 className="section-heading">SETUP COURSES TO START SENTINEL</h2>
+            <p className="status-line">
+              Home no longer lists course cards. Use Courses to create courses, add topics, upload docs, and bind Sentinel sessions.
+            </p>
+            <div className="mission-home-cta-actions">
+              <button type="button" className="top-bar-btn primary" onClick={() => navigate("/courses")}>
+                Open Courses
               </button>
-            )}
-          </div>
-        </section>
+            </div>
+          </section>
+        )}
         <section className="dashboard-section">
           <UpcomingDeadlinesPanel
             deadlines={upcomingDeadlines}
@@ -218,10 +202,7 @@ export function MissionControlPage() {
 
   return (
     <div className="page-shell page-fade">
-      <TopBar
-        onExportReport={() => console.log("Export Report (placeholder)")}
-        onUploadDocs={() => navigate("/documents")}
-      />
+      <TopBar />
       <DeadlineBanner
         dismissed={deadlineBannerDismissed}
         onDismiss={() => setDeadlineBannerDismissed(true)}

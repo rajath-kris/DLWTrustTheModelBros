@@ -114,7 +114,8 @@ def _fallback_questions(
     *,
     course_id: str,
     parent_topic_id: str,
-    doc_id: str,
+    doc_id: str | None,
+    origin_material_id: str | None,
     origin_topic_id: str,
 ) -> list[QuestionBankItem]:
     concept = topic
@@ -142,6 +143,7 @@ def _fallback_questions(
             course_id=course_id,
             topic_id=parent_topic_id,
             origin_doc_id=doc_id,
+            origin_material_id=origin_material_id,
             origin_topic_id=origin_topic_id,
             generated=True,
         ),
@@ -156,6 +158,7 @@ def _fallback_questions(
             course_id=course_id,
             topic_id=parent_topic_id,
             origin_doc_id=doc_id,
+            origin_material_id=origin_material_id,
             origin_topic_id=origin_topic_id,
             generated=True,
         ),
@@ -168,7 +171,8 @@ def _parse_generated_questions(
     topic: str,
     course_id: str,
     parent_topic_id: str,
-    doc_id: str,
+    doc_id: str | None,
+    origin_material_id: str | None,
     origin_topic_id: str,
     max_questions: int,
 ) -> list[QuestionBankItem]:
@@ -217,6 +221,7 @@ def _parse_generated_questions(
                 course_id=course_id,
                 topic_id=parent_topic_id,
                 origin_doc_id=doc_id,
+                origin_material_id=origin_material_id,
                 origin_topic_id=origin_topic_id,
                 generated=True,
             )
@@ -323,6 +328,7 @@ class QuizSeeder:
                 course_id=document.course_id,
                 parent_topic_id=document.topic_id,
                 doc_id=document.doc_id,
+                origin_material_id=None,
                 max_questions=per_topic_budget,
                 allow_llm=allow_llm,
             )
@@ -335,6 +341,64 @@ class QuizSeeder:
 
         return QuizSeedResult(topics_added=topics_added, questions_added=questions_added, warnings=warnings)
 
+    def seed_material(
+        self,
+        *,
+        state: LearningState,
+        course_id: str,
+        topic_id: str,
+        topic_name: str,
+        material_id: str,
+        material_name: str,
+        extracted_text: str,
+        replace_existing_material_questions: bool = True,
+        allow_llm: bool = True,
+    ) -> QuizSeedResult:
+        warnings: list[str] = []
+        text = " ".join((extracted_text or "").split())
+        if not text:
+            warnings.append("No extractable text found in topic material.")
+            return QuizSeedResult(topics_added=0, questions_added=0, warnings=warnings)
+
+        if replace_existing_material_questions:
+            state.question_bank = [
+                item
+                for item in state.question_bank
+                if not (item.generated and item.origin_material_id == material_id)
+            ]
+
+        topic_candidates = extract_topic_candidates(extracted_text, material_name)
+        if topic_name and topic_name not in topic_candidates:
+            topic_candidates.insert(0, topic_name)
+        topic_candidates = dedupe_topics(topic_candidates or [material_name], limit=MAX_TOPICS_PER_DOCUMENT)
+
+        questions_added = 0
+        total_budget = MAX_QUESTIONS_PER_UPLOAD
+        for candidate_topic_name in topic_candidates:
+            if total_budget <= 0:
+                break
+            excerpt = _topic_excerpt(extracted_text, candidate_topic_name)
+            per_topic_budget = min(MAX_QUESTIONS_PER_TOPIC, total_budget)
+            generated_questions = self._generate_seed_questions(
+                topic=candidate_topic_name,
+                origin_topic_id=topic_id,
+                doc_excerpt=excerpt,
+                course_id=course_id,
+                parent_topic_id=topic_id,
+                doc_id=None,
+                origin_material_id=material_id,
+                max_questions=per_topic_budget,
+                allow_llm=allow_llm,
+            )
+            if not generated_questions:
+                warnings.append(f"No valid generated questions for topic '{candidate_topic_name}'.")
+                continue
+            state.question_bank.extend(generated_questions)
+            questions_added += len(generated_questions)
+            total_budget -= len(generated_questions)
+
+        return QuizSeedResult(topics_added=0, questions_added=questions_added, warnings=warnings)
+
     def _generate_seed_questions(
         self,
         *,
@@ -343,7 +407,8 @@ class QuizSeeder:
         doc_excerpt: str,
         course_id: str,
         parent_topic_id: str,
-        doc_id: str,
+        doc_id: str | None,
+        origin_material_id: str | None,
         max_questions: int,
         allow_llm: bool,
     ) -> list[QuestionBankItem]:
@@ -352,6 +417,7 @@ class QuizSeeder:
             course_id=course_id,
             parent_topic_id=parent_topic_id,
             doc_id=doc_id,
+            origin_material_id=origin_material_id,
             origin_topic_id=origin_topic_id,
         )[:max_questions]
         if not allow_llm or not self._chat_client.configured:
@@ -385,6 +451,7 @@ class QuizSeeder:
             course_id=course_id,
             parent_topic_id=parent_topic_id,
             doc_id=doc_id,
+            origin_material_id=origin_material_id,
             origin_topic_id=origin_topic_id,
             max_questions=max_questions,
         )

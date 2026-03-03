@@ -1,0 +1,215 @@
+SC1007 Tutorial 5
+Hash Table
+Dr Liu Siyuan
+Email: syliu@ntu.edu.sg
+Office: N4-2C-72a
+Hashing
+• To reduce the key space to a reasonable size
+• Hashing is the process of using a hash function to map data of arbitrary size to 
+fixed-size values of keys
+hash function: {all possible keys} → {0, 1, 2, …, h-1}
+• Each key is mapped to a unique index (hash value/code/address)
+• Search time remains O(1) on the average
+• The array is called a hash table
+• Each entry in the hash table is called a hash slot
+• When multiple keys are mapped to the same hash value, a collisionoccurs
+• If there are 𝑛𝑛records stored in a hash table with ℎslots, its load factor is 𝜶𝜶 =
+𝑛𝑛
+ℎ
+• When multiple keys are hashed into the same slot index, these keys are 
+inserted into to singly-linked list, which is known as a chain
+• During searching, the searched key with hash address i is compared with 
+keys in linked list H[i] sequentially
+• In closed address hashing, there will be 𝛼𝛼 number of keys in each linked list 
+on average.
+Closed Addressing: Separate Chaining
+39 92
+h(84) = h(39) = h(92) = i
+i
+T
+84
+Open Addressing
+• When collision occurs, probe is required for the alternate slot 
+• Linear Probing
+• H(k,i) = (H’(k)+i) mod h, i = 0, 1, 2,…, h-1
+• Quadratic Probing
+• H(k,i) = (H’(k)+c1i+c2i2) mod h, i = 0, 1, 2,…, h-1
+• Double Hashing
+• H(k,i) = (H1(k)+iH2(k)) mod h, i = 0, 1, 2,…, h-1
+Q1
+• The type of a hash table H under closed 
+addressing is an array of list references, and 
+under open addressing is an array of keys. 
+Assume a key requires one “word” of memory 
+and a linked list node requires two words, one 
+for the key and one for a list reference. 
+• Consider each of these load factors for closed 
+addressing: 0.5, 1.0, 2.0. Estimate the total space 
+requirement, including space for lists, under 
+closed addressing
+• Assuming that the same amount of space is used 
+for an open addressing hash table, what are the 
+corresponding load factors under open 
+addressing?
+• Let h be hash table size. There are h slots.
+• Load factor 𝛼𝛼 =
+𝑛𝑛
+ℎ
+1. When 𝛼𝛼 = 0.5, under closed addressing
+• n=0.5h, meaning there are 0.5h keys, which 
+are 0.5h nodes. 
+• Each node require 2 words. 
+• Total space is 2n + ℎ = 2 × 0.5ℎ+ ℎ = 2ℎ.
+2.  When α=1
+• There are h nodes
+• Total space: ℎ× 2 + ℎ = 3ℎ.
+3.  When α=2
+• There are 2h nodes
+• Total space: 2ℎ× 2 + ℎ = 5ℎ.
+10 slots, 
+requiring 
+10 words
+2 words
+𝛼𝛼 = 0.5
+• Assuming that the same amount of space is used for an 
+open addressing hash table, what are the 
+corresponding load factors under open addressing?
+1. When there are 0.5h keys, and given 2h space, the 
+corresponding load factor under open addressing is 
+α =
+0.5ℎ
+2ℎ =0.25
+2. When there are 1h keys, and given 3h space, 
+ 𝛼𝛼 = ℎ
+3ℎ = 0.33
+3. When there are 2h keys, and given 5h space, 
+ 𝛼𝛼 = 2ℎ
+5ℎ = 0.4
+20 slots 
+20 words
+Q2
+• Consider a hash table of size n using open address hashing and linear 
+probing. Suppose that the hash table has a load factor of 0.5, describe 
+with a diagram of the hash table, the best-case and the worst-case 
+scenarios for the key distribution in the table. 
+• For each of the two scenarios, compute the average-case time 
+complexity in terms of the number of key comparisons when inserting 
+a new key. You may assume equal probability for the new key to be 
+hashed into each of the n slots. [Note: Checking if a slot is empty is 
+not a key comparison.]
+• Linear Probing: probe the next slot when there is a 
+collision
+• 𝐻𝐻(𝑘𝑘,𝑖𝑖) = (𝑘𝑘+𝑖𝑖) mod n, where 𝑖𝑖∈[0, n-1], if H and H’ are the same 
+hash function
+• There are n slots, α=0.5, there are n/2 keys. 
+• Best case scenario: 
+• The n/2 keys are hashed and distributed evenly into the n slots
+• Assume that equal probability for a key to be hashed into 
+each of the n slots, the average-case time complexity
+ =
+1
+𝑛𝑛 ∑𝑖𝑖=1
+𝑛𝑛
+2 0 +
+1
+𝑛𝑛 ∑𝑖𝑖=1
+𝑛𝑛
+2 1 =
+1
+𝑛𝑛 ×
+𝑛𝑛
+2 = 0.5 = Θ(1)
+2
+4
+6
+2
+1
+0
+3
+4
+5
+6
+0
+n=7
+𝐻𝐻’(𝑘𝑘) = k mod n
+• Linear Probing: probe the next slot when there is a 
+collision
+• 𝐻𝐻(𝑘𝑘,𝑖𝑖) = (𝑘𝑘+𝑖𝑖) mod n, where 𝑖𝑖∈[0, n-1], if H and H’ is the 
+same hash function
+• There are n slots, α=0.5, there are n/2 keys. 
+• Worse case scenario: 
+• The n/2 keys are hashed in consecutive slots. Each key 
+always has to rehash and visit every key in the table. The 
+ith key is hashed and rehash i times to get the slot. 
+• Assume that equal probability for a key to be hashed 
+into each of the n slots, average-time-complexity
+ =
+1
+𝑛𝑛 ∑𝑖𝑖=1
+𝑛𝑛
+2 0 +
+1
+𝑛𝑛 ∑𝑖𝑖=1
+𝑛𝑛
+2 𝑖𝑖 =
+1
+𝑛𝑛 ×
+𝑛𝑛
+2×(1+𝑛𝑛
+2)
+2
+           =
+𝑛𝑛
+8 +
+1
+4 = Θ(𝑛𝑛)
+3
+10
+17
+24
+2
+1
+0
+3
+4
+5
+6
+n=7
+𝐻𝐻’(𝑘𝑘) = k mod n
+Q3
+• Consider a hash function h(k)= k mod m, where m = 2𝑝𝑝 -1 and k is a character 
+string interpreted in radix 2𝑝𝑝 . Show that if string 𝑥𝑥 can be derived from string 𝑦𝑦 
+by permuting its characters, then 𝑥𝑥 and 𝑦𝑦 hash to the same value.
+• A character string interpreted in radix 2𝑝𝑝: Each character in the string is 
+assigned a numeric value. The string is then interpreted as a number in base 2𝑝𝑝. 
+For example, suppose 𝑝𝑝 = 3, so that base 2𝑝𝑝 = 8 is used, and the character 
+values are assigned as follows: 𝑨𝑨 = 𝟏𝟏, 𝑩𝑩 = 𝟐𝟐, 𝑪𝑪 = 𝟑𝟑
+• Then, the string "CAB" is interpreted as: 𝑘𝑘 = 3 × 82 + 1 × 81 + 2 × 80 = 202
+• Similarly, the string "BCA" is interpreted as: 𝑘𝑘 = 2 × 82 + 3 × 81 + 1 × 80 = 153
+• We can see that ℎ(202) = 202 𝑚𝑚𝑜𝑜𝑑𝑑 (23 − 1) = 6, ℎ(153) = 153 𝑚𝑚𝑜𝑜𝑑𝑑 (23 − 1) = 6
+Q3
+• For a string S=C1C2C3…Cn, where each Ci​ is a character with a 
+numerical value ai, its numerical representation in radix 2p is:
+• 𝑘𝑘 = 𝑎𝑎1 × (2𝑝𝑝)𝑛𝑛−1+ 𝑎𝑎2 × (2𝑝𝑝)𝑛𝑛−2+ ⋯+ 𝑎𝑎𝑛𝑛 × (2𝑝𝑝)0
+• Let x and y be two strings that are permutations of each other. This 
+means they contain the same characters, just arranged differently.
+• The numerical representations of x and y are:
+• 𝑘𝑘𝑥𝑥 = 𝑎𝑎1 × (2𝑝𝑝)𝑛𝑛−1+ 𝑎𝑎2 × (2𝑝𝑝)𝑛𝑛−2+ ⋯+ 𝑎𝑎𝑛𝑛 × (2𝑝𝑝)0
+• 𝑘𝑘𝑦𝑦 = 𝑏𝑏1 × (2𝑝𝑝)𝑛𝑛−1+ 𝑏𝑏2 × (2𝑝𝑝)𝑛𝑛−2+ ⋯+ 𝑏𝑏𝑛𝑛 × (2𝑝𝑝)0
+Q3
+• (2𝑝𝑝)𝑖𝑖 𝑚𝑚𝑜𝑜𝑑𝑑 (2𝑝𝑝 −1) = 1, for any integer 𝑖𝑖.  
+• Applying Modulo 2𝑝𝑝 −1
+• 𝑘𝑘𝑥𝑥 𝑚𝑚𝑜𝑜𝑑𝑑 (2𝑝𝑝 −1) = 𝑎𝑎1 + 𝑎𝑎2 + ⋯𝑎𝑎𝑛𝑛 
+• 𝑘𝑘𝑦𝑦𝑚𝑚𝑜𝑜𝑑𝑑 2𝑝𝑝 −1 =  𝑏𝑏1 + 𝑏𝑏2 + ⋯𝑏𝑏𝑛𝑛
+• As 𝑎𝑎1 + 𝑎𝑎2 + ⋯𝑎𝑎𝑛𝑛 = 𝑏𝑏1 + 𝑏𝑏2 + ⋯𝑏𝑏𝑛𝑛
+• 𝑘𝑘𝑥𝑥 𝑚𝑚𝑜𝑜𝑑𝑑 (2𝑝𝑝 −1) = 𝑘𝑘𝑦𝑦 𝑚𝑚𝑜𝑜𝑑𝑑 (2𝑝𝑝 −1) 
+• ℎ(𝑘𝑘𝑥𝑥) = ℎ(𝑘𝑘𝑦𝑦)
+Q3
+• This property can lead to hash collisions in applications where order 
+matters. 
+• Password Hashing “1234” and “4321” should produce different 
+hashes, but under this scheme, they do not.
+• Database Indexing “ABCD” and “BCDA” mapping to the same hash 
+could cause incorrect lookups.
+• Cryptographic Signatures: Digital signatures should change if even a 
+small character swap happens.

@@ -1,0 +1,19 @@
+SC1007 Data Structures and Algorithms 
+Tutorial 6: Trie 
+Q1 You are given a Trie that stores multiple words. Write a function 
+count_words() to count how many words are stored in the Trie . The 
+function prototype is given as follow:  
+def count_words( self,node):
+Example: For a trie consisting of words: ["cat" , "cap", "bat", "ball"] , the output will be 4. 
+Q2 Given a Trie that stores multiple words, implement a function 
+find_words_with_prefix()  that returns all words that start with a given 
+prefix. The function prototype is given as follow:  
+def find_words_with_prefix( self,node,prefix):
+Example: for a trie consisting of words: ["cat", "cap", "bat", "ball", "car", "cart"], prefix = 
+“ca”, the output will be ['cap', 'car', 'cart', 'cat'] 
+Q3 Given a Trie storing multiple words, write a function 
+find_shortest_word_with_prefix() that returns the shortest word 
+that starts with a given prefix. If no word starts with the prefix, return None. 
+def find_shortest_word_with_prefix( self,node,prefix):
+Example: for a trie consisting of words: ["cat", "cap", "bat", "ball", "car", "cart"], prefix = 
+“ca”, the output will be ['cap', 'car', 'cat'].

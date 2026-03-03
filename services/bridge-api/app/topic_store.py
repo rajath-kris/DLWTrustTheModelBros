@@ -48,26 +48,40 @@ class TopicStore:
                 topics[cleaned_id] = existing
             else:
                 existing["topic_name"] = cleaned_name
-                existing["course_id"] = self._sanitize_course_id(str(existing.get("course_id") or cleaned_course_id))
+                existing_course = self._sanitize_course_id(str(existing.get("course_id") or "all"))
+                if existing_course != "all" and cleaned_course_id == "all":
+                    cleaned_course_id = existing_course
+                existing["course_id"] = cleaned_course_id
                 existing["updated_at"] = now
             self._write_index_unlocked(index)
             return self._topic_summary(existing)
 
-    def list_topics(self, course_id: str | None = None) -> list[TopicSummary]:
+    def list_topics(self, course_id: str | None = None, *, include_shared: bool = True) -> list[TopicSummary]:
         normalized_course_filter = None
         if course_id is not None:
             normalized_course_filter = self._sanitize_course_id(course_id)
+            if normalized_course_filter == "all":
+                normalized_course_filter = None
         with self._lock:
             index = self._read_index_unlocked()
             topics = index.get("topics", {})
             summaries = [self._topic_summary(entry) for entry in topics.values()]
             if normalized_course_filter is not None:
+                allowed_courses = {normalized_course_filter}
+                if include_shared:
+                    allowed_courses.add("all")
                 summaries = [
                     item
                     for item in summaries
-                    if item.course_id in {normalized_course_filter, "all"}
+                    if item.course_id in allowed_courses
                 ]
             return sorted(summaries, key=lambda item: item.updated_at, reverse=True)
+
+    def list_owned_topics(self, course_id: str) -> list[TopicSummary]:
+        normalized_course = self._sanitize_course_id(course_id)
+        if normalized_course == "all":
+            return []
+        return self.list_topics(normalized_course, include_shared=False)
 
     def get_topic(self, topic_id: str) -> TopicSummary | None:
         cleaned_id = self._sanitize_id(topic_id)

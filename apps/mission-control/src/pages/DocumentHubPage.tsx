@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchActiveTopic, fetchTopics, upsertTopic } from "../api";
 import { useCourse } from "../context/CourseContext";
 import { useBrainState } from "../context/BrainStateContext";
@@ -32,7 +32,7 @@ function topicIdFromName(topicName: string): string {
 export function DocumentHubPage() {
   const { courseId, courseData, allCoursesSummary, courses, liveAvailable, liveError } = useCourse();
   const { state, loading, refreshState, uploadCourseDocument, moveCourseDocument, anchorCourseDocument, removeCourseDocument } = useBrainState();
-  const uploadClickRef = useRef<(() => void) | null>(null);
+  const CREATE_TOPIC_OPTION = "__create_topic__";
 
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [topicLoadError, setTopicLoadError] = useState<string | null>(null);
@@ -42,13 +42,15 @@ export function DocumentHubPage() {
   const [newTopicName, setNewTopicName] = useState("");
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
   const [topicCreateError, setTopicCreateError] = useState<string | null>(null);
+  const [topicCreateModalOpen, setTopicCreateModalOpen] = useState(false);
   const selectedTopicCourseId = (courseId === "all" ? selectedCourseId : courseId) || "all";
+  const activeDocumentCourseId = courseId === "all" ? selectedCourseId : courseId;
   const visibleTopics = useMemo(
     () =>
       topics.filter((topic) =>
         selectedTopicCourseId === "all"
           ? true
-          : topic.course_id === "all" || topic.course_id === selectedTopicCourseId
+          : topic.course_id === selectedTopicCourseId
       ),
     [topics, selectedTopicCourseId]
   );
@@ -179,7 +181,7 @@ export function DocumentHubPage() {
   const allLiveDocuments = useMemo<MockDocument[]>(
     () =>
       state.documents
-        .filter((doc) => courseId === "all" || doc.course_id === courseId)
+        .filter((doc) => !activeDocumentCourseId || doc.course_id === activeDocumentCourseId)
         .slice()
         .sort((a, b) => Date.parse(b.uploaded_at) - Date.parse(a.uploaded_at))
         .map((doc) => ({
@@ -195,13 +197,13 @@ export function DocumentHubPage() {
           path: doc.file_url,
           is_anchor: doc.is_anchor,
         })),
-    [state.documents, courseId, topicNameById]
+    [state.documents, activeDocumentCourseId, topicNameById]
   );
 
   const fallbackDocuments = useMemo<MockDocument[] | undefined>(() => {
     if (courseId === "all") {
       return allCoursesSummary.flatMap(({ course, data }) =>
-        data.documents.map((doc) => ({
+        (selectedCourseId && course.id !== selectedCourseId ? [] : data.documents).map((doc) => ({
           ...doc,
           course_id: course.id,
           course_label: formatCourseLabel(course.id),
@@ -209,11 +211,16 @@ export function DocumentHubPage() {
       );
     }
     return courseData?.documents;
-  }, [allCoursesSummary, courseData, courseId]);
+  }, [allCoursesSummary, courseData, courseId, selectedCourseId]);
 
   const documentRows = allLiveDocuments.length > 0 || liveAvailable ? allLiveDocuments : fallbackDocuments;
   const count = documentRows?.length ?? 0;
-  const courseBadge = courseId === "all" ? "All" : formatCourseLabel(courseId);
+  const courseBadge =
+    courseId === "all"
+      ? selectedCourseId
+        ? formatCourseLabel(selectedCourseId)
+        : "All"
+      : formatCourseLabel(courseId);
   const canUpload = Boolean(selectedTopicId) && (courseId !== "all" || Boolean(selectedCourseId));
   const showLiveLoadingHint = loading && allLiveDocuments.length === 0;
 
@@ -269,6 +276,10 @@ export function DocumentHubPage() {
 
   async function handleCreateTopic() {
     const cleanedTopicName = newTopicName.trim().replace(/\s+/g, " ");
+    if (selectedTopicCourseId === "all") {
+      setTopicCreateError("Select a course before creating a topic.");
+      return;
+    }
     if (!cleanedTopicName) {
       setTopicCreateError("Enter a topic name before creating it.");
       return;
@@ -289,6 +300,7 @@ export function DocumentHubPage() {
       setSelectedTopicId(createdTopic.topic_id);
       setSuggestedTopicId(createdTopic.topic_id);
       setNewTopicName("");
+      setTopicCreateModalOpen(false);
     } catch (error) {
       setTopicCreateError(error instanceof Error ? error.message : "Could not create topic.");
     } finally {
@@ -303,15 +315,17 @@ export function DocumentHubPage() {
           <h1>Document Hub</h1>
           <span className="pill pill-course-badge">{courseBadge}</span>
           <span className="pill pill-docs-uploaded">{count} Uploaded</span>
-          <button type="button" className="top-bar-btn primary" onClick={() => uploadClickRef.current?.()} disabled={!canUpload}>
-            + Upload
-          </button>
         </div>
         <div className="docs-upload-controls">
           {courseId === "all" && (
             <label className="docs-upload-control">
               <span>Course</span>
-              <select value={selectedCourseId} onChange={(event) => setSelectedCourseId(event.target.value)} aria-label="Select course for upload">
+              <select
+                className="quiz-topic-select docs-quiz-select"
+                value={selectedCourseId}
+                onChange={(event) => setSelectedCourseId(event.target.value)}
+                aria-label="Select course for upload"
+              >
                 <option value="">Select course</option>
                 {uploadCourseOptions.map((course) => (
                   <option key={course.id} value={course.id}>
@@ -323,8 +337,26 @@ export function DocumentHubPage() {
           )}
           <label className="docs-upload-control">
             <span>Topic</span>
-            <select value={selectedTopicId} onChange={(event) => setSelectedTopicId(event.target.value)} aria-label="Select topic for upload">
-              <option value="">Select topic</option>
+            <select
+              className="quiz-topic-select docs-quiz-select"
+              value={selectedTopicId}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                if (nextValue === CREATE_TOPIC_OPTION) {
+                  setTopicCreateError(null);
+                  setTopicCreateModalOpen(true);
+                  return;
+                }
+                setSelectedTopicId(nextValue);
+              }}
+              aria-label="Select topic for upload"
+            >
+              <option value="" disabled hidden>
+                Select topic
+              </option>
+              <option value={CREATE_TOPIC_OPTION} disabled={selectedTopicCourseId === "all"}>
+                + Create topic...
+              </option>
               {visibleTopics.map((topic) => (
                 <option key={topic.topic_id} value={topic.topic_id}>
                   {topic.topic_name}
@@ -332,35 +364,12 @@ export function DocumentHubPage() {
               ))}
             </select>
           </label>
-          <label className="docs-upload-control docs-upload-control-create-topic">
-            <span>New topic</span>
-            <div className="docs-topic-create-row">
-              <input
-                type="text"
-                value={newTopicName}
-                placeholder="e.g. Linked Lists"
-                aria-label="New topic name"
-                onChange={(event) => setNewTopicName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") {
-                    return;
-                  }
-                  event.preventDefault();
-                  void handleCreateTopic();
-                }}
-              />
-              <button type="button" className="top-bar-btn" onClick={() => void handleCreateTopic()} disabled={isCreatingTopic || !newTopicName.trim()}>
-                {isCreatingTopic ? "Creating..." : "Create topic"}
-              </button>
-            </div>
-          </label>
         </div>
       </header>
 
       {showLiveLoadingHint && <p className="status-line">Loading live documents...</p>}
       {!liveAvailable && <p className="status-line">{liveError ?? "Live data unavailable. Showing fallback data where possible."}</p>}
       {topicLoadError && <p className="status-line error">{topicLoadError}</p>}
-      {topicCreateError && <p className="status-line error">{topicCreateError}</p>}
       {!selectedTopicId && suggestedTopicId && (
         <p className="status-line">
           Suggested topic: {topicNameById.get(suggestedTopicId) || suggestedTopicId}. Select a topic to enable upload.
@@ -377,13 +386,66 @@ export function DocumentHubPage() {
         showRowActions
         uploadEnabled={canUpload}
         uploadRequirementHint={uploadRequirementHint}
-        onUploadClickRef={uploadClickRef}
         onUploadFiles={handleUpload}
         onSetAnchor={handleSetAnchor}
         onMoveTopic={handleMoveTopic}
         onDeleteDocument={handleDelete}
         topicOptions={visibleTopics}
       />
+
+      {topicCreateModalOpen && (
+        <div className="course-create-backdrop" onClick={() => !isCreatingTopic && setTopicCreateModalOpen(false)}>
+          <div className="course-create-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="course-create-header">
+              <h2>Create Topic</h2>
+              <button
+                type="button"
+                className="top-bar-btn"
+                onClick={() => setTopicCreateModalOpen(false)}
+                disabled={isCreatingTopic}
+              >
+                Close
+              </button>
+            </div>
+            <div className="course-create-form">
+              <label className="quiz-config-label" htmlFor="docs-topic-name">
+                Topic Name
+              </label>
+              <input
+                id="docs-topic-name"
+                type="text"
+                className="quiz-count-input"
+                value={newTopicName}
+                placeholder="e.g. Linked Lists"
+                onChange={(event) => setNewTopicName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") {
+                    return;
+                  }
+                  event.preventDefault();
+                  void handleCreateTopic();
+                }}
+                disabled={isCreatingTopic}
+              />
+              {topicCreateError && (
+                <p className="status-line error" role="alert">
+                  {topicCreateError}
+                </p>
+              )}
+              <div className="course-create-actions">
+                <button
+                  type="button"
+                  className="top-bar-btn primary"
+                  onClick={() => void handleCreateTopic()}
+                  disabled={isCreatingTopic}
+                >
+                  {isCreatingTopic ? "Creating..." : "Create Topic"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="docs-page-footer">
         The Syllabus Anchor grounds Sentinel AI in your course boundaries and keeps guidance aligned with your materials.

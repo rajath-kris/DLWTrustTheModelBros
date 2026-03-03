@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { fetchTopicsForCourse } from "../api";
 import { useBrainState } from "../context/BrainStateContext";
 import { useCourse } from "../context/CourseContext";
-import type { QuestionBankItem, QuizRecord, QuizSelectionSummary, QuizSourceType, QuizSubmitResponse } from "../types";
-import { MOCK_QUESTION_BANK, MOCK_QUIZ_COURSES, mockPrepare, mockSubmit } from "../data/mockQuizData";
-
-/** Map app-level course id (sidebar) to quiz question-bank course id. */
-function getQuizCourseId(appCourseId: string): string | null {
-  if (!appCourseId || appCourseId === "all") return null;
-  if (appCourseId === "cs2040") return "dsa";
-  if (appCourseId === "ee2001") return "circuit";
-  return appCourseId;
-}
+import type {
+  QuestionBankItem,
+  QuizRecord,
+  QuizSelectionSummary,
+  QuizSourceType,
+  QuizSubmitResponse,
+  TopicSummary,
+} from "../types";
 
 const ALL_TOPICS = "All Topics";
 const ALL_SOURCES: QuizSourceType[] = ["pyq", "tutorial", "sentinel"];
@@ -79,6 +78,47 @@ function normalized(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function topicTokens(value: string): Set<string> {
+  return new Set(
+    normalized(value)
+      .split(/[^a-z0-9]+/g)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0)
+  );
+}
+
+function topicMatchesFilter(questionTopic: string, selectedTopic: string): boolean {
+  const requested = normalized(selectedTopic);
+  if (requested === normalized(ALL_TOPICS)) {
+    return true;
+  }
+
+  const candidate = normalized(questionTopic);
+  if (!candidate) {
+    return false;
+  }
+  if (candidate === requested) {
+    return true;
+  }
+  if (candidate.includes(requested) || requested.includes(candidate)) {
+    return true;
+  }
+
+  const requestedTokens = topicTokens(requested);
+  const candidateTokens = topicTokens(candidate);
+  if (requestedTokens.size === 0 || candidateTokens.size === 0) {
+    return false;
+  }
+  let overlap = 0;
+  for (const token of requestedTokens) {
+    if (candidateTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+  const minSize = Math.max(1, Math.min(requestedTokens.size, candidateTokens.size));
+  return overlap / minSize >= 0.6;
+}
+
 function scorePercent(result: QuizSubmitResponse): number {
   return Math.round(result.quiz.score * 100);
 }
@@ -107,7 +147,7 @@ export function QuizPage() {
   const { courseId, courseData, setCourseId } = useCourse();
   const { state, loading, error: stateError, liveAvailable, prepareQuiz, submitQuiz } = useBrainState();
   /** Quiz runs in current course context; no course selector in UI. */
-  const quizCourseId = getQuizCourseId(courseId);
+  const activeCourseId = courseId === "all" ? null : courseId;
   const [selectedTopic, setSelectedTopic] = useState<string>(ALL_TOPICS);
   const [selectedSources, setSelectedSources] = useState<QuizSourceType[]>([...ALL_SOURCES]);
   const [questionCount, setQuestionCount] = useState<number>(5);
@@ -118,6 +158,8 @@ export function QuizPage() {
   const [requestError, setRequestError] = useState<string | null>(null);
   const [result, setResult] = useState<QuizSubmitResponse | null>(null);
   const [selectionSummary, setSelectionSummary] = useState<QuizSelectionSummary | null>(null);
+  const [topics, setTopics] = useState<TopicSummary[]>([]);
+  const [topicLoadError, setTopicLoadError] = useState<string | null>(null);
   const [localQuizHistory, setLocalQuizHistory] = useState<QuizRecord[]>(() => {
     try {
       const raw = localStorage.getItem("quiz-history");
@@ -147,28 +189,67 @@ export function QuizPage() {
   }, [session]);
 
   const scopedQuestions = useMemo(() => {
-    if (!quizCourseId) return [];
-    const fromState = state.question_bank.filter((item) => {
-      if (courseId !== "all" && normalized(item.course_id) !== "all" && normalized(item.course_id) !== normalized(courseId)) return false;
-      if (normalized(item.course_id) !== "all" && normalized(item.course_id) !== normalized(quizCourseId)) return false;
-      return true;
+    if (!activeCourseId) return [];
+    return state.question_bank.filter((item) => {
+      return normalized(item.course_id) === "all" || normalized(item.course_id) === normalized(activeCourseId);
     });
-    const fromMock = MOCK_QUESTION_BANK.filter((item) => normalized(item.course_id) === normalized(quizCourseId));
-    return [...fromState, ...fromMock];
-  }, [state.question_bank, courseId, quizCourseId]);
+  }, [state.question_bank, activeCourseId]);
+
+  useEffect(() => {
+    if (!activeCourseId) {
+      setTopics([]);
+      setTopicLoadError(null);
+      return;
+    }
+
+    let active = true;
+    setTopicLoadError(null);
+    void fetchTopicsForCourse(activeCourseId)
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+        setTopics(response.topics);
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+        setTopics([]);
+        setTopicLoadError(error instanceof Error ? error.message : "Could not load topics for this course.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeCourseId]);
 
   const topicOptions = useMemo(() => {
     const topicSet = new Set<string>([ALL_TOPICS]);
-    for (const item of scopedQuestions) {
-      topicSet.add(item.topic);
+    for (const topic of topics) {
+      const topicName = topic.topic_name.trim();
+      if (!topicName) {
+        continue;
+      }
+      topicSet.add(topicName);
     }
-    for (const row of state.topic_mastery) {
-      if (courseId !== "all" && normalized(row.course_id) !== normalized(courseId)) continue;
-      if (quizCourseId && normalized(row.course_id) !== normalized(quizCourseId)) continue;
-      topicSet.add(row.name);
+    for (const item of scopedQuestions) {
+      const topicName = item.topic.trim();
+      if (!topicName) {
+        continue;
+      }
+      topicSet.add(topicName);
     }
     return Array.from(topicSet.values());
-  }, [courseId, scopedQuestions, state.topic_mastery, quizCourseId]);
+  }, [topics, scopedQuestions]);
+
+  const selectedTopicId = useMemo(() => {
+    if (normalized(selectedTopic) === normalized(ALL_TOPICS)) {
+      return null;
+    }
+    const match = topics.find((topic) => normalized(topic.topic_name) === normalized(selectedTopic));
+    return match?.topic_id ?? null;
+  }, [selectedTopic, topics]);
 
   useEffect(() => {
     if (!topicOptions.includes(selectedTopic)) {
@@ -178,13 +259,13 @@ export function QuizPage() {
 
   const eligibleQuestions = useMemo(() => {
     const topicFiltered = scopedQuestions.filter((item) => {
-      if (normalized(selectedTopic) === normalized(ALL_TOPICS)) {
+      if (selectedTopicId && normalized(item.topic_id || "") === normalized(selectedTopicId)) {
         return true;
       }
-      return normalized(item.topic) === normalized(selectedTopic);
+      return topicMatchesFilter(item.topic, selectedTopic);
     });
     return topicFiltered.filter((item) => selectedSources.includes(item.source));
-  }, [scopedQuestions, selectedTopic, selectedSources]);
+  }, [scopedQuestions, selectedTopic, selectedTopicId, selectedSources]);
 
   useEffect(() => {
     const max = Math.max(1, Math.min(25, eligibleQuestions.length));
@@ -194,14 +275,13 @@ export function QuizPage() {
   }, [eligibleQuestions.length, questionCount]);
 
   const history = useMemo(() => {
-    const wantQuizCourse = courseId === "all" ? null : getQuizCourseId(courseId);
     const fromState = state.quizzes.filter((quiz) => {
       if (courseId === "all") return true;
-      return wantQuizCourse ? normalized(quiz.course_id) === normalized(wantQuizCourse) : normalized(quiz.course_id) === normalized(courseId);
+      return normalized(quiz.course_id) === normalized(courseId);
     });
     const fromLocal = localQuizHistory.filter((quiz) => {
       if (courseId === "all") return true;
-      return wantQuizCourse ? normalized(quiz.course_id) === normalized(wantQuizCourse) : normalized(quiz.course_id) === normalized(courseId);
+      return normalized(quiz.course_id) === normalized(courseId);
     });
     const seen = new Set<string>();
     const combined: QuizRecord[] = [];
@@ -225,6 +305,16 @@ export function QuizPage() {
     return map;
   }, [state.courses]);
 
+  const historyCourseOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const quiz of [...state.quizzes, ...localQuizHistory]) {
+      const id = normalized(quiz.course_id);
+      if (!id || id === "all") continue;
+      ids.add(id);
+    }
+    return Array.from(ids.values()).sort((a, b) => a.localeCompare(b));
+  }, [state.quizzes, localQuizHistory]);
+
   function formatHistoryDate(iso: string): string {
     const d = new Date(iso);
     const now = new Date();
@@ -237,9 +327,9 @@ export function QuizPage() {
   }
 
   function handleRetake(item: QuizRecord) {
-    const qCourse = normalized(item.course_id);
-    if (qCourse === "dsa") setCourseId("cs2040");
-    else if (qCourse === "circuit") setCourseId("ee2001");
+    if (item.course_id && item.course_id !== "all") {
+      setCourseId(item.course_id);
+    }
     setSelectedTopic(item.topic);
     setSelectedSources(item.sources.length > 0 ? [...item.sources] : [...ALL_SOURCES]);
     setQuestionCount(Math.min(25, item.total_questions));
@@ -264,35 +354,48 @@ export function QuizPage() {
   }
 
   async function startQuiz() {
-    if (eligibleQuestions.length === 0) {
-      setRequestError("No questions available for the selected topic/source filters.");
+    if (!activeCourseId) {
+      setRequestError("Select a course from the sidebar to start a quiz.");
       return;
     }
     setPreparing(true);
     setRequestError(null);
     try {
-      const desiredCount = Math.max(1, Math.min(25, Math.min(questionCount, eligibleQuestions.length)));
-      let prepared;
-      try {
-        prepared = await prepareQuiz({
-          topic: selectedTopic,
-          sources: selectedSources,
-          question_count: desiredCount,
-          course_id: quizCourseId ?? courseId,
-        });
-      } catch {
-        prepared = null;
-      }
-      if (!prepared || prepared.questions.length === 0) {
-        prepared = mockPrepare(
-          selectedTopic,
-          selectedSources,
-          desiredCount,
-          quizCourseId ?? courseId
-        );
-      }
+      const desiredCount = Math.max(1, Math.min(25, questionCount));
+      const prepared = await prepareQuiz({
+        topic: selectedTopic,
+        sources: selectedSources,
+        question_count: desiredCount,
+        course_id: activeCourseId,
+        topic_id: selectedTopicId ?? undefined,
+      });
       if (!prepared.questions.length) {
-        setRequestError("Quiz preparation returned no questions for this filter set.");
+        if (normalized(selectedTopic) !== normalized(ALL_TOPICS)) {
+          const fallbackPrepared = await prepareQuiz({
+            topic: ALL_TOPICS,
+            sources: selectedSources,
+            question_count: desiredCount,
+            course_id: activeCourseId,
+          });
+          if (fallbackPrepared.questions.length > 0) {
+            setSelectedTopic(ALL_TOPICS);
+            setResult(null);
+            setSelectionSummary(fallbackPrepared.selection_summary);
+            setSession({
+              sessionId: fallbackPrepared.session_id,
+              topic: fallbackPrepared.topic,
+              questions: fallbackPrepared.questions,
+              currentIndex: 0,
+              answers: {},
+              submitted: {},
+            });
+            setRequestError(
+              "No matching questions for the selected topic yet. Started with All Topics instead."
+            );
+            return;
+          }
+        }
+        setRequestError("Quiz preparation returned no questions. Upload topic materials or broaden filters.");
         return;
       }
       setResult(null);
@@ -306,7 +409,7 @@ export function QuizPage() {
         submitted: {},
       });
     } catch (error) {
-      setRequestError(error instanceof Error ? error.message : "Quiz preparation failed.");
+      setRequestError(error instanceof Error ? error.message : "Quiz preparation failed. Check bridge connection and topic/course filters.");
     } finally {
       setPreparing(false);
     }
@@ -349,38 +452,28 @@ export function QuizPage() {
     setSubmitting(true);
     setRequestError(null);
     try {
-      let response: QuizSubmitResponse;
-      try {
-        response = await submitQuiz({
-          topic: session.topic,
-          sources: selectedSources,
-          answers: session.questions.map((item) => ({
-            question_id: item.question_id,
-            user_answer: session.answers[item.question_id] ?? "",
-          })),
-          course_id: session.questions[0]?.course_id ?? quizCourseId ?? courseId,
-          session_id: session.sessionId,
-        });
-      } catch {
-        response = mockSubmit(
-          session.questions,
-          session.answers,
-          session.topic,
-          selectedSources,
-          session.questions[0]?.course_id ?? quizCourseId ?? courseId
-        );
-      }
+      const response = await submitQuiz({
+        topic: session.topic,
+        sources: selectedSources,
+        answers: session.questions.map((item) => ({
+          question_id: item.question_id,
+          user_answer: session.answers[item.question_id] ?? "",
+        })),
+        course_id: session.questions[0]?.course_id ?? activeCourseId ?? courseId,
+        session_id: session.sessionId,
+        topic_id: selectedTopicId ?? undefined,
+      });
       setResult(response);
       setSession(null);
       setLocalQuizHistory((prev) => [response.quiz, ...prev]);
     } catch (error) {
-      setRequestError(error instanceof Error ? error.message : "Quiz submission failed.");
+      setRequestError(error instanceof Error ? error.message : "Quiz submission failed. Please retry with bridge running.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  const startDisabled = preparing || selectedSources.length === 0 || eligibleQuestions.length === 0 || !quizCourseId;
+  const startDisabled = preparing || selectedSources.length === 0 || !activeCourseId || eligibleQuestions.length === 0;
 
   return (
     <div className={`page-shell page-fade quiz-page ${session ? "quiz-page--active" : ""} ${result && !session ? "quiz-page--result" : ""}`}>
@@ -391,13 +484,14 @@ export function QuizPage() {
 
       {loading && <p className="status-line">Loading quiz state…</p>}
       {stateError && <p className="status-line">{stateError}</p>}
+      {topicLoadError && <p className="status-line error">{topicLoadError}</p>}
       {requestError && <p className="status-line error">{requestError}</p>}
 
       <div className="quiz-main">
         <div className="quiz-primary">
           <article className="card">
             <h3>Setup</h3>
-            {!quizCourseId ? (
+            {!activeCourseId ? (
               <p className="quiz-no-course">
                 Select a course from the sidebar to take a quiz in that course.
               </p>
@@ -786,9 +880,9 @@ export function QuizPage() {
               style={{ marginBottom: "1rem", maxWidth: 240 }}
             >
               <option value="all">All courses</option>
-              {MOCK_QUIZ_COURSES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              {historyCourseOptions.map((id) => (
+                <option key={id} value={id}>
+                  {courseNameById.get(id) ?? id}
                 </option>
               ))}
             </select>
@@ -805,7 +899,6 @@ export function QuizPage() {
                 const pct = Math.round(item.score * 100);
                 const scoreClass = pct >= 80 ? "score-high" : pct >= 50 ? "score-mid" : "score-low";
                 const courseLabel =
-                  MOCK_QUIZ_COURSES.find((c) => c.id === item.course_id)?.name ??
                   courseNameById.get(normalized(item.course_id)) ??
                   item.course_id;
                 return (

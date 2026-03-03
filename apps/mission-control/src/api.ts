@@ -121,11 +121,18 @@ export async function fetchTopics(): Promise<TopicListResponse> {
 }
 
 export async function fetchTopicsForCourse(courseId: string): Promise<TopicListResponse> {
-  const response = await fetch(
-    `${API_BASE}/api/v1/topics?course_id=${encodeURIComponent(courseId)}`
-  );
+  const response = await fetch(`${API_BASE}/api/v1/courses/${encodeURIComponent(courseId)}/topics`);
   if (!response.ok) {
-    throw new Error(`Topics request failed: ${response.status}`);
+    let detail = `Topics request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload?.detail) {
+        detail = `Topics request failed: ${payload.detail}`;
+      }
+    } catch {
+      // Keep fallback status text.
+    }
+    throw new Error(detail);
   }
   return (await response.json()) as TopicListResponse;
 }
@@ -300,12 +307,28 @@ export async function fetchSentinelRuntimeStatus(): Promise<SentinelRuntimeStatu
   return (await response.json()) as SentinelRuntimeStatus;
 }
 
-export async function startSentinelRuntime(): Promise<SentinelRuntimeActionResponse> {
+export async function startSentinelRuntime(courseId: string, topicId: string): Promise<SentinelRuntimeActionResponse> {
   const response = await fetch(`${API_BASE}/api/v1/sentinel/runtime/start`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      course_id: courseId.trim(),
+      topic_id: topicId.trim(),
+    }),
   });
   if (!response.ok) {
-    throw new Error(`Start sentinel runtime failed: ${response.status}`);
+    let detail = `Start sentinel runtime failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload?.detail) {
+        detail = `Start sentinel runtime failed: ${payload.detail}`;
+      }
+    } catch {
+      // Keep fallback status text.
+    }
+    throw new Error(detail);
   }
   return (await response.json()) as SentinelRuntimeActionResponse;
 }

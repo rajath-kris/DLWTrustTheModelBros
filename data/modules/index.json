@@ -1,6 +1,6 @@
 {
-  "active_module_id": "module-linked-lists",
-  "modules": {
+  "active_topic_id": "module-linked-lists",
+  "topics": {
     "module-fallback-grounding": {
       "module_id": "module-fallback-grounding",
       "module_name": "Fallback Grounding",
@@ -19,7 +19,8 @@
           "tokens_count": 13,
           "parse_warning": null,
           "created_at": "2026-03-02T09:47:19.059997Z",
-          "updated_at": "2026-03-02T09:47:19.059997Z"
+          "updated_at": "2026-03-02T09:47:19.059997Z",
+          "topic_id": "module-fallback-grounding"
         },
         "d0c0f26e-b0cf-41d9-8873-422e47ac743e": {
           "material_id": "d0c0f26e-b0cf-41d9-8873-422e47ac743e",
@@ -33,7 +34,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T09:47:57.764942Z",
-          "updated_at": "2026-03-02T09:47:57.764942Z"
+          "updated_at": "2026-03-02T09:47:57.764942Z",
+          "topic_id": "module-fallback-grounding"
         },
         "ab2f084d-85c2-4cb9-99fa-7df85f98cb5a": {
           "material_id": "ab2f084d-85c2-4cb9-99fa-7df85f98cb5a",
@@ -47,7 +49,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T09:49:17.610498Z",
-          "updated_at": "2026-03-02T09:49:17.610498Z"
+          "updated_at": "2026-03-02T09:49:17.610498Z",
+          "topic_id": "module-fallback-grounding"
         },
         "e212dcb7-e860-4314-9338-617d75daa5dc": {
           "material_id": "e212dcb7-e860-4314-9338-617d75daa5dc",
@@ -61,7 +64,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T09:52:10.113058Z",
-          "updated_at": "2026-03-02T09:52:10.113058Z"
+          "updated_at": "2026-03-02T09:52:10.113058Z",
+          "topic_id": "module-fallback-grounding"
         },
         "ddcd4607-db43-43ef-8e5a-cc0d1a244a3c": {
           "material_id": "ddcd4607-db43-43ef-8e5a-cc0d1a244a3c",
@@ -75,7 +79,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T09:53:12.132930Z",
-          "updated_at": "2026-03-02T09:53:12.132930Z"
+          "updated_at": "2026-03-02T09:53:12.132930Z",
+          "topic_id": "module-fallback-grounding"
         },
         "335d99ac-9ef1-4052-8d36-63a6b61fea10": {
           "material_id": "335d99ac-9ef1-4052-8d36-63a6b61fea10",
@@ -89,7 +94,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T16:20:33.571498Z",
-          "updated_at": "2026-03-02T16:20:33.571498Z"
+          "updated_at": "2026-03-02T16:20:33.571498Z",
+          "topic_id": "module-fallback-grounding"
         },
         "455d6812-5425-4f80-bf30-27a2250a4748": {
           "material_id": "455d6812-5425-4f80-bf30-27a2250a4748",
@@ -103,7 +109,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T16:22:05.357508Z",
-          "updated_at": "2026-03-02T16:22:05.357508Z"
+          "updated_at": "2026-03-02T16:22:05.357508Z",
+          "topic_id": "module-fallback-grounding"
         },
         "50cf333d-9283-47d4-bd82-94a796ca35e2": {
           "material_id": "50cf333d-9283-47d4-bd82-94a796ca35e2",
@@ -117,7 +124,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T16:22:59.185738Z",
-          "updated_at": "2026-03-02T16:22:59.185738Z"
+          "updated_at": "2026-03-02T16:22:59.185738Z",
+          "topic_id": "module-fallback-grounding"
         },
         "10d91199-51af-484b-8a63-f19bd1bb175a": {
           "material_id": "10d91199-51af-484b-8a63-f19bd1bb175a",
@@ -131,7 +139,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T17:20:06.301706Z",
-          "updated_at": "2026-03-02T17:20:06.301706Z"
+          "updated_at": "2026-03-02T17:20:06.301706Z",
+          "topic_id": "module-fallback-grounding"
         },
         "e8650f9b-5c7e-4b0b-8895-5338202aab8f": {
           "material_id": "e8650f9b-5c7e-4b0b-8895-5338202aab8f",
@@ -145,7 +154,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T17:21:46.046263Z",
-          "updated_at": "2026-03-02T17:21:46.046263Z"
+          "updated_at": "2026-03-02T17:21:46.046263Z",
+          "topic_id": "module-fallback-grounding"
         },
         "51c3044a-62b1-456a-b36c-1756360da910": {
           "material_id": "51c3044a-62b1-456a-b36c-1756360da910",
@@ -159,7 +169,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T17:25:44.384272Z",
-          "updated_at": "2026-03-02T17:25:44.384272Z"
+          "updated_at": "2026-03-02T17:25:44.384272Z",
+          "topic_id": "module-fallback-grounding"
         },
         "743ef131-6c87-4aad-985e-275bb9d2b67e": {
           "material_id": "743ef131-6c87-4aad-985e-275bb9d2b67e",
@@ -173,7 +184,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T18:13:27.111753Z",
-          "updated_at": "2026-03-02T18:13:27.111753Z"
+          "updated_at": "2026-03-02T18:13:27.111753Z",
+          "topic_id": "module-fallback-grounding"
         },
         "68599326-0598-4406-859c-c915e5ec61c2": {
           "material_id": "68599326-0598-4406-859c-c915e5ec61c2",
@@ -187,7 +199,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T18:15:56.367644Z",
-          "updated_at": "2026-03-02T18:15:56.367644Z"
+          "updated_at": "2026-03-02T18:15:56.367644Z",
+          "topic_id": "module-fallback-grounding"
         },
         "f04a5e37-b4b5-4d5f-a534-9069b9cf6463": {
           "material_id": "f04a5e37-b4b5-4d5f-a534-9069b9cf6463",
@@ -201,7 +214,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T18:20:43.916962Z",
-          "updated_at": "2026-03-02T18:20:43.916962Z"
+          "updated_at": "2026-03-02T18:20:43.916962Z",
+          "topic_id": "module-fallback-grounding"
         },
         "72094b08-8b5d-4eb6-a967-97c539db41e2": {
           "material_id": "72094b08-8b5d-4eb6-a967-97c539db41e2",
@@ -215,7 +229,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T19:29:51.504943Z",
-          "updated_at": "2026-03-02T19:29:51.504943Z"
+          "updated_at": "2026-03-02T19:29:51.504943Z",
+          "topic_id": "module-fallback-grounding"
         },
         "2c55049b-9449-44a6-926e-f72d6fe82e40": {
           "material_id": "2c55049b-9449-44a6-926e-f72d6fe82e40",
@@ -229,7 +244,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T19:52:09.870036Z",
-          "updated_at": "2026-03-02T19:52:09.870036Z"
+          "updated_at": "2026-03-02T19:52:09.870036Z",
+          "topic_id": "module-fallback-grounding"
         },
         "b3224192-61f8-42cf-bae8-8722ea18ca7d": {
           "material_id": "b3224192-61f8-42cf-bae8-8722ea18ca7d",
@@ -243,7 +259,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T19:58:30.870896Z",
-          "updated_at": "2026-03-02T19:58:30.870896Z"
+          "updated_at": "2026-03-02T19:58:30.870896Z",
+          "topic_id": "module-fallback-grounding"
         },
         "3a333e09-b946-4215-a262-ff901c3e9ae6": {
           "material_id": "3a333e09-b946-4215-a262-ff901c3e9ae6",
@@ -257,7 +274,8 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T20:15:34.567743Z",
-          "updated_at": "2026-03-02T20:15:34.567743Z"
+          "updated_at": "2026-03-02T20:15:34.567743Z",
+          "topic_id": "module-fallback-grounding"
         },
         "9b1ae34b-a4c2-483a-bc6c-31d9c20c9362": {
           "material_id": "9b1ae34b-a4c2-483a-bc6c-31d9c20c9362",
@@ -271,31 +289,361 @@
           "tokens_count": 21,
           "parse_warning": null,
           "created_at": "2026-03-02T20:16:15.720624Z",
-          "updated_at": "2026-03-02T20:16:15.720624Z"
+          "updated_at": "2026-03-02T20:16:15.720624Z",
+          "topic_id": "module-fallback-grounding"
         }
-      }
+      },
+      "course_id": "all",
+      "topic_id": "module-fallback-grounding",
+      "topic_name": "Fallback Grounding"
     },
     "module-linked-lists": {
       "module_id": "module-linked-lists",
       "module_name": "Linked Lists",
       "created_at": "2026-03-02T20:43:15.245685Z",
-      "updated_at": "2026-03-02T20:43:15.245685Z",
-      "materials": {}
+      "updated_at": "2026-03-03T01:15:55.108499Z",
+      "materials": {
+        "34d3147f-62a7-4ab7-b6a4-0d88dccc0174": {
+          "material_id": "34d3147f-62a7-4ab7-b6a4-0d88dccc0174",
+          "topic_id": "module-linked-lists",
+          "material_name": "Linked_List_TUT_reindex.pdf",
+          "material_type": "pdf",
+          "original_filename": "b122eaed-a6fd-46eb-995b-c8443fdb3e7e_Linked_List_TUT.pdf",
+          "source_path": "module-linked-lists/materials/34d3147f-62a7-4ab7-b6a4-0d88dccc0174/source.pdf",
+          "extracted_path": "module-linked-lists/materials/34d3147f-62a7-4ab7-b6a4-0d88dccc0174/extracted.txt",
+          "tokens_path": "module-linked-lists/materials/34d3147f-62a7-4ab7-b6a4-0d88dccc0174/tokens.json",
+          "tokens_count": 113,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:13:12.195719Z",
+          "updated_at": "2026-03-03T01:13:12.195719Z"
+        },
+        "ffe99b44-cb8e-4235-bb57-b589fdef72ee": {
+          "material_id": "ffe99b44-cb8e-4235-bb57-b589fdef72ee",
+          "topic_id": "module-linked-lists",
+          "material_name": "Linked_List_TUT_reindex.pdf",
+          "material_type": "pdf",
+          "original_filename": "b122eaed-a6fd-46eb-995b-c8443fdb3e7e_Linked_List_TUT.pdf",
+          "source_path": "module-linked-lists/materials/ffe99b44-cb8e-4235-bb57-b589fdef72ee/source.pdf",
+          "extracted_path": "module-linked-lists/materials/ffe99b44-cb8e-4235-bb57-b589fdef72ee/extracted.txt",
+          "tokens_path": "module-linked-lists/materials/ffe99b44-cb8e-4235-bb57-b589fdef72ee/tokens.json",
+          "tokens_count": 113,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:13:39.939612Z",
+          "updated_at": "2026-03-03T01:13:39.939612Z"
+        },
+        "71f628d2-f517-4d5e-a1e7-6670420b2dd6": {
+          "material_id": "71f628d2-f517-4d5e-a1e7-6670420b2dd6",
+          "topic_id": "module-linked-lists",
+          "material_name": "T5_Solution_-_Hash_Table.pdf",
+          "material_type": "pdf",
+          "original_filename": "T5_Solution_-_Hash_Table.pdf",
+          "source_path": "module-linked-lists/materials/71f628d2-f517-4d5e-a1e7-6670420b2dd6/source.pdf",
+          "extracted_path": "module-linked-lists/materials/71f628d2-f517-4d5e-a1e7-6670420b2dd6/extracted.txt",
+          "tokens_path": "module-linked-lists/materials/71f628d2-f517-4d5e-a1e7-6670420b2dd6/tokens.json",
+          "tokens_count": 280,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:55.000324Z",
+          "updated_at": "2026-03-03T01:15:55.000324Z"
+        },
+        "e6f2a6ca-9b3a-442f-8501-c4bfb9a92684": {
+          "material_id": "e6f2a6ca-9b3a-442f-8501-c4bfb9a92684",
+          "topic_id": "module-linked-lists",
+          "material_name": "T4_-_Analysis_and_Algorithms_and_Searching.pdf",
+          "material_type": "pdf",
+          "original_filename": "T4_-_Analysis_and_Algorithms_and_Searching.pdf",
+          "source_path": "module-linked-lists/materials/e6f2a6ca-9b3a-442f-8501-c4bfb9a92684/source.pdf",
+          "extracted_path": "module-linked-lists/materials/e6f2a6ca-9b3a-442f-8501-c4bfb9a92684/extracted.txt",
+          "tokens_path": "module-linked-lists/materials/e6f2a6ca-9b3a-442f-8501-c4bfb9a92684/tokens.json",
+          "tokens_count": 105,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:55.070202Z",
+          "updated_at": "2026-03-03T01:15:55.070202Z"
+        },
+        "5193e2f0-1430-412b-91f0-dae74ef33c86": {
+          "material_id": "5193e2f0-1430-412b-91f0-dae74ef33c86",
+          "topic_id": "module-linked-lists",
+          "material_name": "T6_-_Trie.pdf",
+          "material_type": "pdf",
+          "original_filename": "T6_-_Trie.pdf",
+          "source_path": "module-linked-lists/materials/5193e2f0-1430-412b-91f0-dae74ef33c86/source.pdf",
+          "extracted_path": "module-linked-lists/materials/5193e2f0-1430-412b-91f0-dae74ef33c86/extracted.txt",
+          "tokens_path": "module-linked-lists/materials/5193e2f0-1430-412b-91f0-dae74ef33c86/tokens.json",
+          "tokens_count": 51,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:55.108499Z",
+          "updated_at": "2026-03-03T01:15:55.108499Z"
+        }
+      },
+      "course_id": "cs2040",
+      "topic_id": "module-linked-lists",
+      "topic_name": "Linked Lists"
     },
     "module-general": {
       "topic_id": "module-general",
       "topic_name": "General Materials",
       "created_at": "2026-03-02T21:00:14.458605Z",
-      "updated_at": "2026-03-02T21:00:14.458605Z",
-      "materials": {}
+      "updated_at": "2026-03-03T01:24:13.923429Z",
+      "materials": {
+        "1fa6e88b-4f4f-4c48-99c6-203bd679dc2c": {
+          "material_id": "1fa6e88b-4f4f-4c48-99c6-203bd679dc2c",
+          "topic_id": "module-general",
+          "material_name": "T6_-_Trie.pdf",
+          "material_type": "pdf",
+          "original_filename": "T6_-_Trie.pdf",
+          "source_path": "module-general/materials/1fa6e88b-4f4f-4c48-99c6-203bd679dc2c/source.pdf",
+          "extracted_path": "module-general/materials/1fa6e88b-4f4f-4c48-99c6-203bd679dc2c/extracted.txt",
+          "tokens_path": "module-general/materials/1fa6e88b-4f4f-4c48-99c6-203bd679dc2c/tokens.json",
+          "tokens_count": 51,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:24:13.923429Z",
+          "updated_at": "2026-03-03T01:24:13.923429Z"
+        }
+      },
+      "course_id": "all"
     },
     "topic-general": {
       "topic_id": "topic-general",
       "topic_name": "General Materials",
       "created_at": "2026-03-02T21:03:44.326808Z",
-      "updated_at": "2026-03-02T21:03:44.326808Z",
-      "materials": {}
+      "updated_at": "2026-03-03T01:15:54.844988Z",
+      "materials": {
+        "fe1b9307-4e09-4f0b-88ac-382c854adf11": {
+          "material_id": "fe1b9307-4e09-4f0b-88ac-382c854adf11",
+          "topic_id": "topic-general",
+          "material_name": "ER_diagram_2025-2026_Sem_2_Solution.pdf",
+          "material_type": "pdf",
+          "original_filename": "ER_diagram_2025-2026_Sem_2_Solution.pdf",
+          "source_path": "topic-general/materials/fe1b9307-4e09-4f0b-88ac-382c854adf11/source.pdf",
+          "extracted_path": "topic-general/materials/fe1b9307-4e09-4f0b-88ac-382c854adf11/extracted.txt",
+          "tokens_path": "topic-general/materials/fe1b9307-4e09-4f0b-88ac-382c854adf11/tokens.json",
+          "tokens_count": 78,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:51.532578Z",
+          "updated_at": "2026-03-03T01:15:51.532578Z"
+        },
+        "3fc9f392-ca2e-4d92-b633-b183691c5b9f": {
+          "material_id": "3fc9f392-ca2e-4d92-b633-b183691c5b9f",
+          "topic_id": "topic-general",
+          "material_name": "L02_-_Linked_List_-_Updated_Slide.pdf",
+          "material_type": "pdf",
+          "original_filename": "L02_-_Linked_List_-_Updated_Slide.pdf",
+          "source_path": "topic-general/materials/3fc9f392-ca2e-4d92-b633-b183691c5b9f/source.pdf",
+          "extracted_path": "topic-general/materials/3fc9f392-ca2e-4d92-b633-b183691c5b9f/extracted.txt",
+          "tokens_path": "topic-general/materials/3fc9f392-ca2e-4d92-b633-b183691c5b9f/tokens.json",
+          "tokens_count": 723,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:53.144619Z",
+          "updated_at": "2026-03-03T01:15:53.144619Z"
+        },
+        "76cacb00-b34e-4d59-9a60-a4e118bcbe1f": {
+          "material_id": "76cacb00-b34e-4d59-9a60-a4e118bcbe1f",
+          "topic_id": "topic-general",
+          "material_name": "L02_-_Linked_Lists.pdf",
+          "material_type": "pdf",
+          "original_filename": "L02_-_Linked_Lists.pdf",
+          "source_path": "topic-general/materials/76cacb00-b34e-4d59-9a60-a4e118bcbe1f/source.pdf",
+          "extracted_path": "topic-general/materials/76cacb00-b34e-4d59-9a60-a4e118bcbe1f/extracted.txt",
+          "tokens_path": "topic-general/materials/76cacb00-b34e-4d59-9a60-a4e118bcbe1f/tokens.json",
+          "tokens_count": 435,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:53.363699Z",
+          "updated_at": "2026-03-03T01:15:53.363699Z"
+        },
+        "c7da2aa4-f0e0-4c92-a4b2-182d5e2eedfa": {
+          "material_id": "c7da2aa4-f0e0-4c92-a4b2-182d5e2eedfa",
+          "topic_id": "topic-general",
+          "material_name": "L03_-_Doubly_and_Circular_Linked_Lists.pdf",
+          "material_type": "pdf",
+          "original_filename": "L03_-_Doubly_and_Circular_Linked_Lists.pdf",
+          "source_path": "topic-general/materials/c7da2aa4-f0e0-4c92-a4b2-182d5e2eedfa/source.pdf",
+          "extracted_path": "topic-general/materials/c7da2aa4-f0e0-4c92-a4b2-182d5e2eedfa/extracted.txt",
+          "tokens_path": "topic-general/materials/c7da2aa4-f0e0-4c92-a4b2-182d5e2eedfa/tokens.json",
+          "tokens_count": 307,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:53.512381Z",
+          "updated_at": "2026-03-03T01:15:53.512381Z"
+        },
+        "19450c11-9fa5-448a-ac3f-43f8120b4037": {
+          "material_id": "19450c11-9fa5-448a-ac3f-43f8120b4037",
+          "topic_id": "topic-general",
+          "material_name": "L04_-_Stacks.pdf",
+          "material_type": "pdf",
+          "original_filename": "L04_-_Stacks.pdf",
+          "source_path": "topic-general/materials/19450c11-9fa5-448a-ac3f-43f8120b4037/source.pdf",
+          "extracted_path": "topic-general/materials/19450c11-9fa5-448a-ac3f-43f8120b4037/extracted.txt",
+          "tokens_path": "topic-general/materials/19450c11-9fa5-448a-ac3f-43f8120b4037/tokens.json",
+          "tokens_count": 375,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:53.666252Z",
+          "updated_at": "2026-03-03T01:15:53.666252Z"
+        },
+        "64d6666c-4238-41b0-9b60-21b4306e34ae": {
+          "material_id": "64d6666c-4238-41b0-9b60-21b4306e34ae",
+          "topic_id": "topic-general",
+          "material_name": "L04_-_Stacks_Updated_Slides.pdf",
+          "material_type": "pdf",
+          "original_filename": "L04_-_Stacks_Updated_Slides.pdf",
+          "source_path": "topic-general/materials/64d6666c-4238-41b0-9b60-21b4306e34ae/source.pdf",
+          "extracted_path": "topic-general/materials/64d6666c-4238-41b0-9b60-21b4306e34ae/extracted.txt",
+          "tokens_path": "topic-general/materials/64d6666c-4238-41b0-9b60-21b4306e34ae/tokens.json",
+          "tokens_count": 480,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:54.097580Z",
+          "updated_at": "2026-03-03T01:15:54.097580Z"
+        },
+        "d238ee31-60d0-4f00-972f-1ad4641b139b": {
+          "material_id": "d238ee31-60d0-4f00-972f-1ad4641b139b",
+          "topic_id": "topic-general",
+          "material_name": "L05_-_Queues.pdf",
+          "material_type": "pdf",
+          "original_filename": "L05_-_Queues.pdf",
+          "source_path": "topic-general/materials/d238ee31-60d0-4f00-972f-1ad4641b139b/source.pdf",
+          "extracted_path": "topic-general/materials/d238ee31-60d0-4f00-972f-1ad4641b139b/extracted.txt",
+          "tokens_path": "topic-general/materials/d238ee31-60d0-4f00-972f-1ad4641b139b/tokens.json",
+          "tokens_count": 420,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:54.765747Z",
+          "updated_at": "2026-03-03T01:15:54.765747Z"
+        },
+        "beb76c0f-0adb-4c14-ab44-9e883dc83d79": {
+          "material_id": "beb76c0f-0adb-4c14-ab44-9e883dc83d79",
+          "topic_id": "topic-general",
+          "material_name": "Linked_List_TUT.pdf",
+          "material_type": "pdf",
+          "original_filename": "Linked_List_TUT.pdf",
+          "source_path": "topic-general/materials/beb76c0f-0adb-4c14-ab44-9e883dc83d79/source.pdf",
+          "extracted_path": "topic-general/materials/beb76c0f-0adb-4c14-ab44-9e883dc83d79/extracted.txt",
+          "tokens_path": "topic-general/materials/beb76c0f-0adb-4c14-ab44-9e883dc83d79/tokens.json",
+          "tokens_count": 113,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:15:54.844988Z",
+          "updated_at": "2026-03-03T01:15:54.844988Z"
+        }
+      },
+      "course_id": "cs2040"
+    },
+    "topic-quiz-seed-cd78cd28": {
+      "topic_id": "topic-quiz-seed-cd78cd28",
+      "topic_name": "Quiz Seed Topic",
+      "course_id": "cs2040",
+      "created_at": "2026-03-03T01:35:37.648977Z",
+      "updated_at": "2026-03-03T01:35:37.668505Z",
+      "materials": {
+        "b3a28ba9-b8e3-478c-a167-1134ad93307d": {
+          "material_id": "b3a28ba9-b8e3-478c-a167-1134ad93307d",
+          "topic_id": "topic-quiz-seed-cd78cd28",
+          "material_name": "Stacks Queue Notes",
+          "material_type": "text",
+          "original_filename": "notes.md",
+          "source_path": "topic-quiz-seed-cd78cd28/materials/b3a28ba9-b8e3-478c-a167-1134ad93307d/source.md",
+          "extracted_path": "topic-quiz-seed-cd78cd28/materials/b3a28ba9-b8e3-478c-a167-1134ad93307d/extracted.txt",
+          "tokens_path": "topic-quiz-seed-cd78cd28/materials/b3a28ba9-b8e3-478c-a167-1134ad93307d/tokens.json",
+          "tokens_count": 13,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:35:37.668505Z",
+          "updated_at": "2026-03-03T01:35:37.668505Z"
+        }
+      }
+    },
+    "topic-quiz-demo-18912cb6": {
+      "topic_id": "topic-quiz-demo-18912cb6",
+      "topic_name": "Quiz Demo Topic",
+      "created_at": "2026-03-03T01:43:47.100095Z",
+      "updated_at": "2026-03-03T01:43:47.259770Z",
+      "materials": {
+        "204d235e-36f3-408b-b6e5-f6cb70eebdf9": {
+          "material_id": "204d235e-36f3-408b-b6e5-f6cb70eebdf9",
+          "topic_id": "topic-quiz-demo-18912cb6",
+          "material_name": "Quiz Demo Material",
+          "material_type": "text",
+          "original_filename": "demo-quiz-material.txt",
+          "source_path": "topic-quiz-demo-18912cb6/materials/204d235e-36f3-408b-b6e5-f6cb70eebdf9/source.txt",
+          "extracted_path": "topic-quiz-demo-18912cb6/materials/204d235e-36f3-408b-b6e5-f6cb70eebdf9/extracted.txt",
+          "tokens_path": "topic-quiz-demo-18912cb6/materials/204d235e-36f3-408b-b6e5-f6cb70eebdf9/tokens.json",
+          "tokens_count": 12,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:43:47.259770Z",
+          "updated_at": "2026-03-03T01:43:47.259770Z"
+        }
+      },
+      "course_id": "ee2001"
+    },
+    "topic-quiz-demo-d2136797": {
+      "topic_id": "topic-quiz-demo-d2136797",
+      "topic_name": "Quiz Demo Topic",
+      "created_at": "2026-03-03T01:44:26.149737Z",
+      "updated_at": "2026-03-03T01:44:26.211802Z",
+      "materials": {
+        "1044b6cc-ad41-4ac1-b67a-b22d8c0ce583": {
+          "material_id": "1044b6cc-ad41-4ac1-b67a-b22d8c0ce583",
+          "topic_id": "topic-quiz-demo-d2136797",
+          "material_name": "Quiz Demo Material",
+          "material_type": "text",
+          "original_filename": "demo-quiz-material.txt",
+          "source_path": "topic-quiz-demo-d2136797/materials/1044b6cc-ad41-4ac1-b67a-b22d8c0ce583/source.txt",
+          "extracted_path": "topic-quiz-demo-d2136797/materials/1044b6cc-ad41-4ac1-b67a-b22d8c0ce583/extracted.txt",
+          "tokens_path": "topic-quiz-demo-d2136797/materials/1044b6cc-ad41-4ac1-b67a-b22d8c0ce583/tokens.json",
+          "tokens_count": 12,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:44:26.211802Z",
+          "updated_at": "2026-03-03T01:44:26.211802Z"
+        }
+      },
+      "course_id": "all"
+    },
+    "topic-debug-openapi": {
+      "topic_id": "topic-debug-openapi",
+      "topic_name": "Debug OpenAPI Topic",
+      "created_at": "2026-03-03T01:49:19.598211Z",
+      "updated_at": "2026-03-03T01:49:19.598211Z",
+      "materials": {},
+      "course_id": "all"
+    },
+    "topic-quiz-demo-f2bac778": {
+      "topic_id": "topic-quiz-demo-f2bac778",
+      "topic_name": "Quiz Demo Topic",
+      "course_id": "cs2040",
+      "created_at": "2026-03-03T01:58:11.857458Z",
+      "updated_at": "2026-03-03T01:58:12.064438Z",
+      "materials": {
+        "2af4981a-fd88-427b-b04b-44e27ed5d8b5": {
+          "material_id": "2af4981a-fd88-427b-b04b-44e27ed5d8b5",
+          "topic_id": "topic-quiz-demo-f2bac778",
+          "material_name": "Quiz Demo Material",
+          "material_type": "text",
+          "original_filename": "demo-quiz-material.txt",
+          "source_path": "topic-quiz-demo-f2bac778/materials/2af4981a-fd88-427b-b04b-44e27ed5d8b5/source.txt",
+          "extracted_path": "topic-quiz-demo-f2bac778/materials/2af4981a-fd88-427b-b04b-44e27ed5d8b5/extracted.txt",
+          "tokens_path": "topic-quiz-demo-f2bac778/materials/2af4981a-fd88-427b-b04b-44e27ed5d8b5/tokens.json",
+          "tokens_count": 12,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:58:12.064438Z",
+          "updated_at": "2026-03-03T01:58:12.064438Z"
+        }
+      }
+    },
+    "topic-quiz-demo-c00ff152": {
+      "topic_id": "topic-quiz-demo-c00ff152",
+      "topic_name": "Quiz Demo Topic",
+      "course_id": "cs2040",
+      "created_at": "2026-03-03T01:58:30.189075Z",
+      "updated_at": "2026-03-03T01:58:30.318560Z",
+      "materials": {
+        "fd71fbf6-0224-486b-bb2a-f99f0454cec1": {
+          "material_id": "fd71fbf6-0224-486b-bb2a-f99f0454cec1",
+          "topic_id": "topic-quiz-demo-c00ff152",
+          "material_name": "Quiz Demo Material",
+          "material_type": "text",
+          "original_filename": "demo-quiz-material.txt",
+          "source_path": "topic-quiz-demo-c00ff152/materials/fd71fbf6-0224-486b-bb2a-f99f0454cec1/source.txt",
+          "extracted_path": "topic-quiz-demo-c00ff152/materials/fd71fbf6-0224-486b-bb2a-f99f0454cec1/extracted.txt",
+          "tokens_path": "topic-quiz-demo-c00ff152/materials/fd71fbf6-0224-486b-bb2a-f99f0454cec1/tokens.json",
+          "tokens_count": 12,
+          "parse_warning": null,
+          "created_at": "2026-03-03T01:58:30.318560Z",
+          "updated_at": "2026-03-03T01:58:30.318560Z"
+        }
+      }
     }
-  },
-  "active_topic_id": null
+  }
 }

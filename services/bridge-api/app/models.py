@@ -213,6 +213,7 @@ class QuestionBankItem(BaseModel):
     course_id: str = "all"
     topic_id: str | None = None
     origin_doc_id: str | None = None
+    origin_material_id: str | None = None
     origin_topic_id: str | None = None
     generated: bool = False
 
@@ -359,11 +360,18 @@ class SentinelSessionContextRequest(BaseModel):
     topic_id: str = Field(min_length=1, max_length=80)
 
 
+class SentinelRuntimeStartRequest(BaseModel):
+    course_id: str = Field(min_length=1, max_length=80)
+    topic_id: str = Field(min_length=1, max_length=80)
+
+
 class SentinelRuntimeStatus(BaseModel):
     running: bool
     process_count: int = Field(ge=0)
     detected_pids: list[int] = Field(default_factory=list)
     managed_pids: list[int] = Field(default_factory=list)
+    active_course_id: str | None = None
+    active_topic_id: str | None = None
     last_action: SentinelRuntimeLastAction = "none"
     last_action_at: str | None = None
     last_error: str | None = None

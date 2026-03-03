@@ -1,0 +1,65 @@
+CLIENT
+Company nameContact person CIDStart dateService tier
+PID
+WIDUSE
+USE
+USE
+SID
+HAS
+SUPPLY
+HAS
+HAS PeriodSerial#
+HASUnit priceEx Del date
+OIDOrder datestatus
+HAS
+HAS
+IS
+SIDOriginal locationTracking number
+HAS
+HAS
+TO
+value
+PURCHASE ORDER
+HAS
+ISA
+Serial#
+ORDER ITEM
+ITEM
+Shipped QtyEx Arr date
+ISASHIP ITEM NameBrandCost
+Price
+LengthWidthHeightHandling requirements
+Category
+PRODUCT
+AddressSize
+TemperatureSecurity
+WAREHOUSE
+Location
+USE
+Code
+ZONE
+INVENTORYrQtyhQtysQty
+oQtyLocationMovementReasons
+countrynamePayment termsLead time
+SUPPLIER
+Shipped date
+Ex Shipped date Ac Shipped date
+SHIPMENT
+Ordered Qty
+EMPLOYEE
+HAS
+HAS
+HAS HAS
+ISAISA ASSIGN
+DO
+SID
+TypeLicenseVID Capacity
+VEHICLELicense Number
+DRIVER
+RID DateTotal DistanceTotal StopsStatus
+ROUTE DELIVERYEst arr timeAct arr timeSequence
+STOP
+Name
+TypeHire Date
+Certification
+License ExpirationSTAFF ASSIGN

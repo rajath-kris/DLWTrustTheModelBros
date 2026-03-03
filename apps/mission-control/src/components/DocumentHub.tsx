@@ -294,7 +294,7 @@ export function DocumentHub({
                     Delete
                   </button>
                   <select
-                    className="doc-hub-topic-select"
+                    className="quiz-topic-select doc-hub-topic-select"
                     aria-label={`Select target topic for ${doc.name}`}
                     value={doc.doc_id ? moveSelectionByDocId[doc.doc_id] ?? (doc.topic_id || "") : ""}
                     disabled={!doc.doc_id || workingDocId === doc.doc_id || topicOptions.length === 0}

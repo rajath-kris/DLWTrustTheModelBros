@@ -214,6 +214,7 @@
           "course_id": { "type": "string" },
           "topic_id": { "type": ["string", "null"] },
           "origin_doc_id": { "type": ["string", "null"] },
+          "origin_material_id": { "type": ["string", "null"] },
           "origin_topic_id": { "type": ["string", "null"] },
           "generated": { "type": "boolean" }
         }

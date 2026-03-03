@@ -5,7 +5,6 @@ import json
 import math
 import re
 import shutil
-from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -44,6 +43,7 @@ from .models import (
     SentinelSessionContext,
     SentinelSessionContextRequest,
     SentinelRuntimeActionResponse,
+    SentinelRuntimeStartRequest,
     SentinelRuntimeStatus,
     SourceContext,
     StudyAction,
@@ -60,7 +60,7 @@ from .topic_models import (
     TopicUpsertRequest,
 )
 from .topic_store import TopicStore
-from .openai_clients import OpenAISocraticClient, OpenAIVisionClient
+from .openai_clients import OpenAISocraticClient, OpenAITopicPickerClient, OpenAIVisionClient
 from .quiz_seeding import QuizSeeder
 from .readiness import calculate_readiness
 from .sentinel_runtime import SentinelRuntimeManager
@@ -97,6 +97,7 @@ store = StateStore(settings.state_file)
 broker = SSEBroker()
 vision_client = OpenAIVisionClient(settings)
 socratic_client = OpenAISocraticClient(settings)
+topic_picker_client = OpenAITopicPickerClient(settings)
 quiz_seeder = QuizSeeder(settings)
 friend_agent = FriendAgentAdapter(settings)
 topic_store = TopicStore(settings.topics_dir, vision_client)
@@ -131,6 +132,7 @@ NO_SOURCE_CAPTURE_PROMPT = (
     "I couldn't find a matching source for this capture. "
     "Please capture content from your uploaded topics so I can ground the guidance."
 )
+CAPTURE_GAP_CREATION_ENABLED = False
 
 
 def _load_syllabus() -> dict:
@@ -174,6 +176,16 @@ def _topic_belongs_to_course(topic: TopicSummary, course_id: str) -> bool:
     normalized_course = _normalize_course_id(course_id)
     topic_course = _normalize_course_id(topic.course_id)
     return topic_course in {"all", normalized_course}
+
+
+def _topic_owned_by_course(topic: TopicSummary, course_id: str) -> bool:
+    normalized_course = _normalize_course_id(course_id)
+    topic_course = _normalize_course_id(topic.course_id)
+    return topic_course == normalized_course
+
+
+def _topic_course_mismatch_detail(topic_id: str, course_id: str) -> str:
+    return f"topic_id '{_normalize_topic_id(topic_id)}' does not belong to course_id '{_normalize_course_id(course_id)}'"
 
 
 def _state_has_course(state: LearningState, course_id: str) -> bool:
@@ -359,6 +371,7 @@ def _infer_best_topic_for_signal(
     *,
     signal_text: str,
     signal_tags: list[str] | None = None,
+    candidate_topics: list[TopicSummary] | None = None,
     minimum_score: float = 0.0,
     minimum_margin: float = 0.0,
     strong_score_override: float = 1.0,
@@ -368,7 +381,7 @@ def _infer_best_topic_for_signal(
     if not compact_text and not tags:
         return None, 0.0, 0, 0.0
 
-    candidates = topic_store.list_topics()
+    candidates = candidate_topics if candidate_topics is not None else topic_store.list_topics()
     scored_candidates: list[tuple[float, TopicSummary]] = []
     candidate_count = 0
     for topic in candidates:
@@ -395,6 +408,48 @@ def _infer_best_topic_for_signal(
             return None, _clamp(best_score), candidate_count, _clamp(runner_up_score)
 
     return best_topic, _clamp(best_score), candidate_count, _clamp(runner_up_score)
+
+
+def _pick_topic_with_gpt_fallback(
+    *,
+    signal_text: str,
+    signal_tags: list[str],
+    course_topics: list[TopicSummary],
+    deterministic_topic: TopicSummary | None,
+    deterministic_score: float,
+) -> tuple[TopicSummary | None, float, str | None]:
+    mode = (settings.bridge_topic_tagger_mode or "hybrid").strip().lower()
+    if mode not in {"hybrid", "gpt"}:
+        return None, 0.0, None
+
+    needs_fallback = deterministic_topic is None or deterministic_score < TOPIC_INFERENCE_MIN_SCORE
+    if not needs_fallback:
+        return None, 0.0, None
+    if not course_topics:
+        return None, 0.0, None
+
+    topic_options = [
+        {"topic_id": topic.topic_id, "topic_name": topic.topic_name}
+        for topic in course_topics
+        if _normalize_course_id(topic.course_id) != "all"
+    ]
+    if not topic_options:
+        return None, 0.0, None
+
+    picked = topic_picker_client.pick_topic(
+        signal_text=signal_text,
+        signal_tags=signal_tags,
+        topic_options=topic_options,
+        min_confidence=settings.bridge_topic_tagger_min_confidence,
+    )
+    if picked is None:
+        return None, 0.0, None
+
+    normalized_picked_topic = _normalize_topic_id(picked.topic_id)
+    for topic in course_topics:
+        if _normalize_topic_id(topic.topic_id) == normalized_picked_topic:
+            return topic, _clamp(picked.confidence), picked.reason
+    return None, 0.0, None
 
 
 def _build_source_context(topic: TopicSummary, extraction_text: str, extraction_tags: list[str]) -> SourceContext:
@@ -932,7 +987,22 @@ def _topic_matches_filter(question_topic: str, requested_topic: str) -> bool:
     normalized_requested = _normalize_topic(requested_topic).lower()
     if normalized_requested == "all topics":
         return True
-    return _normalize_topic(question_topic).lower() == normalized_requested
+
+    normalized_question = _normalize_topic(question_topic).lower()
+    if normalized_question == normalized_requested:
+        return True
+
+    if normalized_requested in normalized_question or normalized_question in normalized_requested:
+        return True
+
+    requested_tokens = set(tokenize(normalized_requested))
+    question_tokens = set(tokenize(normalized_question))
+    if not requested_tokens or not question_tokens:
+        return False
+
+    overlap = len(requested_tokens & question_tokens)
+    min_size = max(1, min(len(requested_tokens), len(question_tokens)))
+    return (overlap / min_size) >= 0.6
 
 
 def _seed_document_topics_and_questions(
@@ -947,6 +1017,31 @@ def _seed_document_topics_and_questions(
         document=document,
         file_path=file_path,
         replace_existing_doc_questions=True,
+        allow_llm=allow_llm,
+    )
+    return result.topics_added, result.questions_added, result.warnings
+
+
+def _seed_topic_material_questions(
+    state: LearningState,
+    *,
+    topic: TopicSummary,
+    material: MaterialSummary,
+    allow_llm: bool = True,
+) -> tuple[int, int, list[str]]:
+    extracted_path = settings.topics_dir / material.extracted_path
+    if not extracted_path.exists():
+        return 0, 0, [f"missing_extracted_text:{material.extracted_path}"]
+    extracted_text = extracted_path.read_text(encoding="utf-8", errors="replace")
+    result = quiz_seeder.seed_material(
+        state=state,
+        course_id=_normalize_course_id(topic.course_id),
+        topic_id=topic.topic_id,
+        topic_name=topic.topic_name,
+        material_id=material.material_id,
+        material_name=material.material_name,
+        extracted_text=extracted_text,
+        replace_existing_material_questions=True,
         allow_llm=allow_llm,
     )
     return result.topics_added, result.questions_added, result.warnings
@@ -1182,16 +1277,15 @@ def _prepare_quiz_questions(
     deadline_mode = nearest_deadline_days is not None and nearest_deadline_days <= 14
 
     desired_count = max(1, min(25, int(question_count)))
+    wrong_ratio = 0.35 if deadline_mode else 0.25
+    wrong_target = min(
+        len([entry for entry in candidates if float(entry["wrong_repeat_score"]) > 0.0]),
+        int(math.ceil(desired_count * wrong_ratio)),
+    )
     gap_target = min(
         len([entry for entry in candidates if float(entry["gap_score"]) > 0.0]),
-        int(math.ceil(desired_count * 0.4)),
+        int(math.ceil(desired_count * 0.35)),
     )
-    wrong_target = 0
-    if deadline_mode:
-        wrong_target = min(
-            len([entry for entry in candidates if float(entry["wrong_repeat_score"]) > 0.0]),
-            int(math.ceil(desired_count * 0.2)),
-        )
 
     selected: list[QuestionBankItem] = []
     selected_ids: set[str] = set()
@@ -1234,15 +1328,15 @@ def _prepare_quiz_questions(
         reverse=True,
     )
 
-    for entry in ranked_gap:
-        if len(selected) >= desired_count or gap_selected >= gap_target:
-            break
-        try_add(entry, track="gap")
-
     for entry in ranked_wrong:
         if len(selected) >= desired_count or wrong_selected >= wrong_target:
             break
         try_add(entry, track="wrong")
+
+    for entry in ranked_gap:
+        if len(selected) >= desired_count or gap_selected >= gap_target:
+            break
+        try_add(entry, track="gap")
 
     def has_non_gap_selected() -> bool:
         selected_ids_local = {item.question_id for item in selected}
@@ -1461,51 +1555,29 @@ def _save_state(state: LearningState) -> LearningState:
     return derived
 
 
-def _dominant_course_id(candidates: list[str]) -> str | None:
-    normalized = [_normalize_course_id(value) for value in candidates if value is not None]
-    if not normalized:
-        return None
-    non_all = [value for value in normalized if value != "all"]
-    if non_all:
-        return Counter(non_all).most_common(1)[0][0]
-    return Counter(normalized).most_common(1)[0][0]
+def _infer_topic_parent_course_with_reason(topic_id: str, state: LearningState) -> tuple[str, str, list[str]]:
+    normalized_topic = _normalize_topic_id(topic_id)
+    if not normalized_topic:
+        return "all", "missing_topic_id", []
+
+    candidate_courses = sorted(
+        {
+            _normalize_course_id(item.course_id)
+            for item in state.documents
+            if _normalize_topic_id(item.topic_id) == normalized_topic
+        }
+    )
+    non_all_courses = [course for course in candidate_courses if course != "all"]
+    if len(non_all_courses) == 1:
+        return non_all_courses[0], "single_course", non_all_courses
+    if not non_all_courses:
+        return "all", "no_document_reference", []
+    return "all", "multiple_courses", non_all_courses
 
 
 def _infer_topic_parent_course_id(topic_id: str, state: LearningState) -> str:
-    normalized_topic = _normalize_topic_id(topic_id)
-    if not normalized_topic:
-        return "all"
-
-    state_topic_candidates = [
-        item.course_id
-        for item in state.topics
-        if _normalize_topic_id(item.parent_topic_id) == normalized_topic
-        or _normalize_topic_id(item.topic_id) == normalized_topic
-    ]
-    inferred = _dominant_course_id(state_topic_candidates)
-    if inferred is not None:
-        return inferred
-
-    document_candidates = [
-        item.course_id
-        for item in state.documents
-        if _normalize_topic_id(item.topic_id) == normalized_topic
-    ]
-    inferred = _dominant_course_id(document_candidates)
-    if inferred is not None:
-        return inferred
-
-    question_candidates = [
-        item.course_id
-        for item in state.question_bank
-        if _normalize_topic_id(item.topic_id) == normalized_topic
-        or _normalize_topic_id(item.origin_topic_id) == normalized_topic
-    ]
-    inferred = _dominant_course_id(question_candidates)
-    if inferred is not None:
-        return inferred
-
-    return "all"
+    inferred_course_id, _, _ = _infer_topic_parent_course_with_reason(topic_id, state)
+    return inferred_course_id
 
 
 def _migrate_topic_parent_courses() -> None:
@@ -1529,6 +1601,7 @@ def _migrate_topic_parent_courses() -> None:
 
     state = _recompute_derived(store.read())
     migrated_count = 0
+    warning_rows: list[dict[str, object]] = []
     for raw_key, raw_entry in payload.get("topics", {}).items():
         if not isinstance(raw_entry, dict):
             continue
@@ -1536,9 +1609,17 @@ def _migrate_topic_parent_courses() -> None:
         if raw_course_id:
             continue
         resolved_topic_id = str(raw_entry.get("topic_id") or raw_entry.get("module_id") or raw_key)
-        inferred_course_id = _infer_topic_parent_course_id(resolved_topic_id, state)
+        inferred_course_id, reason, candidates = _infer_topic_parent_course_with_reason(resolved_topic_id, state)
         raw_entry["course_id"] = inferred_course_id
         migrated_count += 1
+        if reason in {"no_document_reference", "multiple_courses"}:
+            warning_rows.append(
+                {
+                    "topic_id": _normalize_topic_id(resolved_topic_id),
+                    "reason": reason,
+                    "candidate_courses": candidates,
+                }
+            )
 
     if migrated_count == 0:
         return
@@ -1563,19 +1644,39 @@ def _migrate_topic_parent_courses() -> None:
         endpoint_path="/startup",
         migrated_count=migrated_count,
     )
+    for warning in warning_rows:
+        _log_bridge_event(
+            event="topic_parent_migration_warning",
+            endpoint_path="/startup",
+            topic_id=warning.get("topic_id"),
+            reason=str(warning.get("reason")),
+            candidate_courses=warning.get("candidate_courses"),
+            guidance="manual_retagging_required",
+        )
 
 
 def _backfill_state_topic_parent_courses() -> None:
     state = store.read()
     changed = False
     changed_count = 0
+    warning_rows: list[dict[str, object]] = []
     for topic in state.topics:
         if " ".join((topic.course_id or "").split()).strip():
             topic.course_id = _normalize_course_id(topic.course_id)
             continue
-        topic.course_id = _infer_topic_parent_course_id(topic.parent_topic_id or topic.topic_id, state)
+        source_topic_id = topic.parent_topic_id or topic.topic_id
+        inferred_course_id, reason, candidates = _infer_topic_parent_course_with_reason(source_topic_id, state)
+        topic.course_id = inferred_course_id
         changed = True
         changed_count += 1
+        if reason in {"no_document_reference", "multiple_courses"}:
+            warning_rows.append(
+                {
+                    "topic_id": _normalize_topic_id(source_topic_id),
+                    "reason": reason,
+                    "candidate_courses": candidates,
+                }
+            )
 
     if not changed:
         return
@@ -1585,6 +1686,15 @@ def _backfill_state_topic_parent_courses() -> None:
         endpoint_path="/startup",
         migrated_count=changed_count,
     )
+    for warning in warning_rows:
+        _log_bridge_event(
+            event="state_topic_parent_backfill_warning",
+            endpoint_path="/startup",
+            topic_id=warning.get("topic_id"),
+            reason=str(warning.get("reason")),
+            candidate_courses=warning.get("candidate_courses"),
+            guidance="manual_retagging_required",
+        )
 
 
 def _migrate_document_topic_tags() -> None:
@@ -1798,10 +1908,53 @@ def get_sentinel_runtime_status() -> SentinelRuntimeStatus:
 
 
 @app.post("/api/v1/sentinel/runtime/start", response_model=SentinelRuntimeActionResponse)
-def start_sentinel_runtime() -> SentinelRuntimeActionResponse:
+def start_sentinel_runtime(request: SentinelRuntimeStartRequest) -> SentinelRuntimeActionResponse:
     _require_runtime_control_enabled()
+    normalized_course_id = _normalize_course_id(request.course_id)
+    normalized_topic_id = _normalize_topic_id(request.topic_id)
+    if normalized_course_id == "all":
+        raise HTTPException(status_code=400, detail="course_id 'all' is reserved.")
+    if not normalized_topic_id:
+        raise HTTPException(status_code=400, detail="topic_id must not be empty.")
+
+    state = _recompute_derived(store.read())
+    if not _state_has_course(state, normalized_course_id):
+        raise HTTPException(status_code=404, detail=f"Course not found: {normalized_course_id}")
+    topic = topic_store.get_topic(normalized_topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
+    if not _topic_owned_by_course(topic, normalized_course_id):
+        mismatch_detail = _topic_course_mismatch_detail(topic.topic_id, normalized_course_id)
+        _log_bridge_event(
+            event="topic_ownership_validation_failed",
+            endpoint_path="/api/v1/sentinel/runtime/start",
+            course_id=normalized_course_id,
+            topic_id=topic.topic_id,
+            reason=mismatch_detail,
+        )
+        raise HTTPException(status_code=400, detail=mismatch_detail)
+
+    topic_store.set_active_topic(topic.topic_id)
+    course_name_lookup = _course_name_lookup_from_state(state)
+    course_name = course_name_lookup.get(normalized_course_id) or _course_display_name(normalized_course_id)
+    session_context_store.set(
+        course_id=normalized_course_id,
+        course_name=course_name,
+        topic_id=topic.topic_id,
+        topic_name=topic.topic_name,
+        updated_at=utc_now_iso(),
+    )
+    _log_bridge_event(
+        event="sentinel_runtime_start_scope",
+        endpoint_path="/api/v1/sentinel/runtime/start",
+        course_id=normalized_course_id,
+        topic_id=topic.topic_id,
+    )
     try:
-        return runtime_manager.start()
+        return runtime_manager.start(
+            active_course_id=normalized_course_id,
+            active_topic_id=topic.topic_id,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -1833,13 +1986,18 @@ def set_sentinel_session_context(request: SentinelSessionContextRequest) -> Sent
     topic = topic_store.get_topic(request.topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail=f"Topic not found: {request.topic_id}")
-    if not _topic_belongs_to_course(topic, normalized_course_id):
+    if not _topic_owned_by_course(topic, normalized_course_id):
+        mismatch_detail = _topic_course_mismatch_detail(topic.topic_id, normalized_course_id)
+        _log_bridge_event(
+            event="topic_ownership_validation_failed",
+            endpoint_path="/api/v1/sentinel/session-context",
+            course_id=normalized_course_id,
+            topic_id=topic.topic_id,
+            reason=mismatch_detail,
+        )
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Topic '{topic.topic_id}' belongs to course '{topic.course_id}' "
-                f"and cannot be used for course '{normalized_course_id}'."
-            ),
+            detail=mismatch_detail,
         )
 
     topic_store.set_active_topic(topic.topic_id)
@@ -1890,6 +2048,22 @@ async def stream_events() -> StreamingResponse:
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
+@app.get("/api/v1/courses/{course_id}/topics", response_model=TopicListResponse)
+def list_topics_for_course(course_id: str) -> TopicListResponse:
+    normalized_course = _normalize_course_id(course_id)
+    if normalized_course == "all":
+        return TopicListResponse(topics=[], active_topic_id=None)
+    state = _recompute_derived(store.read())
+    if not _state_has_course(state, normalized_course):
+        raise HTTPException(status_code=404, detail=f"Course not found: {normalized_course}")
+    topics = topic_store.list_owned_topics(normalized_course)
+    active_topic = topic_store.get_active_topic()
+    active_topic_id = None
+    if active_topic is not None and _topic_owned_by_course(active_topic, normalized_course):
+        active_topic_id = active_topic.topic_id
+    return TopicListResponse(topics=topics, active_topic_id=active_topic_id)
+
+
 @app.post("/api/v1/topics", response_model=TopicSummary)
 def upsert_topic(request: TopicUpsertRequest) -> TopicSummary:
     topic_id = request.topic_id.strip()
@@ -1899,6 +2073,18 @@ def upsert_topic(request: TopicUpsertRequest) -> TopicSummary:
         raise HTTPException(status_code=400, detail="topic_id must not be empty.")
     if not topic_name:
         raise HTTPException(status_code=400, detail="topic_name must not be empty.")
+    existing_topic = topic_store.get_topic(topic_id)
+    if (
+        existing_topic is not None
+        and _normalize_course_id(existing_topic.course_id) not in {"all", normalized_course_id}
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Topic '{topic_id}' is already attached to course '{existing_topic.course_id}'. "
+                f"Use a different topic id for course '{normalized_course_id}'."
+            ),
+        )
     if normalized_course_id != "all":
         state = _recompute_derived(store.read())
         if not _state_has_course(state, normalized_course_id):
@@ -1908,12 +2094,21 @@ def upsert_topic(request: TopicUpsertRequest) -> TopicSummary:
 
 @app.get("/api/v1/topics", response_model=TopicListResponse)
 def list_topics(course_id: str | None = Query(default=None)) -> TopicListResponse:
+    # Legacy/global endpoint retained for backwards compatibility.
+    # Prefer GET /api/v1/courses/{course_id}/topics for scoped activation flows.
     normalized_course = _normalize_course_id(course_id) if course_id is not None else None
+    if normalized_course == "all":
+        normalized_course = None
     topics = topic_store.list_topics(normalized_course)
     active_topic = topic_store.get_active_topic()
+    active_topic_id = None
+    if active_topic is not None and (
+        normalized_course is None or _topic_belongs_to_course(active_topic, normalized_course)
+    ):
+        active_topic_id = active_topic.topic_id
     return TopicListResponse(
         topics=topics,
-        active_topic_id=active_topic.topic_id if active_topic else None,
+        active_topic_id=active_topic_id,
     )
 
 
@@ -1936,7 +2131,7 @@ async def upload_topic_material(
         )
 
     try:
-        return topic_store.add_material(
+        material = topic_store.add_material(
             topic_id=topic.topic_id,
             material_name=material_name,
             material_type=material_type,
@@ -1945,6 +2140,48 @@ async def upload_topic_material(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    state = store.read()
+    topics_added = 0
+    questions_added = 0
+    try:
+        topics_added, questions_added, seed_warnings = _seed_topic_material_questions(
+            state,
+            topic=topic,
+            material=material,
+        )
+        if topics_added > 0 or questions_added > 0:
+            _log_bridge_event(
+                event="topic_seed_generated",
+                endpoint_path="/api/v1/topics/{topic_id}/materials",
+                course_id=topic.course_id,
+                topic_id=topic.topic_id,
+                material_id=material.material_id,
+                topics_added=topics_added,
+                questions_added=questions_added,
+            )
+        for warning in seed_warnings:
+            _log_bridge_event(
+                event="topic_seed_skipped",
+                endpoint_path="/api/v1/topics/{topic_id}/materials",
+                course_id=topic.course_id,
+                topic_id=topic.topic_id,
+                material_id=material.material_id,
+                reason=warning,
+            )
+    except Exception as exc:  # noqa: BLE001
+        _log_bridge_event(
+            event="topic_seed_skipped",
+            endpoint_path="/api/v1/topics/{topic_id}/materials",
+            course_id=topic.course_id,
+            topic_id=topic.topic_id,
+            material_id=material.material_id,
+            reason=f"llm_error:{type(exc).__name__}",
+        )
+
+    state = _save_state(state)
+    await _publish_state(state)
+    return material
 
 
 @app.post("/api/v1/topics/active", response_model=ActiveTopicResponse)
@@ -2016,15 +2253,31 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         topic_context_source = "inference"
     requested_topic_id = _normalize_topic_id(requested_topic_raw)
     requested_topic = _resolve_requested_topic(requested_topic_raw)
+    if raw_payload_topic and requested_topic is None:
+        _log_bridge_event(
+            event="capture_validation_failed",
+            endpoint_path="/api/v1/captures",
+            capture_id=capture_id,
+            course_id=course_id,
+            topic_id=requested_topic_id or raw_payload_topic,
+            reason=f"Topic not found: {requested_topic_id or raw_payload_topic}",
+        )
+        raise HTTPException(status_code=404, detail=f"Topic not found: {requested_topic_id or raw_payload_topic}")
     topic_scope_warning: str | None = None
-    if requested_topic is not None and not _topic_belongs_to_course(requested_topic, course_id):
+    if requested_topic is not None and not _topic_owned_by_course(requested_topic, course_id):
+        mismatch_detail = _topic_course_mismatch_detail(requested_topic.topic_id, course_id)
         if raw_payload_topic:
+            _log_bridge_event(
+                event="topic_ownership_validation_failed",
+                endpoint_path="/api/v1/captures",
+                capture_id=capture_id,
+                course_id=course_id,
+                topic_id=requested_topic.topic_id,
+                reason=mismatch_detail,
+            )
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Topic '{requested_topic.topic_id}' belongs to course '{requested_topic.course_id}' "
-                    f"and cannot be used for course '{course_id}'."
-                ),
+                detail=mismatch_detail,
             )
         topic_scope_warning = (
             f"Session topic '{requested_topic.topic_id}' does not match course '{course_id}'; using inferred topic."
@@ -2033,13 +2286,33 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         topic_context_source = "session_context_mismatch"
     topic_signal_text = _build_topic_signal_text(payload, extraction)
     grounding_query_text = _build_grounding_query_text(payload, extraction)
+    course_topics = topic_store.list_owned_topics(course_id)
     inferred_topic, inferred_score, topic_candidate_count, inferred_runner_up_score = _infer_best_topic_for_signal(
         signal_text=topic_signal_text,
         signal_tags=extraction.tags,
+        candidate_topics=course_topics,
         minimum_score=TOPIC_INFERENCE_MIN_SCORE,
         minimum_margin=TOPIC_INFERENCE_MIN_MARGIN,
         strong_score_override=TOPIC_INFERENCE_STRONG_SCORE,
     )
+    picker_topic, picker_score, picker_reason = _pick_topic_with_gpt_fallback(
+        signal_text=topic_signal_text,
+        signal_tags=extraction.tags,
+        course_topics=course_topics,
+        deterministic_topic=inferred_topic,
+        deterministic_score=inferred_score,
+    )
+    picker_used = picker_topic is not None
+    if picker_used:
+        _log_bridge_event(
+            event="topic_picker_fallback_applied",
+            endpoint_path="/api/v1/captures",
+            capture_id=capture_id,
+            course_id=course_id,
+            topic_id=picker_topic.topic_id,
+            confidence=round(picker_score, 4),
+            reason=picker_reason,
+        )
     context_topic = requested_topic
     source_resolution_mode = "explicit"
     source_resolution_score = 0.0
@@ -2049,6 +2322,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             context_topic = inferred_topic
             source_resolution_mode = "inferred"
             source_resolution_score = inferred_score
+        elif picker_topic is not None:
+            context_topic = picker_topic
+            source_resolution_mode = "gpt_fallback"
+            source_resolution_score = picker_score
     source_context = (
         _build_source_context(context_topic, grounding_query_text, extraction.tags)
         if context_topic is not None
@@ -2065,13 +2342,7 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         source_resolution_score = _clamp(source_context.match_score)
     topic_grounded = context_topic is not None and source_context.matched
 
-    grounding_topic = None
-    if requested_topic is not None:
-        grounding_topic = requested_topic
-    elif inferred_topic is not None and inferred_score >= TOPIC_INFERENCE_MIN_SCORE:
-        grounding_topic = inferred_topic
-    else:
-        grounding_topic = context_topic
+    grounding_topic = requested_topic or context_topic
 
     grounding_bundle = _build_grounding_bundle(
         state=existing_state,
@@ -2093,10 +2364,10 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     if requested_topic_id and requested_topic is None:
         topic_warning = _merge_warning_messages(
             topic_warning,
-            f"Requested topic '{requested_topic_id}' was not found; using inferred/broader grounding.",
+            [f"Requested topic '{requested_topic_id}' was not found; using inferred/broader grounding."],
         )
     if topic_scope_warning:
-        topic_warning = _merge_warning_messages(topic_warning, topic_scope_warning)
+        topic_warning = _merge_warning_messages(topic_warning, [topic_scope_warning])
     source_warning = _merge_warning_messages(topic_warning, grounding_bundle.warnings)
     agent_backend_used = "bridge"
     socratic_prompt: str
@@ -2180,6 +2451,20 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
             socratic_prompt = socratic.socratic_prompt
             raw_gap_payloads = socratic.gaps
 
+    generated_capture_gap_count = len(raw_gap_payloads)
+    if generated_capture_gap_count > 0 and not CAPTURE_GAP_CREATION_ENABLED:
+        _log_bridge_event(
+            event="capture_gap_generation_skipped",
+            endpoint_path="/api/v1/captures",
+            capture_id=capture_id,
+            course_id=course_id,
+            topic_id=context_topic.topic_id if context_topic is not None else None,
+            reason="capture_gap_creation_disabled",
+            generated_gap_count=generated_capture_gap_count,
+        )
+    if not CAPTURE_GAP_CREATION_ENABLED:
+        raw_gap_payloads = []
+
     gap_topic_id = context_topic.topic_id if context_topic is not None else None
     gap_material_id = source_context.material_id if source_context is not None and source_context.matched else None
 
@@ -2231,7 +2516,11 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
     state = store.append_capture(event, new_gaps, readiness)
 
     session_summary = " ".join(socratic_prompt.split())[:220] or "Socratic turn"
-    topic_name = _topic_label_from_gaps(new_gaps) or "General"
+    topic_name = (
+        context_topic.topic_name
+        if context_topic is not None
+        else (_topic_label_from_gaps(new_gaps) or "General")
+    )
     state.sessions.append(
         SessionEvent(
             course_id=course_id,
@@ -2259,6 +2548,11 @@ async def create_capture(payload: CaptureRequest) -> CaptureResponse:
         agent_backend=agent_backend_used,
         source_resolution_mode=source_resolution_mode,
         source_resolution_score=round(source_resolution_score, 4),
+        topic_picker_mode=settings.bridge_topic_tagger_mode,
+        topic_picker_used=picker_used,
+        topic_picker_topic_id=picker_topic.topic_id if picker_topic is not None else None,
+        topic_picker_confidence=round(picker_score, 4) if picker_used else 0.0,
+        topic_picker_reason=picker_reason if picker_used else None,
         topic_candidate_count=topic_candidate_count,
         topic_runner_up_score=round(inferred_runner_up_score, 4),
         context_topic_id=context_topic.topic_id if context_topic is not None else None,
@@ -2295,10 +2589,24 @@ async def prepare_quiz(request: QuizPrepareRequest) -> QuizPrepareResponse:
     normalized_course_id = _normalize_course_id(request.course_id)
     normalized_topic = _normalize_topic(request.topic)
     selected_sources = set(request.sources) if request.sources else {"pyq", "tutorial", "sentinel"}
-    selected_topic = _resolve_topic(request.topic_id)
-    selected_topic_id = (
-        selected_topic.topic_id if selected_topic is not None else _normalize_topic_id(request.topic_id) or None
-    )
+    selected_topic = _resolve_requested_topic(request.topic_id)
+    selected_topic_id = _normalize_topic_id(request.topic_id) or None
+    if selected_topic is None and selected_topic_id:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {selected_topic_id}")
+    if (
+        normalized_course_id != "all"
+        and selected_topic is not None
+        and not _topic_belongs_to_course(selected_topic, normalized_course_id)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Topic '{selected_topic.topic_id}' belongs to course '{selected_topic.course_id}' "
+                f"and cannot be used for course '{normalized_course_id}'."
+            ),
+        )
+    if selected_topic is not None:
+        selected_topic_id = selected_topic.topic_id
 
     syllabus = _load_syllabus()
     selected_questions, summary = _prepare_quiz_questions(
@@ -2350,8 +2658,24 @@ async def submit_quiz(request: QuizSubmitRequest) -> QuizSubmitResponse:
     normalized_topic = _normalize_topic(request.topic)
     topic_is_all = normalized_topic.lower() == "all topics"
     selected_sources = set(request.sources) if request.sources else {"pyq", "tutorial", "sentinel"}
-    selected_topic = _resolve_topic(request.topic_id)
-    selected_topic_id = selected_topic.topic_id if selected_topic is not None else _normalize_topic_id(request.topic_id) or None
+    selected_topic = _resolve_requested_topic(request.topic_id)
+    selected_topic_id = _normalize_topic_id(request.topic_id) or None
+    if selected_topic is None and selected_topic_id:
+        raise HTTPException(status_code=404, detail=f"Topic not found: {selected_topic_id}")
+    if (
+        normalized_course_id != "all"
+        and selected_topic is not None
+        and not _topic_belongs_to_course(selected_topic, normalized_course_id)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Topic '{selected_topic.topic_id}' belongs to course '{selected_topic.course_id}' "
+                f"and cannot be used for course '{normalized_course_id}'."
+            ),
+        )
+    if selected_topic is not None:
+        selected_topic_id = selected_topic.topic_id
 
     question_by_id = {item.question_id: item for item in state.question_bank}
     question_results: list[QuizQuestionResult] = []
@@ -2692,21 +3016,16 @@ async def upload_course_document(
             reason=f"topic_id '{normalized_topic_id}' was not found.",
         )
         raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
-    if not _topic_belongs_to_course(topic, normalized):
+    if not _topic_owned_by_course(topic, normalized):
+        mismatch_detail = _topic_course_mismatch_detail(normalized_topic_id, normalized)
         _log_bridge_event(
-            event="document_upload_validation_failed",
+            event="topic_ownership_validation_failed",
             endpoint_path="/api/v1/courses/{course_id}/documents/upload",
             course_id=normalized,
             topic_id=normalized_topic_id,
-            reason=f"topic_id '{normalized_topic_id}' is scoped to '{topic.course_id}', not '{normalized}'.",
+            reason=mismatch_detail,
         )
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Topic '{normalized_topic_id}' belongs to course '{topic.course_id}' "
-                f"and cannot be used for course '{normalized}'."
-            ),
-        )
+        raise HTTPException(status_code=400, detail=mismatch_detail)
 
     raw_bytes = await file.read(settings.material_upload_max_bytes + 1)
     if len(raw_bytes) > settings.material_upload_max_bytes:
@@ -2819,14 +3138,16 @@ async def retag_course_document(course_id: str, doc_id: str, request: DocumentRe
     topic = topic_store.get_topic(normalized_topic_id)
     if topic is None:
         raise HTTPException(status_code=404, detail=f"Topic not found: {normalized_topic_id}")
-    if not _topic_belongs_to_course(topic, normalized):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Topic '{normalized_topic_id}' belongs to course '{topic.course_id}' "
-                f"and cannot be used for course '{normalized}'."
-            ),
+    if not _topic_owned_by_course(topic, normalized):
+        mismatch_detail = _topic_course_mismatch_detail(normalized_topic_id, normalized)
+        _log_bridge_event(
+            event="topic_ownership_validation_failed",
+            endpoint_path="/api/v1/courses/{course_id}/documents/{doc_id}",
+            course_id=normalized,
+            topic_id=normalized_topic_id,
+            reason=mismatch_detail,
         )
+        raise HTTPException(status_code=400, detail=mismatch_detail)
 
     state = store.read()
     target = next(

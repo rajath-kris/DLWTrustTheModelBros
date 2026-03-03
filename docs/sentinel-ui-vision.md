@@ -178,7 +178,9 @@ Overlay materials are QSS-authored only for this UI baseline. Runtime blur injec
   - First-turn page (`turn_index = 0`) embeds the capture image at the top with rounded corners.
 - Navigation:
   - Dot controls live on the right side inside the overlay card.
-  - Dot list is capped to 7 visible buttons using a sliding window for long interactions.
+  - Render one dot per turn page in a vertical right-edge rail.
+  - Keep 7 primary dots centered around the active page; overflow pages render as mini-dots.
+  - Keep the rail scrollable and auto-follow the active page so it remains centered in view.
   - Dot click changes the visible page only; it does not mutate bridge/controller turn flow.
 - Reset behavior:
   - Starting a new capture clears the previous interaction page stack.

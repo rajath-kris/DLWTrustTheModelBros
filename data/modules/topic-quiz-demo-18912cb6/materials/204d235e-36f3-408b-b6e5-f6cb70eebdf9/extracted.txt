@@ -1,0 +1,5 @@
+﻿Stacks and queues fundamentals.
+A stack is LIFO.
+A queue is FIFO.
+Push/pop are stack operations.
+Enqueue/dequeue are queue operations.

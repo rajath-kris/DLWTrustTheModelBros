@@ -21,6 +21,7 @@ class BridgeClient:
         monitor: MonitorSnapshot,
         region: CaptureRegion,
         image_bytes: bytes,
+        course_id: str | None = None,
         topic_id: str | None = None,
         thread_id: str | None = None,
         turn_index: int = 0,
@@ -50,6 +51,8 @@ class BridgeClient:
         }
         if thread_id is not None and thread_id.strip():
             payload["thread_id"] = thread_id.strip()
+        if course_id is not None and course_id.strip():
+            payload["course_id"] = course_id.strip()
         if topic_id is not None and topic_id.strip():
             payload["topic_id"] = topic_id.strip()
         payload["turn_index"] = max(0, int(turn_index))

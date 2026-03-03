@@ -389,6 +389,8 @@ class SentinelController(QObject):
                     context.monitor,
                     context.region,
                     context.image_bytes,
+                    course_id=settings.active_course_id or None,
+                    topic_id=settings.active_topic_id or None,
                     thread_id=thread_id,
                     turn_index=effective_turn_index,
                     previous_prompt=previous_prompt,

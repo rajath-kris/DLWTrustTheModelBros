@@ -1,0 +1,14 @@
+{
+  "material_id": "1044b6cc-ad41-4ac1-b67a-b22d8c0ce583",
+  "topic_id": "topic-quiz-demo-d2136797",
+  "material_name": "Quiz Demo Material",
+  "material_type": "text",
+  "original_filename": "demo-quiz-material.txt",
+  "source_path": "topic-quiz-demo-d2136797/materials/1044b6cc-ad41-4ac1-b67a-b22d8c0ce583/source.txt",
+  "extracted_path": "topic-quiz-demo-d2136797/materials/1044b6cc-ad41-4ac1-b67a-b22d8c0ce583/extracted.txt",
+  "tokens_path": "topic-quiz-demo-d2136797/materials/1044b6cc-ad41-4ac1-b67a-b22d8c0ce583/tokens.json",
+  "tokens_count": 12,
+  "parse_warning": null,
+  "created_at": "2026-03-03T01:44:26.211802Z",
+  "updated_at": "2026-03-03T01:44:26.211802Z"
+}

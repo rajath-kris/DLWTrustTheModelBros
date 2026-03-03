@@ -35,6 +35,8 @@ class Settings:
 
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "12.0"))
     material_upload_max_bytes: int = int(os.getenv("BRIDGE_MATERIAL_UPLOAD_MAX_BYTES", "15728640"))
+    bridge_topic_tagger_mode: str = os.getenv("BRIDGE_TOPIC_TAGGER_MODE", "hybrid").strip().lower() or "hybrid"
+    bridge_topic_tagger_min_confidence: float = float(os.getenv("BRIDGE_TOPIC_TAGGER_MIN_CONFIDENCE", "0.55"))
     sentinel_runtime_enabled: bool = _env_bool("SENTINEL_RUNTIME_ENABLED", True)
     sentinel_runtime_python: str = os.getenv("SENTINEL_RUNTIME_PYTHON", "").strip()
     sentinel_runtime_workdir: str = os.getenv("SENTINEL_RUNTIME_WORKDIR", "").strip()
